@@ -10,7 +10,28 @@ agent-brain is a personal operating model for AI coding agents (Claude Code, Ope
 
 ## Status
 
-**Early / work in progress.** This repo contains the operating model and the `brain` skill. The zero-touch `bootstrap-zero.sh` installer and the notes-agnostic refactor (`vault` → `home`, Obsidian-as-one-`notes_mode`) are landing in the next stage. The structure is in place; automated install is coming.
+**Early / work in progress.** The operating model and `brain` skill are in place, and the
+`bootstrap-zero.sh` installer now wires a HOME end-to-end for the **implant** direction
+(machine has a HOME with `_AGENTS/<runtime>/`; bootstrap symlinks runtimes + brain skill
+into place). The **ingest** direction (adopt existing local config into a new HOME) and
+the semantic `vault` → `home` refactor are still TODO. boyscout skill is deferred.
+
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/juanyque/agent-brain/main/bootstrap-zero.sh | bash
+```
+
+This clones agent-brain to `~/.local/share/agent-brain` and runs the orchestrator, which
+will ask for your HOME path (an Obsidian vault, a notes folder, or a new empty dir). It
+dry-runs by default — re-run with `--apply` (passed through the pipe) once the plan looks
+right. See `model/SCRIPTS/bootstrap-zero.sh -h` for flags.
+
+> ⚠️ Piping to `bash` runs the dry-run plan only (the orchestrator defaults to dry-run).
+> To apply, review the plan first, then run with `-- --home <path> --apply`:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/juanyque/agent-brain/main/bootstrap-zero.sh | bash -s -- --home /path/to/home --apply
+> ```
 
 ## Repository layout
 
