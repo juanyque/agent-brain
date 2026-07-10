@@ -1,0 +1,6 @@
+# Python
+__pycache__/
+*.pyc
+
+# Script run logs (runtime artifacts, not source)
+*.log
