@@ -25,6 +25,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MODEL_DIR="$REPO_ROOT/model"
+FIND_HOME="$REPO_ROOT/skills/brain/scripts/find_home.py"
 
 HOME_PATH=""
 APPLY=0
@@ -48,8 +49,19 @@ mode() { [[ $APPLY -eq 1 ]] && echo "apply" || echo "dry-run (pass --apply to ex
 # --- Step 0: resolve HOME ----------------------------------------------------
 if [[ -z "$HOME_PATH" ]]; then
   echo "== Home resolution =="
-  echo "  (pass --home <path> to skip this prompt)"
-  read -r -p "HOME path (notes folder / vault / new empty dir): " HOME_PATH
+  if [[ -f "$FIND_HOME" ]] && command -v python3 >/dev/null 2>&1; then
+    echo "  Detected HOME candidates:"
+    python3 "$FIND_HOME" "$HOME" 2>/dev/null | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for h in d.get("homes", []):
+    print(f"    [{h[\"notes_mode\"]:8}] {h[\"path\"]}")' || true
+  fi
+  echo "  (enter a path: existing notes folder/vault, or a new empty dir to create)"
+  read -r -p "HOME path: " HOME_PATH
 fi
 if [[ ! -d "$HOME_PATH" ]]; then
   echo "  path does not exist: $HOME_PATH"
@@ -63,10 +75,12 @@ echo
 
 # --- Step 1: notes_mode ------------------------------------------------------
 notes_mode="empty"
-[[ -d "$HOME_PATH/.obsidian" ]] && notes_mode="obsidian"
-if [[ "$notes_mode" == "empty" && -n "$(find "$HOME_PATH" -maxdepth 2 -name '*.md' 2>/dev/null | head -1)" ]]; then
-  notes_mode="generic"
+if [[ -f "$FIND_HOME" ]] && command -v python3 >/dev/null 2>&1; then
+  notes_mode="$(python3 "$FIND_HOME" "$HOME_PATH" 2>/dev/null | python3 -c 'import json,sys
+try: print(json.load(sys.stdin)["homes"][0]["notes_mode"])
+except Exception: pass' 2>/dev/null || echo "")"
 fi
+notes_mode="${notes_mode:-empty}"
 echo "== notes_mode: $notes_mode =="
 echo
 
