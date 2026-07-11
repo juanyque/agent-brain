@@ -27,7 +27,7 @@ from find_vaults import SKIP_DIRS, is_vault
 
 GENERIC_MIN_MD = 5
 OP_DIRS = {"journal", "memory", "wip", "_agents", "backlog", "inbox"}
-TODO_NAMES = {"todo.txt", "todo.md"}
+MARKER_NAMES = {"todo.txt", "todo.md", "wip.txt", "wip.md"}
 
 
 def _iter_filenames(path: Path) -> list[str]:
@@ -56,9 +56,9 @@ def classify(path: Path) -> str:
     if is_vault(path):
         return "obsidian"
     names = _iter_filenames(path)
-    has_todo = any(n in TODO_NAMES for n in names)
+    has_marker = any(n in MARKER_NAMES for n in names)
     has_readme = "readme.md" in names
-    if has_todo or _has_op_dirs(path):
+    if has_marker or _has_op_dirs(path):
         return "generic"
     if has_readme and _count_md(path) >= 3:
         return "generic"
