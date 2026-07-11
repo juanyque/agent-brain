@@ -18,7 +18,8 @@ if [[ ! -d "$CANONICAL/.git" ]]; then
   mkdir -p "$CANONICAL"
   git clone --depth 1 "$REPO_URL" "$CANONICAL"
 else
-  echo "agent-brain already present at $CANONICAL"
+  echo "agent-brain already present at $CANONICAL — updating (git pull --ff-only)..."
+  git -C "$CANONICAL" pull --ff-only || echo "  (pull failed — continuing with local copy)"
 fi
 
 exec bash "$CANONICAL/model/SCRIPTS/bootstrap-zero.sh" "$@"

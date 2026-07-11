@@ -26,29 +26,41 @@ from pathlib import Path
 from find_vaults import SKIP_DIRS, is_vault
 
 GENERIC_MIN_MD = 5
-OP_DIRS = {"JOURNAL", "MEMORY", "WIP", "_AGENTS", "BACKLOG", "INBOX"}
+OP_DIRS = {"journal", "memory", "wip", "_agents", "backlog", "inbox"}
+TODO_NAMES = {"todo.txt", "todo.md"}
 
 
-def _count_md(path: Path) -> int:
+def _iter_filenames(path: Path) -> list[str]:
     try:
-        return sum(1 for p in path.iterdir() if p.suffix == ".md")
+        return [p.name.lower() for p in path.iterdir() if p.is_file()]
     except (PermissionError, OSError):
-        return 0
+        return []
+
+
+def _iter_dirnames(path: Path) -> list[str]:
+    try:
+        return [p.name.lower() for p in path.iterdir() if p.is_dir()]
+    except (PermissionError, OSError):
+        return []
 
 
 def _has_op_dirs(path: Path) -> bool:
-    try:
-        return any((path / d).is_dir() for d in OP_DIRS)
-    except (PermissionError, OSError):
-        return False
+    return any(d in OP_DIRS for d in _iter_dirnames(path))
+
+
+def _count_md(path: Path) -> int:
+    return sum(1 for n in _iter_filenames(path) if n.endswith(".md"))
 
 
 def classify(path: Path) -> str:
     if is_vault(path):
         return "obsidian"
-    if (path / "todo.txt").is_file() or _has_op_dirs(path):
+    names = _iter_filenames(path)
+    has_todo = any(n in TODO_NAMES for n in names)
+    has_readme = "readme.md" in names
+    if has_todo or _has_op_dirs(path):
         return "generic"
-    if (path / "README.md").is_file() and _count_md(path) >= 3:
+    if has_readme and _count_md(path) >= 3:
         return "generic"
     if _count_md(path) >= GENERIC_MIN_MD:
         return "generic"
