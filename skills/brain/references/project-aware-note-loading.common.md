@@ -1,6 +1,6 @@
 # Project-aware note loading
 
-After the vault is connected and WIP.md has been loaded, attempt to identify the project context from the current working directory. This avoids loading irrelevant notes and saves tokens.
+After the brain is connected and WIP.md has been loaded, attempt to identify the project context from the current working directory. This avoids loading irrelevant notes and saves tokens.
 
 ## Step 1: Extract project keywords
 
@@ -10,18 +10,18 @@ Inspect the working directory path and derive 1-3 lowercase keywords that identi
 - `/Users/user/projects/my-app` → `["my-app"]`
 - `/Users/user/workspace/EXAMPLE-CO/lerp` → `["lerp", "example-co"]`
 
-If the working directory does not clearly map to a project (e.g. the vault itself, a generic temp dir), skip this entire section and fall back to showing all WIP items equally.
+If the working directory does not clearly map to a project (e.g. the brain itself, a generic temp dir), skip this entire section and fall back to showing all WIP items equally.
 
 ## Step 2: Cross-reference with WIP
 
 You already have WIP.md loaded. Mentally match the keywords against active WIP items. If one or more WIP items are clearly related, note them for priority display.
 
-## Step 3: Search vault for related notes
+## Step 3: Search brain for related notes
 
 Run the related-notes script to find additional notes beyond WIP:
 
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/find_related_notes.py --vault <vault_path> --keywords "lerp example-co"
+python3 ~/.agents/skills/obsidian/scripts/find_related_notes.py --brain <brain_path> --keywords "lerp example-co"
 ```
 
 This searches note filenames by default. The script returns JSON with matched notes (path, title, preview line).
@@ -40,7 +40,7 @@ Only load the notes the user selects. Do not read unselected notes.
 
 After loading selected notes, summarize:
 1. Project-specific WIP context (highlighted first)
-2. General vault status (briefly, if different from above)
+2. General brain status (briefly, if different from above)
 3. Any additional notes the user chose to load
 
 ## Fallback
