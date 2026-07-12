@@ -91,7 +91,7 @@ Any auxiliary file inside a ticket folder, project folder, or other context-bear
 
 Discriminator-first reads as `<context>.<what>.md` ("the plan of PROJ-305") and groups a folder's auxiliary files together by ticket when listed across mixed locations.
 
-**Applies to**: any file whose basename matches a known shared name (`README.md`, `plan.md`, `analysis.md`, `analisis.md`, `estado.md`, `decisiones.md`, `notes.md`, `MEMORY.md`, etc.) when multiple instances exist in different folders across the vault.
+**Applies to**: any file whose basename matches a known shared name (`README.md`, `plan.md`, `analysis.md`, `analisis.md`, `estado.md`, `decisiones.md`, `notes.md`, `MEMORY.md`, etc.) when multiple instances exist in different folders across the brain.
 
 **Detection / cleanup**: see `_COMMON/SKILLS/obsidian/scripts/TOOL.check-basename-collisions.common.md` for the detector + auto-rename workflow.
 

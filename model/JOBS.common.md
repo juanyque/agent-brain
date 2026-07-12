@@ -1,6 +1,6 @@
 # JOBS.common.md
 
-This file defines the structure and generic tasks for recurring vault maintenance routines.
+This file defines the structure and generic tasks for recurring brain maintenance routines.
 Execution state is recorded in the local `JOBS_LOGS.md`, not here.
 
 ## `JOBS_LOGS.md` format
@@ -20,7 +20,7 @@ Each job section must be a `##` heading with the same name used in this file. Ea
   period: 2026-W20
   status: done
   summary: Reviewed stale sessions and attachment audit; no moves applied.
-  refs: [[2026-05-17]], [[Estandarización del vault]]
+  refs: [[2026-05-17]], [[Estandarización del brain]]
 ```
 
 Required fields:
@@ -42,7 +42,7 @@ Optional fields:
 
 `maintenance_scheduler.py` reads `run`, `period`, and `status`, and uses `run_at` when present to choose/report the latest entry more precisely. Free-form prose may be useful to humans, but it should not be the only execution state for new entries.
 
-`JOBS_LOGS.md` should contain execution state only. Do not repeat these format or retention rules in local vault logs; local logs should just follow them.
+`JOBS_LOGS.md` should contain execution state only. Do not repeat these format or retention rules in local brain logs; local logs should just follow them.
 
 ### Status hygiene
 
@@ -54,7 +54,7 @@ Each job section follows this shape:
 
 - `### Purpose` — what this routine does.
 - `### Trigger` — required only for **event-driven** jobs (Daily, Session consolidation): user phrases like "nuevo día" / "nueva sesión" or explicit context changes that an agent intercepts in real time.
-- `### Tasks` — what to do. Generic tasks are defined here; local wrappers may add vault-specific tasks.
+- `### Tasks` — what to do. Generic tasks are defined here; local wrappers may add brain-specific tasks.
 - Execution logs go in `JOBS_LOGS.md`, not in this file.
 
 **Calendar-driven jobs** (Weekly, Monthly, Yearly) do not declare a `### Trigger`. Their scheduling is derived from the `period` field in `JOBS_LOGS.md` and surfaced by `maintenance_scheduler.py`, which decides whether a job is due based on the latest entry. A user phrase such as "weekly maintenance" can always force one of them to run, but that is an override rather than the primary trigger.
@@ -76,7 +76,7 @@ Each job section follows this shape:
 ## Session consolidation
 
 ### Purpose
-- Consolidate one or more working sessions into the vault when starting a new session.
+- Consolidate one or more working sessions into the brain when starting a new session.
 - Procedure source of truth: `RULES-SESSION-LIFECYCLE.md` → Flow 2.
 
 ### Trigger
@@ -90,19 +90,19 @@ Each job section follows this shape:
 ## Weekly
 
 ### Purpose
-- Hold recurring weekly maintenance routines for the vault.
+- Hold recurring weekly maintenance routines for the brain.
 
 ### Tasks
 - Review orphaned or stale session notes that were not fully consolidated.
 - Review blocked or stale WIP items and decide whether they should remain in active WIP.
 - Run attachment-maintenance review: detect possible orphaned attachments, misplaced attachments, and conflict cases without deleting anything automatically; move suspected orphaned attachments to `QUARANTINE/ATTACHMENTS/` for review.
 - Review `QUARANTINE/TRASH/` for notes older than 15 days and propose candidates for permanent deletion. Do not delete automatically; list candidates and wait for explicit human approval.
-- Run the basename-collision detector to catch new duplicates created during the week: `_COMMON/SKILLS/obsidian/scripts/check_basename_collisions.py --vault-root <vault> --exclude-path <runtime-governed paths> [--apply]`. Read-only by default; `--apply` auto-renames files no reference points at (per-file safety). Interactive review of `(needs edits)` groups follows the procedure in `TASK_TYPES/basename-collision-cleanup.md` (wrapper to the common task-type guide).
+- Run the basename-collision detector to catch new duplicates created during the week: `_COMMON/SKILLS/obsidian/scripts/check_basename_collisions.py --brain-root <brain> --exclude-path <runtime-governed paths> [--apply]`. Read-only by default; `--apply` auto-renames files no reference points at (per-file safety). Interactive review of `(needs edits)` groups follows the procedure in `TASK_TYPES/basename-collision-cleanup.md` (wrapper to the common task-type guide).
 
 ## Monthly
 
 ### Purpose
-- Hold recurring monthly maintenance routines for the vault.
+- Hold recurring monthly maintenance routines for the brain.
 
 ### Tasks
 - Review whether WIP items should be consolidated into MEMORY, moved to BACKLOG, or archived to ARCHIVED (for historically important but no longer active content).
@@ -114,7 +114,7 @@ Each job section follows this shape:
 ## Yearly
 
 ### Purpose
-- Hold recurring yearly maintenance routines for the vault.
+- Hold recurring yearly maintenance routines for the brain.
 
 ### Tasks
 - Move closed-year daily notes into `JOURNAL/<year>/` while keeping the current year directly under `JOURNAL/`.

@@ -17,7 +17,7 @@ This is explicitly **not**:
 
 ## Source of truth
 
-This file is the canonical procedure. The shape of the document itself lives in `TEMPLATES/TEMPLATE.issue.common.md` (and the vault-local `TEMPLATES/Issue Template.md` wrapper). Do not redefine the document shape here.
+This file is the canonical procedure. The shape of the document itself lives in `TEMPLATES/TEMPLATE.issue.common.md` (and the brain-local `TEMPLATES/Issue Template.md` wrapper). Do not redefine the document shape here.
 
 ## Trigger
 

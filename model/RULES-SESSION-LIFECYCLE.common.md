@@ -7,17 +7,17 @@ Use this rule when starting, rolling over, consolidating, or closing session not
 This file is the canonical procedure for session lifecycle decisions.
 
 - `AGENTS.md` only points agents to this rule.
-- `VAULT.md` defines the conceptual model and folder ownership.
+- `BRAIN.md` defines the conceptual model and folder ownership.
 - `JOBS.md` follows the common job structure; execution state is recorded in `JOBS_LOGS.md`. Neither should duplicate this procedure.
 
 ## Session notes
 
 - Session notes are temporary operational memory stored in `WIP/SESSIONS/`.
-- Use date-first filenames with the **full** session id and a topic, for example `YYYY-MM-DD-session-<full-session-id>-topic.md` (e.g. `2026-05-22-session-fb2f1974-7eb1-4dda-9cb2-a26bc4328e30-vault-followup.md`). Always use the full id — never truncate — so the filename matches the resume command verbatim. When the session id is not yet known at creation time, fall back to a unique counter (`-session-01-`, `-session-02-`) and rename in place once the id is resolved (see identification below).
+- Use date-first filenames with the **full** session id and a topic, for example `YYYY-MM-DD-session-<full-session-id>-topic.md` (e.g. `2026-05-22-session-fb2f1974-7eb1-4dda-9cb2-a26bc4328e30-brain-followup.md`). Always use the full id — never truncate — so the filename matches the resume command verbatim. When the session id is not yet known at creation time, fall back to a unique counter (`-session-01-`, `-session-02-`) and rename in place once the id is resolved (see identification below).
 - **Topic field — derive deterministically, never ask**. The topic component of the filename must be derived from observable session signals, in this order:
   1. Explicit session label set via the runtime's rename command (e.g. Claude Code `/rename`), if surfaced to the agent — slugify (`lowercase`, spaces → `-`, drop non-alphanumeric).
   2. Active ticket prefix from the current branch name (`PROJ-307-...` → `proj-307`), when the cwd is a code repo.
-  3. Cwd basename (`demo-app`, `org-marketplace`, vault root → `<vault-name>`).
+  3. Cwd basename (`demo-app`, `org-marketplace`, brain root → `<brain-name>`).
   4. `unspecified-<YYYYMMDD-HHMM>` as last-resort fallback.
   Never block on the topic field via `AskUserQuestion`. The user can rename the file in place if they prefer a different label — that round-trip is cheap; the round-trip to ask is not.
 - A session note must use the real session id from the agent runtime (OpenCode, Claude Code, Codex, etc.) in its resume command. Example (OpenCode): `opencode -s ses_abc123`. Example (Claude Code): `claude --resume <uuid>`.
@@ -61,7 +61,7 @@ Use this flow only when the user is continuing the same working session and the 
 
 1. Create today's daily note if it does not exist.
 2. **Migrate the previous day's unfinished `* [[TODO]]:` items.** Before cleaning the previous note, review its TODO list with the user (do not move silently — same review-first pattern as the Objectives review in `RULES-DAILY-NOTES.md`): carry unfinished items into today's `* [[TODO]]:`, promote real tasks to `WIP/`/`BACKLOG/` where they belong, and drop done/obsolete ones. This empties the previous TODO so the cleanup in the next step can remove it if it ends up empty.
-3. Clean the previous existing daily note by removing empty action categories. **Scope the script to the previous daily** so the current day's fresh note (and other days) are never cleaned — a note may only be cleaned once its date is no longer today (see `RULES-DAILY-NOTES.md` → Cleanup timing): `_COMMON/SKILLS/obsidian/scripts/cleanup_empty_action_categories.py --vault-root <vault> --glob <prev-date>.md --apply` (e.g. `--glob 2026-05-29.md`). It skips legacy-shape dailies without a `# Actions` section, preserves real content, and removes placeholder-only categories per `TOOL.cleanup-empty-action-categories.common.md`. **Defer this cleanup if the previous day still has open session notes pending consolidation** (same rule as Flow 2 Scenario B step 3) — empty placeholders are harmless and those sessions' template sections must survive until they consolidate.
+3. Clean the previous existing daily note by removing empty action categories. **Scope the script to the previous daily** so the current day's fresh note (and other days) are never cleaned — a note may only be cleaned once its date is no longer today (see `RULES-DAILY-NOTES.md` → Cleanup timing): `_COMMON/SKILLS/obsidian/scripts/cleanup_empty_action_categories.py --brain-root <brain> --glob <prev-date>.md --apply` (e.g. `--glob 2026-05-29.md`). It skips legacy-shape dailies without a `# Actions` section, preserves real content, and removes placeholder-only categories per `TOOL.cleanup-empty-action-categories.common.md`. **Defer this cleanup if the previous day still has open session notes pending consolidation** (same rule as Flow 2 Scenario B step 3) — empty placeholders are harmless and those sessions' template sections must survive until they consolidate.
 4. If there are open session notes from previous days:
    - consolidate their work into the last day the work was actually done;
    - do **not** delete the session note if that same session is continuing;
@@ -83,7 +83,7 @@ The two scenarios differ only by **whether today's daily note already exists** �
 
 The day has already been started, so there is no previous day to close.
 
-1. Create a new session note with the real current session id and a topic derived per the "Topic field — derive deterministically, never ask" rule above. This is the first durable artifact of the session — write it before loading deep vault context, not after.
+1. Create a new session note with the real current session id and a topic derived per the "Topic field — derive deterministically, never ask" rule above. This is the first durable artifact of the session — write it before loading deep brain context, not after.
 2. Add the session id or resume command to today's daily note under `# Sessions`.
 3. Do not mass-consolidate existing sessions by default. Report the open session notes other than the current one, and run the **"Previous sessions rollover"** below only for sessions the user asks to close, or for clearly stale notes that need it.
 
@@ -96,7 +96,7 @@ The day has not been started yet. Start it as part of the session, consolidating
 3. **Review-first close of the previous day** (never silent):
    - **Migrate the previous day's unfinished `* [[TODO]]:` items** — review the list with the user, carry unfinished items into today's `* [[TODO]]:`, promote real tasks to `WIP/`/`BACKLOG/`, drop done/obsolete ones (per `RULES-DAILY-NOTES.md` → TODO carryover).
    - Run the **Objectives review** pass for the previous day (`RULES-DAILY-NOTES.md` → Objectives review) before any cleanup.
-4. Clean the previous daily note by removing empty action categories, **scoped to that single daily** — but **only if that day has no open session note still pending consolidation** (any session the rollover above left live). The cleanup removes only empty placeholders, never real content; still, if a session that worked that day is still open, **defer this cleanup** so its template sections survive until it consolidates. A deferred day is cleaned later — by a later rollover when those sessions close, or by the Daily maintenance job. A note may only be cleaned once its date is no longer today (see `RULES-DAILY-NOTES.md` → Cleanup timing). Command, when it does run: `_COMMON/SKILLS/obsidian/scripts/cleanup_empty_action_categories.py --vault-root <vault> --glob <prev-date>.md --apply` (e.g. `--glob 2026-06-08.md`).
+4. Clean the previous daily note by removing empty action categories, **scoped to that single daily** — but **only if that day has no open session note still pending consolidation** (any session the rollover above left live). The cleanup removes only empty placeholders, never real content; still, if a session that worked that day is still open, **defer this cleanup** so its template sections survive until it consolidates. A deferred day is cleaned later — by a later rollover when those sessions close, or by the Daily maintenance job. A note may only be cleaned once its date is no longer today (see `RULES-DAILY-NOTES.md` → Cleanup timing). Command, when it does run: `_COMMON/SKILLS/obsidian/scripts/cleanup_empty_action_categories.py --brain-root <brain> --glob <prev-date>.md --apply` (e.g. `--glob 2026-06-08.md`).
 5. Create today's daily note from the template, with navigation links (previous day → today).
 6. Create the new session note with the real current session id (first durable artifact — before deep context).
 7. Add the session id or resume command to today's daily note under `# Sessions`.
@@ -132,14 +132,14 @@ The current session trace is mandatory even when previous sessions are intention
 
 ## Multi-session coordination
 
-Multiple agent sessions may operate against the same vault in parallel (e.g. one session per code repo plus a clean-vault session). Without explicit coordination, sessions can overwrite each other's edits or move artifacts another session is still using. The rules below keep the parallel arrangement safe.
+Multiple agent sessions may operate against the same brain in parallel (e.g. one session per code repo plus a clean-brain session). Without explicit coordination, sessions can overwrite each other's edits or move artifacts another session is still using. The rules below keep the parallel arrangement safe.
 
-- **Scope ownership**: each session owns the scope it touches. Vault edits scoped to a ticket folder, project subdirectory, or workflow are the exclusive responsibility of the session that started that work. Another session must not edit, move, or consolidate notes inside a peer session's active scope without an explicit handoff request from the user.
-- **Shared state files are edited surgically**. `WIP/WIP.md`, today's daily note `JOURNAL/<date>.md`, and any other vault-wide dashboard live in a shared space. Sessions touching them must:
+- **Scope ownership**: each session owns the scope it touches. Brain edits scoped to a ticket folder, project subdirectory, or workflow are the exclusive responsibility of the session that started that work. Another session must not edit, move, or consolidate notes inside a peer session's active scope without an explicit handoff request from the user.
+- **Shared state files are edited surgically**. `WIP/WIP.md`, today's daily note `JOURNAL/<date>.md`, and any other brain-wide dashboard live in a shared space. Sessions touching them must:
   - append entries under a unique, project-specific heading (per the project-uniqueness rule of daily notes — see `RULES-DAILY-NOTES.common.md`);
   - never rewrite or restructure sections owned by other sessions;
   - never replace an entire shared file in one edit when only a section is theirs.
-- **Detect parallel sessions at session start**. After loading vault context, scan today's daily note `# Sessions` block. Any session id present and not equal to the current session is a parallel session whose scope must be respected. If `session_bootstrap.py` is available, its `open_session_notes` list is the canonical source — read each peer note's `## Current objective` to learn its scope.
+- **Detect parallel sessions at session start**. After loading brain context, scan today's daily note `# Sessions` block. Any session id present and not equal to the current session is a parallel session whose scope must be respected. If `session_bootstrap.py` is available, its `open_session_notes` list is the canonical source — read each peer note's `## Current objective` to learn its scope.
 - **When in doubt, ask the user** which session owns an ambiguous scope. Do not infer from filenames or cwd alone.
 
-This section is referenced by `SKILL.obsidian.common.md` → "After vault resolution" so the rule loads at every `/obsidian` connection.
+This section is referenced by `SKILL.obsidian.common.md` → "After brain resolution" so the rule loads at every `/obsidian` connection.

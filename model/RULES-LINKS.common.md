@@ -4,19 +4,19 @@ Use this rule whenever adding or correcting internal Obsidian links.
 
 ## Internal note links
 
-When referencing another note inside the vault, use Obsidian wiki links:
+When referencing another note inside the brain, use Obsidian wiki links:
 
 ```markdown
 [[Note title]]
 ```
 
-Do not use filesystem paths for vault notes:
+Do not use filesystem paths for brain notes:
 
 ```markdown
 WIP/Example project.md
 ```
 
-Use filesystem paths only when referencing files outside the vault or when the path itself is the subject.
+Use filesystem paths only when referencing files outside the brain or when the path itself is the subject.
 
 ## Daily note links
 

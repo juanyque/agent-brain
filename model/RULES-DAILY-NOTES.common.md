@@ -42,10 +42,10 @@ Use this rule when creating, rolling over, cleaning, or correcting daily notes i
 
 ## Objectives tracking
 
-- The `* [[OBJECTIVES]]:` item under `# Actions` is the place to record daily evidence of progress against the recurring objectives listed in `WIP/OBJECTIVES.md` (see `VAULT.common.md` → WIP → Objectives tracking).
+- The `* [[OBJECTIVES]]:` item under `# Actions` is the place to record daily evidence of progress against the recurring objectives listed in `WIP/OBJECTIVES.md` (see `BRAIN.common.md` → WIP → Objectives tracking).
 - When evidence is recorded, use the shape `* [[<objective name>]] — <short evidence>` so the daily backlinks to the relevant objective node in `WIP/OBJECTIVES.md`.
 - If the `* [[OBJECTIVES]]:` item is empty at end-of-day cleanup, remove it like any other empty action category. Days with real entries keep them, so cumulative evidence stays trackable via backlinks to `[[OBJECTIVES]]`.
-- This item is optional: if the vault has no `WIP/OBJECTIVES.md`, it stays empty and is always cleaned up.
+- This item is optional: if the brain has no `WIP/OBJECTIVES.md`, it stays empty and is always cleaned up.
 
 ### Objectives review (close-day / close-session)
 
@@ -59,7 +59,7 @@ When closing a session or closing the day, before the empty-category cleanup run
 4. For confirmed items, add a bullet under `* [[OBJECTIVES]]:` in the shape `* [[<objective>]] — <short evidence with link to the work bullet, session, or external artifact>`.
 5. After the review, run the standard empty-category cleanup: the OBJECTIVES item is removed only if it stayed empty.
 
-This review is a checklist step in the Daily and Session-consolidation jobs (`JOBS.common.md`). It is a no-op when the vault has no `WIP/OBJECTIVES.md`.
+This review is a checklist step in the Daily and Session-consolidation jobs (`JOBS.common.md`). It is a no-op when the brain has no `WIP/OBJECTIVES.md`.
 
 ## Continuing session across days
 

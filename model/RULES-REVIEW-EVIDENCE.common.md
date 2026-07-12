@@ -50,7 +50,7 @@ Follow `RULES-FILE-NAMING.common.md`. Specific patterns:
 - **Report**: `report-<kind>-YYYYMMDD-<slug>.md` under `WIP/`. `<kind>` is `brag`, `feedback`, or `complaint`. The date is the generation date. Example: `report-brag-20260701-fy25-h2.md`, `report-complaint-20260720-arch-review-conflict.md`.
 - **Attachments**: stored in `WIP/evidence/ATTACHMENTS/`, named date-first: `YYYYMMDD - <source> - <topic>.<ext>`.
 
-Basenames must stay unique vault-wide (Obsidian resolves wikilinks by basename).
+Basenames must stay unique brain-wide (Obsidian resolves wikilinks by basename).
 
 ## Lifecycle
 
@@ -121,9 +121,9 @@ When a report moves to `ARCHIVED/Reviews/`, its own attachments (if any, added d
 
 ## References
 
-- `VAULT.common.md` -> WIP -> Review evidence (structure)
-- `VAULT.common.md` -> Attachments (binary handling)
-- `VAULT.common.md` -> ARCHIVED (end-of-cycle destination)
+- `BRAIN.common.md` -> WIP -> Review evidence (structure)
+- `BRAIN.common.md` -> Attachments (binary handling)
+- `BRAIN.common.md` -> ARCHIVED (end-of-cycle destination)
 - `RULES-FILE-NAMING.common.md` (naming patterns)
 - `RULES-DAILY-NOTES.common.md` (daily capture and cleanup)
 - `RULES-LINKS.common.md` (wikilink conventions)

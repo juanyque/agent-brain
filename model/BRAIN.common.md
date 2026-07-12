@@ -1,23 +1,23 @@
-# VAULT.common.md
+# BRAIN.common.md
 
 ## Purpose
-- This file is the shared operating guide for how compatible Obsidian vaults can be structured and maintained.
-- Local `AGENTS.md` is the always-on guardrail; local `VAULT.md` holds vault-specific workflow details and should reference this common model when appropriate.
-- This is a preferred normalized model, not merely a lowest-common-denominator description. Local vaults may diverge, but divergence should be explicit in local entrypoints.
+- This file is the shared operating guide for how compatible Obsidian brains can be structured and maintained.
+- Local `AGENTS.md` is the always-on guardrail; local `BRAIN.md` holds brain-specific workflow details and should reference this common model when appropriate.
+- This is a preferred normalized model, not merely a lowest-common-denominator description. Local brains may diverge, but divergence should be explicit in local entrypoints.
 
 ## Design goals
-- Keep the vault useful as a second brain: easy to update, easy to query, easy to resume after interruptions.
+- Keep the brain useful as a second brain: easy to update, easy to query, easy to resume after interruptions.
 - Separate active work from consolidated knowledge.
 - Preserve information during reorganization.
 - Keep context small at the top level and load deeper context only when needed.
 - Favor simple Markdown-first workflows that Obsidian can manage well.
-- Make vaults that use this common model similar enough that shared scripts, procedures, jobs, and the `obsidian` skill can operate predictably across them.
+- Make brains that use this common model similar enough that shared scripts, procedures, jobs, and the `obsidian` skill can operate predictably across them.
 
-## Installing common into an existing vault
-- Before relying on common workflows, run a conservative vault standardization pass when the vault structure is unclear or inherited.
-- The normalization pass should inspect the existing vault, propose a safe information-maturity structure, and migrate in phases with zero knowledge loss.
+## Installing common into an existing brain
+- Before relying on common workflows, run a conservative brain standardization pass when the brain structure is unclear or inherited.
+- The normalization pass should inspect the existing brain, propose a safe information-maturity structure, and migrate in phases with zero knowledge loss.
 - The preferred destination structure is `INBOX/`, `WIP/`, `JOURNAL/`, `MEMORY/`, `BACKLOG/`, `REPORTS/`, `TEMPLATES/`, `SCRIPTS/`, and `QUARANTINE/` where needed.
-- The user may choose local divergences, but those divergences should be documented in local `AGENTS.md` or `VAULT.md` so agents do not assume the default common structure blindly.
+- The user may choose local divergences, but those divergences should be documented in local `AGENTS.md` or `BRAIN.md` so agents do not assume the default common structure blindly.
 
 ## Information maturity model
 - Use this distinction consistently:
@@ -31,10 +31,10 @@
 - Avoid mixing these layers unless there is a clear reason.
 
 ## Operational top-level directories
-- Some top-level dirs are operational, not content. They are created and maintained by `obsidian-vault-common` tooling and are not part of the information maturity model.
-- `_COMMON` — symlink to the shared `obsidian-vault-common` repository.
-- `_STAGING` — transitional area created by `vault_setup.py` during initial reorganization. Drained area by area via `/obsidian init`.
-- `_AGENTS` — on-demand home for agent runtime configuration kept inside the vault (e.g. a `CLAUDE/` directory referenced by external symlinks under `~/.claude/`).
+- Some top-level dirs are operational, not content. They are created and maintained by `obsidian-brain-common` tooling and are not part of the information maturity model.
+- `_COMMON` — symlink to the shared `obsidian-brain-common` repository.
+- `_STAGING` — transitional area created by `brain_setup.py` during initial reorganization. Drained area by area via `/obsidian init`.
+- `_AGENTS` — on-demand home for agent runtime configuration kept inside the brain (e.g. a `CLAUDE/` directory referenced by external symlinks under `~/.claude/`).
 - The `_` prefix marks these dirs as operational. They are never considered candidates for reorganization, MEMORY promotion, or BACKLOG triage.
 
 ## ARCHIVED
@@ -47,13 +47,13 @@
 - Regular maintenance jobs should check `ARCHIVED/` periodically and flag content that has become dead links or references broken external resources, but should not delete content automatically.
 
 ## _AGENTS
-- `_AGENTS/` holds vault-internal directories that act as the source of truth for an external agent runtime (Claude Code, Codex, Anthropic Agents SDK, etc.) via symlinks rooted in the user's home (`~/.claude`, `~/.codex`, `~/.agents`).
-- Each subdirectory uses the runtime's natural folder name as it lived at the vault root before installation (for example `_AGENTS/CLAUDE/`).
-- Population is on-demand: `vault_setup.py` creates `_AGENTS/` only when external symlinks pointing into the vault are detected, and moves the affected top-level dirs into it.
-- The vault stays the source of truth for these configurations; external runtime homes hold only symlinks pointing here. This keeps runtime config versioned with the vault and portable across machines.
+- `_AGENTS/` holds brain-internal directories that act as the source of truth for an external agent runtime (Claude Code, Codex, Anthropic Agents SDK, etc.) via symlinks rooted in the user's home (`~/.claude`, `~/.codex`, `~/.agents`).
+- Each subdirectory uses the runtime's natural folder name as it lived at the brain root before installation (for example `_AGENTS/CLAUDE/`).
+- Population is on-demand: `brain_setup.py` creates `_AGENTS/` only when external symlinks pointing into the brain are detected, and moves the affected top-level dirs into it.
+- The brain stays the source of truth for these configurations; external runtime homes hold only symlinks pointing here. This keeps runtime config versioned with the brain and portable across machines.
 - Do not mix `_AGENTS/` with content layers. Agent runtimes evolve on their own cadence and may rewrite their own configuration; isolating them avoids polluting `MEMORY/`, `WIP/`, or `JOURNAL/`.
-- Files inside `_AGENTS/<runtime>/` should be location-agnostic. Avoid embedding the file's own absolute vault path inside its content (e.g. header lines like "Source: …/_AGENTS/<runtime>/<this-file>") — the filesystem (via symlinks rooted in `~/.<runtime>/`) is the canonical source of truth for the runtime↔vault relationship, and embedded paths break on every future rename or move.
-- Top-level Markdown files inside `_AGENTS/<runtime>/` should use the suffix `*.runtime.<runtime>.md` (e.g. `CLAUDE.runtime.claude.md`, `README.runtime.codex.md`) to keep basenames unique across runtimes and avoid collisions with vault notes that Obsidian indexes by basename.
+- Files inside `_AGENTS/<runtime>/` should be location-agnostic. Avoid embedding the file's own absolute brain path inside its content (e.g. header lines like "Source: …/_AGENTS/<runtime>/<this-file>") — the filesystem (via symlinks rooted in `~/.<runtime>/`) is the canonical source of truth for the runtime↔brain relationship, and embedded paths break on every future rename or move.
+- Top-level Markdown files inside `_AGENTS/<runtime>/` should use the suffix `*.runtime.<runtime>.md` (e.g. `CLAUDE.runtime.claude.md`, `README.runtime.codex.md`) to keep basenames unique across runtimes and avoid collisions with brain notes that Obsidian indexes by basename.
 
 ## JOURNAL
 - `JOURNAL/` is the home for daily notes / bitácora.
@@ -105,15 +105,15 @@
 - Session lifecycle procedures should live in `RULES-SESSION-LIFECYCLE.md`; update that rule when changing how sessions are started, rolled over, consolidated, or closed.
 
 ### Objectives tracking (optional)
-- A vault may keep a `WIP/OBJECTIVES.md` hub note listing recurring objectives that should stay top-of-mind across days (performance-framework items, personal habits, cross-team practices, etc.).
-- The content is vault-specific (it depends on role, performance cycle, personal goals); the *structure* is common: a flat list of `[[Objective name]]` wiki-links with a short "why" and a short "how to evidence" line.
+- A brain may keep a `WIP/OBJECTIVES.md` hub note listing recurring objectives that should stay top-of-mind across days (performance-framework items, personal habits, cross-team practices, etc.).
+- The content is brain-specific (it depends on role, performance cycle, personal goals); the *structure* is common: a flat list of `[[Objective name]]` wiki-links with a short "why" and a short "how to evidence" line.
 - Objectives evolve in `WIP/OBJECTIVES.md` (add/remove/refine over time). Daily evidence of progress is recorded in the daily note under `# Actions` → `* [[OBJECTIVES]]:` per `RULES-DAILY-NOTES.md`.
-- When the vault has no `WIP/OBJECTIVES.md`, the `[[OBJECTIVES]]` item in the daily template stays empty and gets cleaned up like any other empty action category.
-- When the vault *does* have `WIP/OBJECTIVES.md`, "what should I work on?" / WIP triage answers can surface objectives as candidate tasks (talk to other teams, document something, exercise, etc.) alongside project work.
+- When the brain has no `WIP/OBJECTIVES.md`, the `[[OBJECTIVES]]` item in the daily template stays empty and gets cleaned up like any other empty action category.
+- When the brain *does* have `WIP/OBJECTIVES.md`, "what should I work on?" / WIP triage answers can surface objectives as candidate tasks (talk to other teams, document something, exercise, etc.) alongside project work.
 
 ### Review evidence (optional)
 
-- A vault may keep a **continuous evidence store** under `WIP/evidence/`: self-contained atomic notes capturing accomplishments, feedback, incidents, and learnings as they happen. Reports (brag, feedback, complaint) are generated on demand by filtering the store, then curated by the human.
+- A brain may keep a **continuous evidence store** under `WIP/evidence/`: self-contained atomic notes capturing accomplishments, feedback, incidents, and learnings as they happen. Reports (brag, feedback, complaint) are generated on demand by filtering the store, then curated by the human.
 - The conventions for the store and reports (naming, lifecycle, sensitivity, attachment handling, daily capture) live in `RULES-REVIEW-EVIDENCE.common.md`. The procedural guides live in `TASK_TYPES/evidence-management.common.md` (the store), `TASK_TYPES/brag-report.common.md`, `TASK_TYPES/feedback-report.common.md`, and `TASK_TYPES/complaint-report.common.md` (the reports).
 - The daily note is the capture surface: three action categories (`* [[BRAG]]:`, `* [[FEEDBACK]]:`, `* [[COMPLAIN]]:` — see `TEMPLATES/TEMPLATE.daily-note.common.md`) hold one-line stubs that are harvested into atomic evidence notes. These are the backward-looking counterpart of `* [[OBJECTIVES]]:`.
 - Evidence notes are permanent and append-only. Reports are transient: generated in `WIP/`, curated, shared, then moved to `ARCHIVED/Reviews/` via `git mv` when the cycle closes. Reports tagged `sensitive` (complaint reports) stay in `WIP/` unless the user explicitly decides to archive them, because retention may be governed by HR policy.
@@ -131,7 +131,7 @@
 - MEMORY should favor clarity and reuse over raw chronology.
 - If a project clearly belongs to a client, prefer storing it under that client context instead of in a global projects area.
 - Use generic project/client/service areas only when the context is clearly general, personal, or not tied to a more specific owner.
-- A normalization pass should propose a concrete `MEMORY/` structure for the vault, usually including areas such as Clients, Projects, People, Tools, Providers, Inventory, Services, Infrastructure, or other locally meaningful domains.
+- A normalization pass should propose a concrete `MEMORY/` structure for the brain, usually including areas such as Clients, Projects, People, Tools, Providers, Inventory, Services, Infrastructure, or other locally meaningful domains.
 - Use `MEMORY/Providers/` for external suppliers and vendors, such as registrars, SaaS providers, infrastructure providers, banks, utilities, or professional services.
 - Use `MEMORY/Inventory/` for operational asset catalogs that must be easy to audit, such as domains, subscriptions, licenses, certificates, renewals, hardware assignments, or other owned assets.
 - Keep `MEMORY/Services/` for internal, self-hosted, or organization-operated services, not for the external provider companies behind them.
@@ -144,7 +144,7 @@
 - `TASK_TYPES/` holds **how-to-approach** guides for recurring task types — knowledge organized by the kind of work being done rather than by domain (Tools / Projects / Services / People).
 - This is a content layer distinct from existing ones:
   - **vs `TEMPLATES/`**: TEMPLATES define the shape of a single note; TASK_TYPES describe the procedure for a kind of work, and may inline a suggested note shape as one of their sections.
-  - **vs `RULES-*.md`**: RULES are vault-operational (how to keep the vault consistent and well-formed); TASK_TYPES are domain-task-operational (how to approach a kind of work that uses the vault).
+  - **vs `RULES-*.md`**: RULES are brain-operational (how to keep the brain consistent and well-formed); TASK_TYPES are domain-task-operational (how to approach a kind of work that uses the brain).
   - **vs `MEMORY/Tools/<tool>.md`**: tool notes are passive references about a tool; task-type notes are active procedural guides about a kind of work that may combine multiple tools, services, and projects.
   - **vs skills**: skills are runtime-loaded action sequences executed by an agent runtime (Claude Code, Codex, etc.); TASK_TYPES notes are informational guides that any agent can read. A task-type may be **promoted to a skill** when it becomes procedurally rich enough to deserve automated invocation.
 - The expected access pattern is index-first: agents scan a tiny index at session start, then deep-read the specific note only when the current task matches one of the listed types.
@@ -153,7 +153,7 @@
 
 - `TASK_TYPES/TASK_TYPES.md` is the always-loadable index. One line per task-type, with a short description and a `[[wikilink]]` to the note.
 - Keep the index tight. Add or trim entries when task-types are introduced or retired; do not let it accumulate stale entries.
-- The agent runtime / skill should load this file as part of the normal vault-connect step (alongside `AGENTS.md`, `VAULT.md`, `WIP/WIP.md`), so the catalog is available without explicit search.
+- The agent runtime / skill should load this file as part of the normal brain-connect step (alongside `AGENTS.md`, `BRAIN.md`, `WIP/WIP.md`), so the catalog is available without explicit search.
 
 ### Note shape
 
@@ -171,15 +171,15 @@ When a task-type guide becomes rich enough that an agent should execute it (acti
 - Live home: `_AGENTS/<runtime>/skills/<name>/SKILL.md` so it can be symlinked into runtime homes like `~/.claude/skills/<name>/`.
 - The TASK_TYPES index keeps a pointer entry pointing at the skill instead of (or alongside) the markdown guide.
 
-### Common vs vault-local
+### Common vs brain-local
 
 Task-types follow the same wrapper convention as RULES and AGENTS (see `AGENTS.common.md` → "Wrapper convention"):
 
 - Common content lives in `_COMMON/TASK_TYPES/<name>.common.md`. The index is `_COMMON/TASK_TYPES/TASK_TYPES.common.md`.
-- `vault_setup.py` discovers each `*.common.md` and creates a thin wrapper at `<vault>/TASK_TYPES/<name>.md`.
-- Vault-only task-types (no common counterpart) live directly at `<vault>/TASK_TYPES/<name>.md` and are listed in the vault index under "Additional local task-types".
+- `brain_setup.py` discovers each `*.common.md` and creates a thin wrapper at `<brain>/TASK_TYPES/<name>.md`.
+- Brain-only task-types (no common counterpart) live directly at `<brain>/TASK_TYPES/<name>.md` and are listed in the brain index under "Additional local task-types".
 
-Promote a vault-local task-type to common when its procedure is generic enough that the same content would apply unchanged in a different vault.
+Promote a brain-local task-type to common when its procedure is generic enough that the same content would apply unchanged in a different brain.
 
 ## INBOX
 - `INBOX/` is the central capture area for newly created or not-yet-classified notes.
@@ -209,7 +209,7 @@ Promote a vault-local task-type to common when its procedure is generic enough t
 ## Note naming (basename uniqueness for Obsidian wikilinks)
 
 - Obsidian resolves `[[wikilinks]]` by **basename**, not by full path. Two notes with the same basename in different folders produce ambiguous or wrong wikilink resolution.
-- When grouping related files inside an identifying folder (e.g. `WIP/demo-may-1-22/`, `WIP/<project>/<ticket>/`, an attached-folder ticket per `RULES-FILE-NAMING.md`), the **filenames inside still need to be identifying and ideally unique vault-wide**. Use the folder name as a prefix on each contained file's basename.
+- When grouping related files inside an identifying folder (e.g. `WIP/demo-may-1-22/`, `WIP/<project>/<ticket>/`, an attached-folder ticket per `RULES-FILE-NAMING.md`), the **filenames inside still need to be identifying and ideally unique brain-wide**. Use the folder name as a prefix on each contained file's basename.
 - Example — *wrong* (basenames collide across folders):
   ```
   WIP/demo-may-1-22/{estado,script}.md + deck.html
@@ -228,7 +228,7 @@ Promote a vault-local task-type to common when its procedure is generic enough t
 - Do not rename or move it until local `.obsidian` configuration is verified.
 - Favor simple templates that support the agreed workflow instead of template-heavy complexity.
 - Obsidian-facing templates should live in local `TEMPLATES/`; common automation/process templates may live under `_COMMON/TEMPLATES/` and be symlinked into local `TEMPLATES/` only when intentionally exposed to Obsidian.
-- Preferred local Obsidian configuration should point template creation to `TEMPLATES/`, unless the local vault explicitly documents another setup.
+- Preferred local Obsidian configuration should point template creation to `TEMPLATES/`, unless the local brain explicitly documents another setup.
 - The daily note template should stay minimal: keep only `tags` in frontmatter and track meaningful activity in the body. Contabilizable/facturable work belongs under `# Actions` → `* [[WORK]]:`, organized by project/context per `RULES-DAILY-NOTES.md`.
 
 ## Preferred Obsidian configuration direction
@@ -236,11 +236,11 @@ Promote a vault-local task-type to common when its procedure is generic enough t
 - Daily notes should preferably live in `JOURNAL/` using the common daily-note lifecycle rules.
 - Templates should preferably live in `TEMPLATES/`.
 - Attachments should preferably be created near the current note or in a predictable local `ATTACHMENTS/` folder, then maintained by attachment ownership rules.
-- These are desired target conventions. If a vault's `.obsidian` settings differ, document that locally and avoid changing `.obsidian/` without explicit user approval.
+- These are desired target conventions. If a brain's `.obsidian` settings differ, document that locally and avoid changing `.obsidian/` without explicit user approval.
 
 ## JOBS
 - `JOBS.md` follows the structure defined in `_COMMON/JOBS.common.md`: sections for Daily, Session consolidation, Weekly, Monthly, and Yearly routines, each with Purpose, Trigger, and Tasks.
-- Local wrappers may add vault-specific tasks. Execution state is recorded in a separate local `JOBS_LOGS.md`, not in `JOBS.md` itself.
+- Local wrappers may add brain-specific tasks. Execution state is recorded in a separate local `JOBS_LOGS.md`, not in `JOBS.md` itself.
 - Session consolidation should be a separate manual routine from daily/end-of-day closure.
 - Session consolidation may run multiple times in one day and should be idempotent.
 - Jobs should be lightweight checklists with minimal execution state so future sessions can tell whether a routine already ran and whether rerunning needs confirmation.
@@ -266,7 +266,7 @@ Promote a vault-local task-type to common when its procedure is generic enough t
 ## Reorganization rules
 - No information loss.
 - Prefer move/rename/link/consolidate over delete.
-- Agents must not delete vault content as a cleanup action. If something appears discardable, move it to `QUARANTINE/TRASH/` with `git mv` and document the reason.
+- Agents must not delete brain content as a cleanup action. If something appears discardable, move it to `QUARANTINE/TRASH/` with `git mv` and document the reason.
 - Preserve traceability when moving notes so prior knowledge can still be found.
 - Reorganize in phases: define model, map current state, create destination structure, migrate carefully, then clean up only when safe.
 - When moving notes in ways the user will review through Git, prefer `git mv` to preserve clearer traceability.
@@ -275,7 +275,7 @@ Promote a vault-local task-type to common when its procedure is generic enough t
 ## Working model for future sessions
 - Start from `WIP/WIP.md` once that structure exists.
 - Use `WIP/SESSIONS/` for temporary per-session context.
-- For project work, load the relevant project-specific WIP note instead of the whole vault.
+- For project work, load the relevant project-specific WIP note instead of the whole brain.
 - At the start of a session or day rollover, load `RULES-SESSION-LIFECYCLE.md` and follow its scenario logic.
 - Review `INBOX/` as part of normal capture/consolidation flow and re-home notes when their proper destination is clear.
 - Record meaningful day progress in `JOURNAL/`.
