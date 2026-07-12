@@ -45,7 +45,7 @@ Do not run broad brain maintenance, standardization, or semantic reorganization 
 Run the discovery script first. It handles all deterministic path logic:
 
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/find_vaults.py [path]
+python3 ~/.agents/skills/brain/scripts/find_home.py [path]
 ```
 
 The script returns JSON. Handle each outcome:
@@ -184,7 +184,7 @@ Key terms used throughout the maintenance and setup workflows below:
 
 The runtime skill exposes deterministic helper tools under its installed `scripts/` directory (see the Runtime path note above). Prefer these tools over brain-local copies.
 
-- `find_vaults.py` — resolve candidate Obsidian brains from a path.
+- `find_home.py` — resolve candidate brains from a path (notes-agnostic: obsidian, generic, empty).
 - `find_related_notes.py` — find notes related to project keywords.
 - `session_open.py` — session-start ceremony: emits a compact digest, creates session note, updates daily `# Sessions`. Args: `--brain-root`, `--session-id` (real id from the agent runtime — never a timestamp), `--runtime` (claude|opencode|codex; controls resume-command format), `--session-label` (opt), `--cwd` (opt), `--apply`. Dry-run by default.
 - `session_close.py` — session-close ceremony. Subcommands: `handoff <session-id>` (→ handoff-only), `consolidate <session-id> [--archive]` (→ consolidated, optional git mv to QUARANTINE/TRASH/). Args: `--brain-root`, `--apply`. Dry-run by default.

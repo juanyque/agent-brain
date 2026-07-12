@@ -6,7 +6,7 @@ The user should not need to know internal tool names. The skill resolves the bra
 
 "Reversible through Git" is NOT a license to auto-apply: every `git mv` is reversible by `git reset --hard`, yet a brain crowded with 900+ undeclared renames is unusable. The narrow set of actions the skill MAY apply without explicit per-action user approval is limited to:
 
-- Read-only scripts (`find_vaults.py`, `standardize_assessment.py` in dry-run, `maintenance_scheduler.py` reports).
+- Read-only scripts (`find_home.py`, `standardize_assessment.py` in dry-run, `maintenance_scheduler.py` reports).
 - `home_setup.py --apply` after the user explicitly answered the setup question in step 1.
 - The setup-time `.DS_Store` sweep and empty-dir cleanup and `_AGENTS/` migration, all performed by `home_setup.py` itself under that same approval.
 - `cleanup_ds_store.py --apply` as a maintenance-mode pre-check — `.DS_Store` removal does not destroy information.

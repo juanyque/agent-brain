@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Find agent-brain HOME candidates (notes-agnostic).
+"""Find agent-brain candidates (notes-agnostic).
 
-A HOME is a folder the operating model can attach to. Each candidate is classified by
+A brain is a folder the operating model can attach to. Each candidate is classified by
 notes_mode: 'obsidian' (has .obsidian/), 'generic' (looks like a notes folder), or
-'empty'. Reuses find_vaults.py for Obsidian detection so the two stay consistent.
+'empty'. This is the single discovery script (absorbed find_vaults.py).
 
 Usage:
     python3 find_home.py                  # search from home directory
@@ -23,7 +23,17 @@ import json
 import sys
 from pathlib import Path
 
-from find_vaults import SKIP_DIRS, is_vault
+SKIP_DIRS = {
+    ".git", "node_modules", ".Trash", ".cache", ".Trash-0",
+    "__pycache__", ".venv", "venv", "env", ".tox", ".mypy_cache",
+    ".pytest_cache", ".next", ".nuxt", "dist", "build", ".gradle",
+    "Library", "Applications", ".local", ".npm", ".nvm", ".cargo",
+    ".rustup", ".docker", ".kube",
+}
+
+
+def is_vault(path: Path) -> bool:
+    return (path / ".obsidian").is_dir()
 
 GENERIC_MIN_MD = 5
 OP_DIRS = {"journal", "memory", "wip", "_agents", "backlog", "inbox"}
