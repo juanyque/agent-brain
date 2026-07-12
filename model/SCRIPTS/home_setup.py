@@ -16,10 +16,14 @@ from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 
-COMMON_LINK_NAME = "_COMMON"
-STAGING_DIR_NAME = "_STAGING"
-AGENTS_DIR_NAME = "_AGENTS"
-OPERATIONAL_TOP_LEVEL_DIRS = {COMMON_LINK_NAME, STAGING_DIR_NAME, AGENTS_DIR_NAME}
+from brain_state import (  # noqa: E402  (lives next to this script)
+    AGENTS_DIR_NAME,
+    COMMON_LINK_NAME,
+    OPERATIONAL_TOP_LEVEL_DIRS,
+    STAGING_DIR_NAME,
+    link_status,
+    staging_status,
+)
 
 # Content-level top-level directories (created on-demand, not during initial setup):
 # JOURNAL, WIP, MEMORY, ARCHIVED, BACKLOG, INBOX, REPORTS, QUARANTINE, TEMPLATES, SCRIPTS
@@ -472,10 +476,6 @@ def git_mv_to_staging(
 
 
 
-def relative_symlink_target(source: Path, link_path: Path) -> str:
-    return os.path.relpath(source.resolve(), start=link_path.parent.resolve())
-
-
 def via_common_symlink_target(common_rel: str, link_path: Path, vault: Path) -> str:
     """Compute a relative symlink target that resolves through the _COMMON link.
 
@@ -491,19 +491,6 @@ def via_common_symlink_target(common_rel: str, link_path: Path, vault: Path) -> 
     depth = len(rel.parts) - 1
     prefix = ("../" * depth) if depth > 0 else ""
     return f"{prefix}{COMMON_LINK_NAME}/{common_rel}"
-
-
-def link_status(vault: Path, common: Path) -> tuple[str, str]:
-    link_path = vault / COMMON_LINK_NAME
-    desired = relative_symlink_target(common, link_path)
-
-    if not link_path.exists() and not link_path.is_symlink():
-        return "missing", desired
-    if not link_path.is_symlink():
-        return "conflict-not-symlink", desired
-    if link_path.resolve() == common.resolve():
-        return "ok", desired
-    return "conflict-wrong-target", desired
 
 
 def discover_runtimes(extra_runtimes: list[str] | None) -> list[Path]:
@@ -524,18 +511,6 @@ def discover_runtimes(extra_runtimes: list[str] | None) -> list[Path]:
         seen.add(key)
         unique.append(runtime)
     return unique
-
-
-def staging_status(vault: Path) -> tuple[str, int]:
-    """Return (status, item_count) for _STAGING in the vault.
-
-    status is one of: "missing", "empty", "has-content".
-    """
-    staging = vault / STAGING_DIR_NAME
-    if not staging.is_dir():
-        return "missing", 0
-    items = [p for p in staging.iterdir() if p.name != ".git"]
-    return ("empty" if not items else "has-content"), len(items)
 
 
 def collect_movable_items(vault: Path) -> list[Path]:
