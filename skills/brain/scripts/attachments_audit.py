@@ -32,11 +32,11 @@ class AttachmentReport:
 from _common import Reporter, build_command_string  # noqa: E402  (lives next to this script)
 
 
-def is_git_repo(vault_root: Path) -> bool:
+def is_git_repo(brain_root: Path) -> bool:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--is-inside-work-tree"],
-            cwd=vault_root,
+            cwd=brain_root,
             capture_output=True,
             text=True,
         )
@@ -45,9 +45,9 @@ def is_git_repo(vault_root: Path) -> bool:
     return result.returncode == 0 and result.stdout.strip() == "true"
 
 
-def build_markdown_index(vault_root: Path) -> dict[str, list[Path]]:
+def build_markdown_index(brain_root: Path) -> dict[str, list[Path]]:
     index: dict[str, list[Path]] = defaultdict(list)
-    for md_file in vault_root.rglob("*.md"):
+    for md_file in brain_root.rglob("*.md"):
         try:
             content = md_file.read_text(encoding="utf-8")
         except UnicodeDecodeError:
@@ -76,7 +76,7 @@ def note_attachment_dir(note_path: Path) -> Path:
 
 
 def infer_destination(
-    vault_root: Path,
+    brain_root: Path,
     refs: list[Path],
     quarantine_dir: Path,
     current_attachment_dir: Path,
@@ -101,18 +101,18 @@ def infer_destination(
     return (
         "RELOCATE_CANDIDATE",
         target_dir / attachment_name,
-        f"Referenced from notes in {target_dir.relative_to(vault_root)}.",
+        f"Referenced from notes in {target_dir.relative_to(brain_root)}.",
     )
 
 
-def audit_folder(vault_root: Path, attachment_dir: Path, quarantine_dir: Path, markdown_index: dict[str, list[Path]]) -> list[AttachmentReport]:
+def audit_folder(brain_root: Path, attachment_dir: Path, quarantine_dir: Path, markdown_index: dict[str, list[Path]]) -> list[AttachmentReport]:
     if not any(p.is_file() for p in attachment_dir.iterdir()):
         return []
     reports: list[AttachmentReport] = []
     for attachment in sorted(p for p in attachment_dir.iterdir() if p.is_file()):
         refs = sorted(set(markdown_index.get(attachment.name, [])))
         status, destination, note = infer_destination(
-            vault_root=vault_root,
+            brain_root=brain_root,
             refs=refs,
             quarantine_dir=quarantine_dir,
             current_attachment_dir=attachment_dir,
@@ -140,12 +140,12 @@ def find_attachment_dirs(scope_root: Path) -> list[Path]:
     return sorted(dirs)
 
 
-def move_file(src: Path, dst: Path, vault_root: Path, use_git_mv: bool) -> None:
+def move_file(src: Path, dst: Path, brain_root: Path, use_git_mv: bool) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists():
         raise FileExistsError(f"Destination already exists for {src.name}: {dst}")
     if use_git_mv:
-        subprocess.run(["git", "mv", str(src), str(dst)], cwd=vault_root, check=True)
+        subprocess.run(["git", "mv", str(src), str(dst)], cwd=brain_root, check=True)
     else:
         shutil.move(str(src), str(dst))
 
@@ -156,7 +156,7 @@ def cleanup_empty_attachment_dirs(dirs: set[Path]) -> None:
             attachment_dir.rmdir()
 
 
-def apply_reports(reports: list[AttachmentReport], vault_root: Path, use_git_mv: bool) -> None:
+def apply_reports(reports: list[AttachmentReport], brain_root: Path, use_git_mv: bool) -> None:
     touched_attachment_dirs: set[Path] = set()
     for report in reports:
         if report.status not in {"RELOCATE_CANDIDATE", "ORPHAN_CANDIDATE"}:
@@ -164,32 +164,32 @@ def apply_reports(reports: list[AttachmentReport], vault_root: Path, use_git_mv:
         if report.proposed_destination is None:
             continue
         touched_attachment_dirs.add(report.attachment.parent)
-        move_file(report.attachment, report.proposed_destination, vault_root, use_git_mv)
+        move_file(report.attachment, report.proposed_destination, brain_root, use_git_mv)
     cleanup_empty_attachment_dirs(touched_attachment_dirs)
 
 
-def print_report(vault_root: Path, scoped_reports: list[tuple[Path, list[AttachmentReport]]], reporter: Reporter, applied: bool, command_string: str) -> None:
+def print_report(brain_root: Path, scoped_reports: list[tuple[Path, list[AttachmentReport]]], reporter: Reporter, applied: bool, command_string: str) -> None:
     reporter.write("# Attachment audit")
     reporter.write("")
-    reporter.write(f"vault_root: {vault_root}")
+    reporter.write(f"brain_root: {brain_root}")
     reporter.write(f"mode: {'apply' if applied else 'dry-run'}")
     reporter.write(f"command: {command_string}")
-    reporter.write(f"move_strategy: {'git mv' if is_git_repo(vault_root) else 'filesystem move'}")
+    reporter.write(f"move_strategy: {'git mv' if is_git_repo(brain_root) else 'filesystem move'}")
     reporter.write("")
     for attachment_dir, reports in scoped_reports:
-        reporter.write(f"## Folder: {attachment_dir.relative_to(vault_root)}")
+        reporter.write(f"## Folder: {attachment_dir.relative_to(brain_root)}")
         reporter.write("")
         for report in reports:
-            rel_attachment = report.attachment.relative_to(vault_root)
+            rel_attachment = report.attachment.relative_to(brain_root)
             reporter.write(f"- {rel_attachment}")
             reporter.write(f"  status: {report.status}")
             reporter.write(f"  note: {report.note}")
             if report.proposed_destination is not None:
-                reporter.write(f"  proposed_destination: {report.proposed_destination.relative_to(vault_root)}")
+                reporter.write(f"  proposed_destination: {report.proposed_destination.relative_to(brain_root)}")
             if report.references:
                 reporter.write("  references:")
                 for ref in report.references:
-                    reporter.write(f"    - {ref.relative_to(vault_root)}")
+                    reporter.write(f"    - {ref.relative_to(brain_root)}")
             else:
                 reporter.write("  references: []")
             reporter.write("")
@@ -197,7 +197,7 @@ def print_report(vault_root: Path, scoped_reports: list[tuple[Path, list[Attachm
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Audit and optionally relocate attachments under a scope root.")
-    parser.add_argument("--vault-root", default=".", help="Vault root path")
+    parser.add_argument("--brain-root", default=".", help="Vault root path")
     parser.add_argument(
         "--scope-root",
         default="JOURNAL",
@@ -218,12 +218,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    vault_root = Path(args.vault_root).resolve()
-    scope_root = (vault_root / args.scope_root).resolve()
-    quarantine_dir = (vault_root / args.quarantine_dir).resolve()
+    brain_root = Path(args.brain_root).resolve()
+    scope_root = (brain_root / args.scope_root).resolve()
+    quarantine_dir = (brain_root / args.quarantine_dir).resolve()
     log_path = Path(__file__).with_suffix(".log")
     reporter = Reporter(log_path)
-    use_git_mv = is_git_repo(vault_root)
+    use_git_mv = is_git_repo(brain_root)
     command_string = build_command_string()
 
     if not scope_root.exists():
@@ -239,18 +239,18 @@ def main() -> int:
         reporter.flush()
         return 0
 
-    markdown_index = build_markdown_index(vault_root)
+    markdown_index = build_markdown_index(brain_root)
     scoped_reports: list[tuple[Path, list[AttachmentReport]]] = []
     all_reports: list[AttachmentReport] = []
     for attachment_dir in attachment_dirs:
-        reports = audit_folder(vault_root, attachment_dir, quarantine_dir, markdown_index)
+        reports = audit_folder(brain_root, attachment_dir, quarantine_dir, markdown_index)
         if reports:
             scoped_reports.append((attachment_dir, reports))
             all_reports.extend(reports)
 
-    print_report(vault_root, scoped_reports, reporter, args.apply, command_string)
+    print_report(brain_root, scoped_reports, reporter, args.apply, command_string)
     if args.apply:
-        apply_reports(all_reports, vault_root, use_git_mv)
+        apply_reports(all_reports, brain_root, use_git_mv)
         reporter.write("Applied relocate/orphan moves for safe candidates.")
     reporter.flush()
     return 0

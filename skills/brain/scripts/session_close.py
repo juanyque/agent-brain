@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
         description="Session-close ceremony: mark session state and optionally archive."
     )
     parser.add_argument(
-        "--vault-root",
+        "--brain-root",
         required=True,
         help="Vault root path.",
     )
@@ -58,14 +58,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def find_session_note(vault_root: Path, session_id: str) -> Path | None:
+def find_session_note(brain_root: Path, session_id: str) -> Path | None:
     """Find a session note in WIP/SESSIONS/ whose filename contains session_id.
 
     When multiple notes match (e.g. same session spanning two days), prefer the
     most recent note whose status is active (open or handoff-only). Falls back to
     the most recent note overall if all are in terminal states.
     """
-    session_dir = vault_root / "WIP" / "SESSIONS"
+    session_dir = brain_root / "WIP" / "SESSIONS"
     if not session_dir.exists():
         return None
     matches = [p for p in session_dir.glob("*.md") if session_id in p.name]
@@ -177,19 +177,19 @@ def git_mv(src: Path, dst: Path, apply: bool) -> bool:
 
 def main() -> int:
     args = parse_args()
-    vault_root = Path(args.vault_root).expanduser().resolve()
-    if not vault_root.is_dir():
-        print(f"ERROR: vault root not found: {vault_root}", file=sys.stderr)
+    brain_root = Path(args.brain_root).expanduser().resolve()
+    if not brain_root.is_dir():
+        print(f"ERROR: vault root not found: {brain_root}", file=sys.stderr)
         return 1
 
     mode = "apply" if args.apply else "dry-run"
     subcommand: str = args.subcommand
     session_id: str = args.session_id
 
-    note_path = find_session_note(vault_root, session_id)
+    note_path = find_session_note(brain_root, session_id)
     if note_path is None:
         print(f"ERROR: session note not found for id '{session_id}'", file=sys.stderr)
-        print(f"  searched in: {vault_root / 'WIP' / 'SESSIONS'}", file=sys.stderr)
+        print(f"  searched in: {brain_root / 'WIP' / 'SESSIONS'}", file=sys.stderr)
         return 1
 
     current_status = read_session_status(note_path)
@@ -203,7 +203,7 @@ def main() -> int:
         print(f"  '{subcommand}' requires status to be one of: {', '.join(allowed_from)}", file=sys.stderr)
         return 1
 
-    note_rel = note_path.relative_to(vault_root)
+    note_rel = note_path.relative_to(brain_root)
     new_status = "handoff-only" if subcommand == "handoff" else "consolidated"
 
     print(f"# Session close — {subcommand}")
@@ -227,7 +227,7 @@ def main() -> int:
             print(f"  {action}: 'wip' tag from frontmatter")
 
         if args.archive:
-            trash_dir = vault_root / "QUARANTINE" / "TRASH"
+            trash_dir = brain_root / "QUARANTINE" / "TRASH"
             dst = trash_dir / note_path.name
             ok = git_mv(note_path, dst, apply=args.apply)
             if not ok:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Detect `*.md` basename collisions across the vault.
+"""Detect `*.md` basename collisions across the brain_root.
 
 Same basename in different folders makes Obsidian's `[[wikilink]]` resolution
 non-deterministic. This tool surfaces all collisions, counts incoming
@@ -69,7 +69,7 @@ def strip_code_spans(text: str) -> str:
 LINK_BEARING_EXTS = (".md", ".canvas")
 
 
-def walk_files(vault: Path, exclude_paths: list[Path]) -> list[Path]:
+def walk_files(brain_root: Path, exclude_paths: list[Path]) -> list[Path]:
     """Yield files under visible non-symlinked top-level dirs.
 
     Mirrors `cleanup_ds_store.py`'s containment model: dotfile dirs and
@@ -93,7 +93,7 @@ def walk_files(vault: Path, exclude_paths: list[Path]) -> list[Path]:
         return False
 
     try:
-        top_entries = list(vault.iterdir())
+        top_entries = list(brain_root.iterdir())
     except OSError:
         return found
     for top in top_entries:
@@ -216,16 +216,16 @@ def count_incoming_refs(
     return counts
 
 
-def git_creation_iso(vault: Path, path: Path) -> str | None:
+def git_creation_iso(brain_root: Path, path: Path) -> str | None:
     """ISO timestamp of the first commit adding this path; None if untracked."""
     try:
-        rel = path.relative_to(vault)
+        rel = path.relative_to(brain_root)
     except ValueError:
         return None
     try:
         result = subprocess.run(
             [
-                "git", "-C", str(vault), "log",
+                "git", "-C", str(brain_root), "log",
                 "--diff-filter=A", "--reverse", "--format=%cI",
                 "--", str(rel),
             ],
@@ -248,10 +248,10 @@ def fs_birth_iso(path: Path) -> str:
     return datetime.fromtimestamp(epoch).isoformat()
 
 
-def depth(vault: Path, path: Path) -> int:
+def depth(brain_root: Path, path: Path) -> int:
     """Folder depth from vault root. File at root = 0; under `WIP/` = 1; etc."""
     try:
-        return len(path.relative_to(vault).parts) - 1
+        return len(path.relative_to(brain_root).parts) - 1
     except ValueError:
         return -1
 
@@ -269,7 +269,7 @@ def suggested_new_basename(path: Path) -> str:
     return f"{parent_slug(path)}.{path.stem}{path.suffix}"
 
 
-def resolve_exclude_paths(vault: Path, raw_paths: list[str]) -> list[Path]:
+def resolve_exclude_paths(brain_root: Path, raw_paths: list[str]) -> list[Path]:
     """Convert user-supplied `--exclude-path` values (relative to vault or
     absolute) into absolute Paths. Non-existent paths are kept (allows
     pre-emptive exclusion of paths that don't exist in every vault)."""
@@ -277,7 +277,7 @@ def resolve_exclude_paths(vault: Path, raw_paths: list[str]) -> list[Path]:
     for raw in raw_paths:
         p = Path(raw)
         if not p.is_absolute():
-            p = vault / p
+            p = brain_root / p
         resolved.append(p.resolve(strict=False))
     return resolved
 
@@ -286,7 +286,7 @@ def attribute_ref_to_group_file(
     ref_file: Path,
     normalized_ref: str,
     group_files: list[Path],
-    vault_root: Path,
+    brain_root: Path,
 ) -> Path | None:
     """Try to identify which file in group_files the reference targets.
 
@@ -318,7 +318,7 @@ def attribute_ref_to_group_file(
                     continue
             return None
         # Vault-relative or path-suffix
-        vault_candidate = (vault_root / target_filename).resolve()
+        vault_candidate = (brain_root / target_filename).resolve()
         for gf in group_files:
             try:
                 if gf.resolve() == vault_candidate:
@@ -342,7 +342,7 @@ def attribute_ref_to_group_file(
 def count_refs_per_file(
     files: list[Path],
     duplicates: dict[str, list[Path]],
-    vault_root: Path,
+    brain_root: Path,
 ) -> dict[Path, dict[str, int]]:
     """Per-file attribution counter. For each duplicate-group file, returns
     counters of refs (by kind) that resolve to THIS specific file.
@@ -376,7 +376,7 @@ def count_refs_per_file(
             if stem not in stem_to_group:
                 continue
             target = attribute_ref_to_group_file(
-                ref_file, norm, stem_to_group[stem], vault_root
+                ref_file, norm, stem_to_group[stem], brain_root
             )
             if target is None:
                 continue
@@ -390,7 +390,7 @@ def count_refs_per_file(
             if stem not in stem_to_group:
                 continue
             target = attribute_ref_to_group_file(
-                ref_file, norm, stem_to_group[stem], vault_root
+                ref_file, norm, stem_to_group[stem], brain_root
             )
             if target is None:
                 continue
@@ -459,11 +459,11 @@ def is_inside_git_repo(path: Path) -> bool:
     return result.returncode == 0 and result.stdout.strip() == "true"
 
 
-def git_mv(vault: Path, src: Path, dst: Path) -> tuple[bool, str]:
+def git_mv(brain_root: Path, src: Path, dst: Path) -> tuple[bool, str]:
     """Run `git -C vault mv src dst`. Returns (ok, message)."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(vault), "mv", str(src), str(dst)],
+            ["git", "-C", str(brain_root), "mv", str(src), str(dst)],
             capture_output=True, text=True, check=False, timeout=10,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
@@ -475,16 +475,16 @@ def git_mv(vault: Path, src: Path, dst: Path) -> tuple[bool, str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Detect *.md basename collisions across the vault."
+        description="Detect *.md basename collisions across the brain_root."
     )
-    parser.add_argument("--vault-root", required=True, help="Path to the vault root.")
+    parser.add_argument("--brain-root", required=True, help="Path to the vault root.")
     parser.add_argument(
         "--exclude-path",
         action="append",
         default=[],
         metavar="PATH",
         help=(
-            "Path (relative to --vault-root, or absolute) to exclude from the scan. "
+            "Path (relative to --brain-root, or absolute) to exclude from the scan. "
             "Repeatable. Use to skip subtrees owned by external runtimes (e.g. "
             "`_AGENTS/CLAUDE/memory` — files there are governed by CLAUDE.md, "
             "renaming breaks the runtime). Excluded files are also ignored when "
@@ -514,15 +514,15 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    vault = Path(args.vault_root).expanduser().resolve()
-    if not vault.is_dir():
-        print(f"ERROR: vault root not found: {vault}", file=sys.stderr)
+    brain_root = Path(args.brain_root).expanduser().resolve()
+    if not brain_root.is_dir():
+        print(f"ERROR: brain root not found: {brain_root}", file=sys.stderr)
         return 1
 
-    exclude_paths = resolve_exclude_paths(vault, args.exclude_path)
-    use_git = is_inside_git_repo(vault)
+    exclude_paths = resolve_exclude_paths(brain_root, args.exclude_path)
+    use_git = is_inside_git_repo(brain_root)
 
-    all_files = walk_files(vault, exclude_paths)
+    all_files = walk_files(brain_root, exclude_paths)
     md_files = [f for f in all_files if f.suffix == ".md"]
 
     # --show-refs short-circuits before the collision report.
@@ -533,12 +533,12 @@ def main() -> int:
         by_kind = find_refs_to_stem(all_files, target)
         total = sum(len(refs) for refs in by_kind.values())
         print(f"# References to `{target}` (basename `{target}.md`)")
-        print(f"vault: {vault}")
+        print(f"brain_root: {brain_root}")
         if exclude_paths:
             print("excluded:")
             for ex in exclude_paths:
                 try:
-                    print(f"  - {ex.relative_to(vault)}")
+                    print(f"  - {ex.relative_to(brain_root)}")
                 except ValueError:
                     print(f"  - {ex}")
         print(f"link-bearing files scanned (md + canvas): {len(all_files)}")
@@ -560,7 +560,7 @@ def main() -> int:
             print(f"## {REF_KIND_LABELS[kind]} — {label} · {len(refs)} occurrence(s)")
             for path, line_no, content in sorted(refs, key=lambda t: (str(t[0]), t[1])):
                 try:
-                    rel = path.relative_to(vault)
+                    rel = path.relative_to(brain_root)
                 except ValueError:
                     rel = path
                 print(f"  - {rel}:{line_no}")
@@ -575,15 +575,15 @@ def main() -> int:
 
     target_stems = {Path(bn).stem for bn in duplicates.keys()}
     incoming = count_incoming_refs(all_files, target_stems)
-    per_file = count_refs_per_file(all_files, duplicates, vault)
+    per_file = count_refs_per_file(all_files, duplicates, brain_root)
 
     print("# Basename collisions report")
-    print(f"vault: {vault}")
+    print(f"brain_root: {brain_root}")
     if exclude_paths:
         print("excluded:")
         for ex in exclude_paths:
             try:
-                rel = ex.relative_to(vault)
+                rel = ex.relative_to(brain_root)
                 print(f"  - {rel}")
             except ValueError:
                 print(f"  - {ex}")
@@ -618,10 +618,10 @@ def main() -> int:
 
         annotated: list[tuple[Path, Path, str, int]] = []
         for p in paths:
-            iso = git_creation_iso(vault, p) or fs_birth_iso(p)
-            d = depth(vault, p)
+            iso = git_creation_iso(brain_root, p) or fs_birth_iso(p)
+            d = depth(brain_root, p)
             try:
-                rel = p.relative_to(vault)
+                rel = p.relative_to(brain_root)
             except ValueError:
                 rel = p
             annotated.append((p, rel, iso, d))
@@ -636,7 +636,7 @@ def main() -> int:
                 new_name = suggested_new_basename(p)
                 dst = p.parent / new_name
                 try:
-                    new_rel = dst.relative_to(vault)
+                    new_rel = dst.relative_to(brain_root)
                 except ValueError:
                     new_rel = dst
                 if args.apply:
@@ -645,7 +645,7 @@ def main() -> int:
                         apply_failures.append((p, dst, "target exists"))
                         continue
                     if use_git:
-                        ok, err = git_mv(vault, p, dst)
+                        ok, err = git_mv(brain_root, p, dst)
                     else:
                         try:
                             p.rename(dst)
@@ -725,7 +725,7 @@ def main() -> int:
                 new_name = suggested_new_basename(p)
                 dst = p.parent / new_name
                 try:
-                    new_rel = dst.relative_to(vault)
+                    new_rel = dst.relative_to(brain_root)
                 except ValueError:
                     new_rel = dst
                 if args.apply:
@@ -734,7 +734,7 @@ def main() -> int:
                         apply_failures.append((p, dst, "target exists"))
                         continue
                     if use_git:
-                        ok, err = git_mv(vault, p, dst)
+                        ok, err = git_mv(brain_root, p, dst)
                     else:
                         try:
                             p.rename(dst)
@@ -752,7 +752,7 @@ def main() -> int:
             for p, rel, iso, d in needs_edits:
                 new_name = suggested_new_basename(p)
                 try:
-                    new_rel = p.parent.relative_to(vault) / new_name
+                    new_rel = p.parent.relative_to(brain_root) / new_name
                 except ValueError:
                     new_rel = Path(p.parent) / new_name
                 print(f"    → suggest rename (needs edits): {rel} → {new_rel}")

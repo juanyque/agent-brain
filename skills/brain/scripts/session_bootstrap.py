@@ -22,12 +22,12 @@ TEMPLATE_CANDIDATES = [
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Inspect vault state and print a ready-to-send session bootstrap prompt.")
-    parser.add_argument("--vault-root", default=".", help="Vault root path")
+    parser.add_argument("--brain-root", default=".", help="Vault root path")
     return parser.parse_args()
 
 
-def load_daily_config(vault_root: Path) -> dict:
-    path = vault_root / ".obsidian" / "daily-notes.json"
+def load_daily_config(brain_root: Path) -> dict:
+    path = brain_root / ".obsidian" / "daily-notes.json"
     if not path.exists():
         return {"folder": "JOURNAL"}
     try:
@@ -44,8 +44,8 @@ def list_daily_notes(journal_root: Path) -> list[Path]:
     return sorted(notes)
 
 
-def list_session_notes(vault_root: Path) -> list[Path]:
-    session_dir = vault_root / "WIP" / "SESSIONS"
+def list_session_notes(brain_root: Path) -> list[Path]:
+    session_dir = brain_root / "WIP" / "SESSIONS"
     if not session_dir.exists():
         return []
     return sorted(session_dir.glob("*.md"))
@@ -58,9 +58,9 @@ def read_lines(path: Path) -> list[str]:
         return []
 
 
-def find_template_path(vault_root: Path) -> Path | None:
+def find_template_path(brain_root: Path) -> Path | None:
     for candidate in TEMPLATE_CANDIDATES:
-        path = vault_root / candidate
+        path = brain_root / candidate
         if path.exists():
             return path
     return None
@@ -97,16 +97,16 @@ def work_project_headings(lines: list[str]) -> list[str]:
     return headings
 
 
-def validate_daily_notes(vault_root: Path, journal_root: Path, daily_notes: list[Path], today_path: Path) -> list[str]:
+def validate_daily_notes(brain_root: Path, journal_root: Path, daily_notes: list[Path], today_path: Path) -> list[str]:
     warnings: list[str] = []
-    template_path = find_template_path(vault_root)
+    template_path = find_template_path(brain_root)
     if today_path.exists() and template_path:
         expected_categories = action_categories(read_lines(template_path))
         today_categories = set(action_categories(read_lines(today_path)))
         missing = [category for category in expected_categories if category not in today_categories]
         if missing:
             warnings.append(
-                f"Current daily note `{today_path.relative_to(vault_root)}` is missing template action categories: "
+                f"Current daily note `{today_path.relative_to(brain_root)}` is missing template action categories: "
                 + ", ".join(f"[[{category}]]" for category in missing)
                 + ". Current-day cleanup may have run too early."
             )
@@ -120,7 +120,7 @@ def validate_daily_notes(vault_root: Path, journal_root: Path, daily_notes: list
             seen.add(heading)
         if duplicates:
             warnings.append(
-                f"Daily note `{daily_note.relative_to(vault_root)}` has duplicate WORK project section(s): "
+                f"Daily note `{daily_note.relative_to(brain_root)}` has duplicate WORK project section(s): "
                 + ", ".join(f"`{heading}`" for heading in duplicates)
                 + ". Merge same-project activity under one heading."
             )
@@ -129,30 +129,30 @@ def validate_daily_notes(vault_root: Path, journal_root: Path, daily_notes: list
 
 def main() -> int:
     args = parse_args()
-    vault_root = Path(args.vault_root).resolve()
+    brain_root = Path(args.brain_root).resolve()
 
-    daily_config = load_daily_config(vault_root)
-    journal_root = vault_root / daily_config["folder"]
+    daily_config = load_daily_config(brain_root)
+    journal_root = brain_root / daily_config["folder"]
     today = datetime.now().strftime("%Y-%m-%d")
 
     daily_notes = list_daily_notes(journal_root)
     latest_daily = daily_notes[-1].name if daily_notes else "NONE"
     today_path = journal_root / f"{today}.md"
     today_exists = today_path.exists()
-    sessions = list_session_notes(vault_root)
-    daily_warnings = validate_daily_notes(vault_root, journal_root, daily_notes, today_path)
+    sessions = list_session_notes(brain_root)
+    daily_warnings = validate_daily_notes(brain_root, journal_root, daily_notes, today_path)
 
     print("# Session bootstrap")
     print()
-    print(f"vault_root: {vault_root}")
-    print(f"journal_folder: {journal_root.relative_to(vault_root)}")
+    print(f"brain_root: {brain_root}")
+    print(f"journal_folder: {journal_root.relative_to(brain_root)}")
     print(f"today: {today}")
     print(f"today_daily_exists: {'yes' if today_exists else 'no'}")
     print(f"latest_daily: {latest_daily}")
     print("open_session_notes:")
     if sessions:
         for s in sessions:
-            print(f"- {s.relative_to(vault_root)}")
+            print(f"- {s.relative_to(brain_root)}")
     else:
         print("- none found")
     print("daily_note_warnings:")
@@ -172,7 +172,7 @@ def main() -> int:
     if sessions:
         print("- Existing session notes:")
         for s in sessions:
-            print(f"  - {s.relative_to(vault_root)}")
+            print(f"  - {s.relative_to(brain_root)}")
     else:
         print("- Existing session notes: none found")
     print(

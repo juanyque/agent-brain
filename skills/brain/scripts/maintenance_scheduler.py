@@ -40,7 +40,7 @@ class JobLogEntry:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Decide which recurring vault maintenance jobs are due.")
-    parser.add_argument("--vault-root", default=".", help="Vault root path")
+    parser.add_argument("--brain-root", default=".", help="Vault root path")
     parser.add_argument("--date", help="Override today's date as YYYY-MM-DD")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     return parser.parse_args()
@@ -195,25 +195,25 @@ def yearly_state(lines: list[str], today: date) -> tuple[str, str, str]:
     return "missing", "none", "none"
 
 
-def daily_note_state(vault_root: Path, today: date) -> tuple[bool, str]:
-    config = vault_root / ".obsidian" / "daily-notes.json"
+def daily_note_state(brain_root: Path, today: date) -> tuple[bool, str]:
+    config = brain_root / ".obsidian" / "daily-notes.json"
     folder = "JOURNAL"
     if config.exists():
         try:
             folder = json.loads(config.read_text(encoding="utf-8")).get("folder", folder)
         except json.JSONDecodeError:
             pass
-    path = vault_root / folder / f"{today.isoformat()}.md"
-    return path.exists(), str(path.relative_to(vault_root))
+    path = brain_root / folder / f"{today.isoformat()}.md"
+    return path.exists(), str(path.relative_to(brain_root))
 
 
-def decide_jobs(vault_root: Path, today: date) -> list[JobDecision]:
-    sections = read_sections(vault_root / "JOBS_LOGS.md")
+def decide_jobs(brain_root: Path, today: date) -> list[JobDecision]:
+    sections = read_sections(brain_root / "JOBS_LOGS.md")
     decisions: list[JobDecision] = []
 
     daily_lines = sections.get("Daily (Day change)", [])
     daily_latest = latest_run(daily_lines)
-    today_daily_exists, today_daily_path = daily_note_state(vault_root, today)
+    today_daily_exists, today_daily_path = daily_note_state(brain_root, today)
     if daily_latest == today:
         decisions.append(JobDecision("Daily (Day change)", "not_due", "Daily job already logged today.", latest_run_label(daily_lines), "No action needed."))
     elif today_daily_exists:
@@ -254,11 +254,11 @@ def decide_jobs(vault_root: Path, today: date) -> list[JobDecision]:
     return decisions
 
 
-def render_report(vault_root: Path, today: date, decisions: list[JobDecision]) -> str:
+def render_report(brain_root: Path, today: date, decisions: list[JobDecision]) -> str:
     lines = [
         "# Maintenance scheduler",
         "",
-        f"vault_root: {vault_root}",
+        f"brain_root: {brain_root}",
         f"today: {today.isoformat()}",
         f"command: {build_command_string()}",
         "",
@@ -278,16 +278,16 @@ def render_report(vault_root: Path, today: date, decisions: list[JobDecision]) -
 
 def main() -> int:
     args = parse_args()
-    vault_root = Path(args.vault_root).expanduser().resolve()
-    if not vault_root.is_dir():
-        print(f"Vault root not found: {vault_root}")
+    brain_root = Path(args.brain_root).expanduser().resolve()
+    if not brain_root.is_dir():
+        print(f"Vault root not found: {brain_root}")
         return 1
     today = date.fromisoformat(args.date) if args.date else datetime.now().date()
-    decisions = decide_jobs(vault_root, today)
+    decisions = decide_jobs(brain_root, today)
     if args.json:
         print(json.dumps([decision.__dict__ for decision in decisions], ensure_ascii=False, indent=2))
     else:
-        print(render_report(vault_root, today, decisions))
+        print(render_report(brain_root, today, decisions))
     return 0
 
 

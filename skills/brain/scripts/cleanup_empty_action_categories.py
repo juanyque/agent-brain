@@ -143,9 +143,9 @@ def process_file(path: Path, apply: bool) -> tuple[bool, list[tuple[str, str]]]:
     return (True, removed)
 
 
-def has_open_session_for_date(vault_root: Path, date_str: str) -> list[str]:
+def has_open_session_for_date(brain_root: Path, date_str: str) -> list[str]:
     """Return list of open session note paths (relative) whose filename date matches date_str."""
-    session_dir = vault_root / "WIP" / "SESSIONS"
+    session_dir = brain_root / "WIP" / "SESSIONS"
     if not session_dir.exists():
         return []
     open_notes: list[str] = []
@@ -156,7 +156,7 @@ def has_open_session_for_date(vault_root: Path, date_str: str) -> list[str]:
             continue
         for line in text.splitlines():
             if STATUS_OPEN_RE.match(line.strip()):
-                open_notes.append(str(note.relative_to(vault_root)))
+                open_notes.append(str(note.relative_to(brain_root)))
                 break
     return open_notes
 
@@ -165,11 +165,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Remove empty placeholder action categories from daily notes."
     )
-    parser.add_argument("--vault-root", required=True, help="Path to the vault root.")
+    parser.add_argument("--brain-root", required=True, help="Path to the vault root.")
     parser.add_argument(
         "--journal-subdir",
         default="JOURNAL",
-        help="Journal subdir under --vault-root (default: JOURNAL).",
+        help="Journal subdir under --brain-root (default: JOURNAL).",
     )
     parser.add_argument(
         "--glob",
@@ -192,7 +192,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    vault = Path(args.vault_root).expanduser().resolve()
+    vault = Path(args.brain_root).expanduser().resolve()
     if not vault.is_dir():
         print(f"ERROR: vault root not found: {vault}", file=sys.stderr)
         return 1

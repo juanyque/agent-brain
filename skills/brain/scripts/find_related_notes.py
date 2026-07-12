@@ -2,15 +2,15 @@
 """Find notes in an Obsidian vault related to given keywords.
 
 Usage:
-    python3 find_related_notes.py --vault /path/to/vault --keywords "lerp example-co"
-    python3 find_related_notes.py --vault /path/to/vault --keywords "lerp" --mode content
+    python3 find_related_notes.py --brain /path/to/vault --keywords "lerp example-co"
+    python3 find_related_notes.py --brain /path/to/vault --keywords "lerp" --mode content
 
 Modes:
     filename (default) — match note filenames (stem) against keywords (case-insensitive).
     content            — also match note contents via grep (slower, more thorough).
 
 Output: JSON with keys:
-    - vault: vault root path
+    - brain_root: vault root path
     - keywords: list of keywords used
     - mode: search mode used
     - notes: list of note objects (see below)
@@ -42,10 +42,10 @@ SKIP_DIRS = {
 FRONTMATTER_RE = re.compile(r"^---\s*$", re.MULTILINE)
 
 
-def _in_skip_dir(path: Path, vault: Path) -> bool:
+def _in_skip_dir(path: Path, brain_root: Path) -> bool:
     """Check if any parent directory (between file and vault root) is in skip list."""
     try:
-        rel = path.relative_to(vault)
+        rel = path.relative_to(brain_root)
     except ValueError:
         return True
     for part in rel.parts[:-1]:
@@ -54,13 +54,13 @@ def _in_skip_dir(path: Path, vault: Path) -> bool:
     return False
 
 
-def filename_search(vault: Path, keywords: list[str]) -> list[dict]:
+def filename_search(brain_root: Path, keywords: list[str]) -> list[dict]:
     """Search notes by filename matching."""
     results = []
     kw_lower = [k.lower() for k in keywords]
 
-    for md_file in vault.rglob("*.md"):
-        if _in_skip_dir(md_file, vault):
+    for md_file in brain_root.rglob("*.md"):
+        if _in_skip_dir(md_file, brain_root):
             continue
 
         stem = md_file.stem.lower()
@@ -73,7 +73,7 @@ def filename_search(vault: Path, keywords: list[str]) -> list[dict]:
         if matched:
             results.append({
                 "path": str(md_file),
-                "relative_path": str(md_file.relative_to(vault)),
+                "relative_path": str(md_file.relative_to(brain_root)),
                 "title": md_file.stem,
                 "match_source": "filename",
                 "matched_keywords": matched,
@@ -83,14 +83,14 @@ def filename_search(vault: Path, keywords: list[str]) -> list[dict]:
     return results
 
 
-def content_search(vault: Path, keywords: list[str]) -> list[dict]:
+def content_search(brain_root: Path, keywords: list[str]) -> list[dict]:
     """Search notes by content via grep."""
     results = []
     kw_lower = [k.lower() for k in keywords]
     seen_paths: dict[str, dict] = {}
 
-    for md_file in vault.rglob("*.md"):
-        if _in_skip_dir(md_file, vault):
+    for md_file in brain_root.rglob("*.md"):
+        if _in_skip_dir(md_file, brain_root):
             continue
 
         try:
@@ -105,7 +105,7 @@ def content_search(vault: Path, keywords: list[str]) -> list[dict]:
                 matched.append(kw)
 
         if matched:
-            rel_path = str(md_file.relative_to(vault))
+            rel_path = str(md_file.relative_to(brain_root))
             seen_paths[rel_path] = {
                 "path": str(md_file),
                 "relative_path": rel_path,
@@ -171,7 +171,7 @@ def merge_results(filename_notes: list[dict], content_notes: list[dict]) -> list
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Find related notes in an Obsidian vault")
-    parser.add_argument("--vault", required=True, help="Absolute path to the vault root")
+    parser.add_argument("--brain", required=True, help="Absolute path to the vault root")
     parser.add_argument("--keywords", required=True, help="Space-separated keywords to search for")
     parser.add_argument(
         "--mode",
@@ -181,15 +181,15 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    vault = Path(args.vault).expanduser().resolve()
-    if not vault.is_dir():
+    vault = Path(args.brain).expanduser().resolve()
+    if not brain_root.is_dir():
         print(json.dumps({
-            "vault": str(vault),
+            "vault": str(brain_root),
             "keywords": args.keywords.split(),
             "mode": args.mode,
             "notes": [],
             "count": 0,
-            "error": f"Vault path does not exist: {vault}",
+            "error": f"Brain path does not exist: {vault}",
         }))
         return 1
 
@@ -199,10 +199,10 @@ def main() -> int:
     content_notes = []
 
     if args.mode in ("filename", "both"):
-        filename_notes = filename_search(vault, keywords)
+        filename_notes = filename_search(brain_root, keywords)
 
     if args.mode in ("content", "both"):
-        content_notes = content_search(vault, keywords)
+        content_notes = content_search(brain_root, keywords)
 
     if args.mode == "both":
         notes = merge_results(filename_notes, content_notes)
@@ -212,7 +212,7 @@ def main() -> int:
         notes = filename_notes
 
     print(json.dumps({
-        "vault": str(vault),
+        "vault": str(brain_root),
         "keywords": keywords,
         "mode": args.mode,
         "notes": notes,

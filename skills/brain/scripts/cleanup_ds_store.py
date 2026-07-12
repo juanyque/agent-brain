@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Remove .DS_Store noise files from visible vault content.
+"""Remove .DS_Store noise files from visible brain_root content.
 
 Dry-run by default. Pass --apply to actually delete the files. Top-level
 dotfile dirs (`.git`, `.obsidian`, `.WIP_<timestamp>`, ...) are skipped —
 they may contain their own `.DS_Store` files that we should not touch.
 
 Intended to run as a maintenance step and as a pre-check inside
-`vault_setup.py` before `cleanup_empty_dirs_recursively`, so directories
+`brain_root_setup.py` before `cleanup_empty_dirs_recursively`, so directories
 that hold only `.DS_Store` are correctly detected as empty afterwards.
 """
 
@@ -18,13 +18,13 @@ from pathlib import Path
 
 # Filenames to remove. Extend this list in place when a new universal noise
 # pattern emerges (e.g. `Thumbs.db` on Windows, `@eaDir` on Synology). If the
-# list grows beyond ~3 entries or needs per-vault customization, rename the
+# list grows beyond ~3 entries or needs per-brain_root customization, rename the
 # script to `cleanup_noise_files.py` and expose `--pattern` on the CLI.
 NOISE_FILE_NAMES = [".DS_Store"]
 
 
-def find_noise_files(vault: Path) -> list[Path]:
-    """Return all noise files inside visible vault subtrees, sorted by path.
+def find_noise_files(brain_root: Path) -> list[Path]:
+    """Return all noise files inside visible brain_root subtrees, sorted by path.
 
     Skips top-level dotfile dirs entirely (they may have their own noise we
     should not touch). Skips symlinks. Walks all visible top-level dirs
@@ -32,7 +32,7 @@ def find_noise_files(vault: Path) -> list[Path]:
     """
     found: list[Path] = []
     try:
-        top_entries = list(vault.iterdir())
+        top_entries = list(brain_root.iterdir())
     except OSError:
         return found
     for top in top_entries:
@@ -53,7 +53,7 @@ def find_noise_files(vault: Path) -> list[Path]:
                     except OSError:
                         continue
             elif top.is_file():
-                # Files at the vault root: match by name regardless of leading dot.
+                # Files at the brain_root root: match by name regardless of leading dot.
                 # NOISE_FILE_NAMES contains dotfile patterns (e.g. ".DS_Store") that
                 # must be removed even when sitting loose at the root.
                 if top.name in NOISE_FILE_NAMES:
@@ -65,9 +65,9 @@ def find_noise_files(vault: Path) -> list[Path]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Remove .DS_Store noise files from visible vault content."
+        description="Remove .DS_Store noise files from visible brain_root content."
     )
-    parser.add_argument("--vault-root", required=True, help="Path to the vault root.")
+    parser.add_argument("--brain-root", required=True, help="Path to the brain_root root.")
     parser.add_argument(
         "--apply",
         action="store_true",
@@ -75,24 +75,24 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    vault = Path(args.vault_root).expanduser().resolve()
-    if not vault.is_dir():
-        print(f"ERROR: vault root not found: {vault}", file=sys.stderr)
+    brain_root = Path(args.brain_root).expanduser().resolve()
+    if not brain_root.is_dir():
+        print(f"ERROR: brain_root root not found: {brain_root}", file=sys.stderr)
         return 1
 
     print("# Cleanup of noise files")
     print(f"mode: {'apply' if args.apply else 'dry-run'}")
-    print(f"vault: {vault}")
+    print(f"brain_root: {brain_root}")
     print(f"patterns: {', '.join(NOISE_FILE_NAMES)}")
 
-    found = find_noise_files(vault)
+    found = find_noise_files(brain_root)
     if not found:
         print("  no noise files found")
         return 0
 
     failures = 0
     for path in found:
-        rel = path.relative_to(vault)
+        rel = path.relative_to(brain_root)
         print(f"  removing: {rel}")
         if args.apply:
             try:

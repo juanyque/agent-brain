@@ -30,9 +30,9 @@ class NodeReport:
 from _common import Reporter, build_command_string  # noqa: E402  (lives next to this script)
 
 
-def build_file_index(vault_root: Path) -> dict[str, list[Path]]:
+def build_file_index(brain_root: Path) -> dict[str, list[Path]]:
     index: dict[str, list[Path]] = {}
-    for p in vault_root.rglob("*.md"):
+    for p in brain_root.rglob("*.md"):
         index.setdefault(p.name, []).append(p)
     return index
 
@@ -41,15 +41,15 @@ def normalize_basename(name: str) -> str:
     return "".join(ch for ch in name.casefold() if ch.isalnum())
 
 
-def build_normalized_file_index(vault_root: Path) -> dict[str, list[Path]]:
+def build_normalized_file_index(brain_root: Path) -> dict[str, list[Path]]:
     index: dict[str, list[Path]] = {}
-    for p in vault_root.rglob("*.md"):
+    for p in brain_root.rglob("*.md"):
         key = normalize_basename(p.name)
         index.setdefault(key, []).append(p)
     return index
 
 
-def audit_canvas(vault_root: Path, canvas_path: Path, file_index: dict[str, list[Path]], normalized_file_index: dict[str, list[Path]]) -> tuple[list[NodeReport], dict]:
+def audit_canvas(brain_root: Path, canvas_path: Path, file_index: dict[str, list[Path]], normalized_file_index: dict[str, list[Path]]) -> tuple[list[NodeReport], dict]:
     try:
         data = json.loads(canvas_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -61,7 +61,7 @@ def audit_canvas(vault_root: Path, canvas_path: Path, file_index: dict[str, list
         rel = node.get("file")
         if not rel:
             continue
-        target = (vault_root / rel).resolve()
+        target = (brain_root / rel).resolve()
         if target.exists():
             reports.append(NodeReport(canvas_path, node.get("id", ""), rel, "OK", rel, "Target exists."))
             continue
@@ -73,9 +73,9 @@ def audit_canvas(vault_root: Path, canvas_path: Path, file_index: dict[str, list
             reports.append(NodeReport(canvas_path, node.get("id", ""), rel, "MISSING", None, "No matching note basename found in vault."))
             continue
         if len(matches) > 1:
-            reports.append(NodeReport(canvas_path, node.get("id", ""), rel, "AMBIGUOUS", None, f"Multiple matching note basenames found: {[str(m.relative_to(vault_root)) for m in matches]}"))
+            reports.append(NodeReport(canvas_path, node.get("id", ""), rel, "AMBIGUOUS", None, f"Multiple matching note basenames found: {[str(m.relative_to(brain_root)) for m in matches]}"))
             continue
-        new_rel = str(matches[0].relative_to(vault_root))
+        new_rel = str(matches[0].relative_to(brain_root))
         reports.append(NodeReport(canvas_path, node.get("id", ""), rel, "REWRITE_CANDIDATE", new_rel, "Unique basename match found."))
     return reports, data
 
@@ -87,7 +87,7 @@ def atomic_write(path: Path, content: str) -> None:
     tmp.replace(path)
 
 
-def apply_reports(vault_root: Path, canvas_data: dict[Path, tuple[list[NodeReport], dict]]) -> None:
+def apply_reports(brain_root: Path, canvas_data: dict[Path, tuple[list[NodeReport], dict]]) -> None:
     for canvas_path, (reports, data) in canvas_data.items():
         changed = False
         node_map = {node.get("id", ""): node for node in data.get("nodes", [])}
@@ -103,15 +103,15 @@ def apply_reports(vault_root: Path, canvas_data: dict[Path, tuple[list[NodeRepor
             atomic_write(canvas_path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
 
 
-def print_report(vault_root: Path, scoped: dict[Path, tuple[list[NodeReport], dict]], reporter: Reporter, applied: bool, command_string: str) -> None:
+def print_report(brain_root: Path, scoped: dict[Path, tuple[list[NodeReport], dict]], reporter: Reporter, applied: bool, command_string: str) -> None:
     reporter.write("# Canvas path audit")
     reporter.write("")
-    reporter.write(f"vault_root: {vault_root}")
+    reporter.write(f"brain_root: {brain_root}")
     reporter.write(f"mode: {'apply' if applied else 'dry-run'}")
     reporter.write(f"command: {command_string}")
     reporter.write("")
     for canvas_path, (reports, _) in scoped.items():
-        reporter.write(f"## Canvas: {canvas_path.relative_to(vault_root)}")
+        reporter.write(f"## Canvas: {canvas_path.relative_to(brain_root)}")
         reporter.write("")
         for report in reports:
             reporter.write(f"- node: {report.node_id}")
@@ -125,7 +125,7 @@ def print_report(vault_root: Path, scoped: dict[Path, tuple[list[NodeReport], di
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Audit and optionally repair Obsidian canvas file-node paths.")
-    parser.add_argument("--vault-root", default=".", help="Vault root path")
+    parser.add_argument("--brain-root", default=".", help="Vault root path")
     parser.add_argument("--scope-root", default=".", help="Root path under which canvas files should be audited")
     parser.add_argument("--apply", action="store_true", help="Rewrite uniquely resolvable broken file paths")
     return parser.parse_args()
@@ -133,8 +133,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    vault_root = Path(args.vault_root).resolve()
-    scope_root = (vault_root / args.scope_root).resolve()
+    brain_root = Path(args.brain_root).resolve()
+    scope_root = (brain_root / args.scope_root).resolve()
     log_path = Path(__file__).with_suffix(".log")
     reporter = Reporter(log_path)
     command_string = build_command_string()
@@ -150,15 +150,15 @@ def main() -> int:
         reporter.flush()
         return 0
 
-    index = build_file_index(vault_root)
-    normalized_index = build_normalized_file_index(vault_root)
+    index = build_file_index(brain_root)
+    normalized_index = build_normalized_file_index(brain_root)
     scoped: dict[Path, tuple[list[NodeReport], dict]] = {}
     for canvas_path in canvases:
-        scoped[canvas_path] = audit_canvas(vault_root, canvas_path, index, normalized_index)
+        scoped[canvas_path] = audit_canvas(brain_root, canvas_path, index, normalized_index)
 
-    print_report(vault_root, scoped, reporter, args.apply, command_string)
+    print_report(brain_root, scoped, reporter, args.apply, command_string)
     if args.apply:
-        apply_reports(vault_root, scoped)
+        apply_reports(brain_root, scoped)
         reporter.write("Applied unique canvas path rewrites.")
     reporter.flush()
     return 0

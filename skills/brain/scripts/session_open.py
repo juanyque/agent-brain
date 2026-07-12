@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Session-open ceremony: resolve vault state, create session note, update daily."
     )
-    parser.add_argument("--vault-root", required=True, help="Vault root path.")
+    parser.add_argument("--brain-root", required=True, help="Vault root path.")
     parser.add_argument(
         "--session-id",
         required=True,
@@ -99,7 +99,7 @@ def slugify(text: str) -> str:
     return text.strip("-")
 
 
-def derive_topic(session_label: str, cwd: str, vault_root: Path) -> str:
+def derive_topic(session_label: str, cwd: str, brain_root: Path) -> str:
     if session_label:
         slug = slugify(session_label)
         if slug:
@@ -108,14 +108,14 @@ def derive_topic(session_label: str, cwd: str, vault_root: Path) -> str:
         slug = slugify(Path(cwd).name)
         if slug:
             return slug
-    slug = slugify(vault_root.name)
+    slug = slugify(brain_root.name)
     if slug:
         return slug
     return f"unspecified-{datetime.now().strftime('%Y%m%d-%H%M')}"
 
 
-def load_journal_folder(vault_root: Path) -> str:
-    config_path = vault_root / ".obsidian" / "daily-notes.json"
+def load_journal_folder(brain_root: Path) -> str:
+    config_path = brain_root / ".obsidian" / "daily-notes.json"
     if config_path.exists():
         try:
             cfg = json.loads(config_path.read_text(encoding="utf-8"))
@@ -133,8 +133,8 @@ def list_daily_notes(journal_root: Path) -> list[Path]:
     return sorted(notes)
 
 
-def list_session_notes(vault_root: Path) -> list[Path]:
-    session_dir = vault_root / "WIP" / "SESSIONS"
+def list_session_notes(brain_root: Path) -> list[Path]:
+    session_dir = brain_root / "WIP" / "SESSIONS"
     if not session_dir.exists():
         return []
     return sorted(session_dir.glob("*.md"))
@@ -151,9 +151,9 @@ def read_lines_safe(path: Path) -> list[str]:
     return read_text_safe(path).splitlines()
 
 
-def find_template(vault_root: Path) -> Path | None:
+def find_template(brain_root: Path) -> Path | None:
     for candidate in TEMPLATE_CANDIDATES:
-        path = vault_root / candidate
+        path = brain_root / candidate
         if path.exists():
             return path
     return None
@@ -175,14 +175,14 @@ def _read_status(path: Path) -> str:
     return ""
 
 
-def find_existing_session_note(vault_root: Path, session_id: str) -> Path | None:
+def find_existing_session_note(brain_root: Path, session_id: str) -> Path | None:
     """Return the most recent active session note for session_id, regardless of date prefix.
 
     Used by --apply to avoid creating a duplicate when the same session continues
     across a day boundary. Returns the most recent open/handoff-only note, or None
     if no prior note exists for this session ID.
     """
-    session_dir = vault_root / "WIP" / "SESSIONS"
+    session_dir = brain_root / "WIP" / "SESSIONS"
     if not session_dir.exists():
         return None
     matches = [p for p in session_dir.glob("*.md") if session_id in p.name]
@@ -300,46 +300,46 @@ def append_to_sessions_block(daily_path: Path, entry: str, apply: bool) -> bool:
 def main() -> int:
     args = parse_args()
     runtime = args.runtime or detect_runtime()
-    vault_root = Path(args.vault_root).expanduser().resolve()
-    if not vault_root.is_dir():
-        print(f"ERROR: vault root not found: {vault_root}", file=sys.stderr)
+    brain_root = Path(args.brain_root).expanduser().resolve()
+    if not brain_root.is_dir():
+        print(f"ERROR: vault root not found: {brain_root}", file=sys.stderr)
         return 1
 
     mode = "apply" if args.apply else "dry-run"
     today = datetime.now().strftime("%Y-%m-%d")
-    topic = derive_topic(args.session_label, args.cwd, vault_root)
+    topic = derive_topic(args.session_label, args.cwd, brain_root)
     slug = f"{today}-session-{args.session_id}-{topic}"
     session_note_rel = Path("WIP") / "SESSIONS" / f"{slug}.md"
-    session_note_path = vault_root / session_note_rel
+    session_note_path = brain_root / session_note_rel
 
-    journal_folder = load_journal_folder(vault_root)
-    journal_root = vault_root / journal_folder
+    journal_folder = load_journal_folder(brain_root)
+    journal_root = brain_root / journal_folder
     daily_notes = list_daily_notes(journal_root)
     latest_daily = daily_notes[-1].name if daily_notes else "NONE"
     today_path = journal_root / f"{today}.md"
     today_exists = today_path.exists()
     day_rollover = latest_daily != "NONE" and not today_exists
 
-    sessions = list_session_notes(vault_root)
+    sessions = list_session_notes(brain_root)
     open_sessions = [s for s in sessions if is_session_open(s)]
 
-    wip_path = vault_root / "WIP" / "WIP.md"
-    task_types_path = vault_root / "TASK_TYPES" / "TASK_TYPES.md"
-    agents_md = vault_root / "AGENTS.md"
-    brain_md = vault_root / "BRAIN.md"
+    wip_path = brain_root / "WIP" / "WIP.md"
+    task_types_path = brain_root / "TASK_TYPES" / "TASK_TYPES.md"
+    agents_md = brain_root / "AGENTS.md"
+    brain_md = brain_root / "BRAIN.md"
 
     wip_context = extract_wip_context(wip_path, args.cwd)
     task_types = extract_task_types(task_types_path)
-    template_path = find_template(vault_root)
+    template_path = find_template(brain_root)
 
     # Check for an existing session note from a prior day (same session ID, different date).
     # If found, reuse it rather than creating a duplicate today-dated note.
-    existing_note = find_existing_session_note(vault_root, args.session_id)
+    existing_note = find_existing_session_note(brain_root, args.session_id)
     if existing_note and existing_note == session_note_path:
         # Same path = today-dated note already exists; not a cross-day continuation.
         existing_note = None
     if existing_note:
-        effective_note_rel = existing_note.relative_to(vault_root)
+        effective_note_rel = existing_note.relative_to(brain_root)
         effective_slug = existing_note.stem
     else:
         effective_note_rel = session_note_rel
@@ -348,7 +348,7 @@ def main() -> int:
     # ── Compact digest ──────────────────────────────────────────────────────────
     print("# Session open digest")
     print(f"mode: {mode}")
-    print(f"vault_root: {vault_root}")
+    print(f"brain_root: {brain_root}")
     print(f"today: {today}")
     print(f"today_daily_exists: {'yes' if today_exists else 'no'}")
     print(f"latest_daily: {latest_daily}")
@@ -369,7 +369,7 @@ def main() -> int:
     print("open_sessions:")
     if open_sessions:
         for s in open_sessions:
-            print(f"- {s.relative_to(vault_root)}")
+            print(f"- {s.relative_to(brain_root)}")
     else:
         print("- none")
     print()

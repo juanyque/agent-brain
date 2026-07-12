@@ -76,7 +76,7 @@ def cleanup_ds_store_command(common: Path, brain_root: Path, applied: bool) -> l
     command = [
         sys.executable,
         str(repo_root / "skills" / "brain" / "scripts" / "cleanup_ds_store.py"),
-        "--vault-root",
+        "--brain-root",
         str(brain_root),
     ]
     if applied:
