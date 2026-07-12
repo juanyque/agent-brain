@@ -15,7 +15,7 @@ Generate a brag report from the evidence store for a given date range, then cura
 - [ ] Confirm `WIP/evidence/` exists and has harvested items (run the harvest first if dailies have unlinked stubs — see `TASK_TYPES/evidence-management.common.md`).
 - [ ] Determine the date range for the report. This is driven by your review cycle, not by calendar year. If your fiscal year starts in July, a report covering Jul 2025–Jun 2026 is correct.
 - [ ] Read `RULES-REVIEW-EVIDENCE.common.md` for naming and lifecycle conventions.
-- [ ] If the vault has `WIP/OBJECTIVES.md`, have it open. The report should reflect progress against objectives.
+- [ ] If the brain has `WIP/OBJECTIVES.md`, have it open. The report should reflect progress against objectives.
 
 ## Process
 
@@ -75,6 +75,6 @@ The template (`TEMPLATES/TEMPLATE.brag-report.common.md`) defines the shape. Key
 - `TASK_TYPES/evidence-management.common.md` (store: capture, harvest, schema)
 - `RULES-REVIEW-EVIDENCE.common.md` (conventions)
 - `RULES-DAILY-NOTES.common.md` -> Objectives tracking (the forward-looking counterpart)
-- `WIP/OBJECTIVES.md` (if the vault uses it)
+- `WIP/OBJECTIVES.md` (if the brain uses it)
 - Source concept: https://jvns.ca/blog/brag-documents/
 - Related task-types: `feedback-report.common.md` (feedback for others), `complaint-report.common.md` (escalation evidence)

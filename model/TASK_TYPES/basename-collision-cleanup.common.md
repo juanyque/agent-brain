@@ -1,6 +1,6 @@
 # Basename collision cleanup — task-type guide
 
-Resolve `*.md` basename collisions in the vault. Obsidian resolves `[[wikilinks]]` by basename, not by path, so duplicates make wikilinks non-deterministic. This task uses the deterministic detector + auto-rename script to clean them up, with surgical edits for the references that can't be auto-handled.
+Resolve `*.md` basename collisions in the brain. Obsidian resolves `[[wikilinks]]` by basename, not by path, so duplicates make wikilinks non-deterministic. This task uses the deterministic detector + auto-rename script to clean them up, with surgical edits for the references that can't be auto-handled.
 
 > Tooling: `_COMMON/SKILLS/obsidian/scripts/check_basename_collisions.py` + `TOOL.check-basename-collisions.common.md`. The script is the single source of truth for ref-detection regex; never hand-write ad-hoc grep for the same purpose.
 
@@ -8,11 +8,11 @@ Resolve `*.md` basename collisions in the vault. Obsidian resolves `[[wikilinks]
 
 - User invokes `/obsidian` and the detector surfaces collision groups.
 - User explicitly asks to clean up basename collisions, deduplicate filenames, or unblock `[[wikilink]]` resolution.
-- Periodic vault hygiene pass (Weekly job).
+- Periodic brain hygiene pass (Weekly job).
 
 ## Before starting
 
-- [ ] Vault is a git repo. Renames must use `git mv` to preserve history; revert via `git checkout -- .` is the safety net.
+- [ ] Brain is a git repo. Renames must use `git mv` to preserve history; revert via `git checkout -- .` is the safety net.
 - [ ] Branch / working tree state is clean OR the user accepts mixing this work with in-progress changes.
 - [ ] Identify any runtime-governed subtrees that need exclusion (`_AGENTS/CLAUDE/memory/` is the canonical case — agent runtime hardcodes the paths).
 - [ ] Read `_COMMON/RULES-FILE-NAMING.common.md` → "Avoiding Obsidian basename collisions" to confirm the target naming convention (`<stem>.<parent-folder-slug>.md`).
@@ -24,7 +24,7 @@ Resolve `*.md` basename collisions in the vault. Obsidian resolves `[[wikilinks]
 1. Run the detector in dry-run mode:
    ```bash
    python3 ~/.claude/skills/obsidian/scripts/check_basename_collisions.py \
-     --vault-root /path/to/vault \
+     --brain-root /path/to/brain \
      --exclude-path _AGENTS/CLAUDE/memory
    ```
 2. Note the counters:
@@ -37,7 +37,7 @@ Resolve `*.md` basename collisions in the vault. Obsidian resolves `[[wikilinks]
 4. Re-run with `--apply`:
    ```bash
    python3 ~/.claude/skills/obsidian/scripts/check_basename_collisions.py \
-     --vault-root /path/to/vault \
+     --brain-root /path/to/brain \
      --exclude-path _AGENTS/CLAUDE/memory \
      --apply
    ```
@@ -54,7 +54,7 @@ For each group still surfaced after `--apply`:
 7. Get the deterministic reference list:
    ```bash
    python3 ~/.claude/skills/obsidian/scripts/check_basename_collisions.py \
-     --vault-root /path/to/vault \
+     --brain-root /path/to/brain \
      --exclude-path _AGENTS/CLAUDE/memory \
      --show-refs <basename-without-md>
    ```
@@ -63,7 +63,7 @@ For each group still surfaced after `--apply`:
    - Read the file at the printed line (use the line content as your locator; the surrounding 1-3 lines as context).
    - Decide which file in the group the ref intended. Most of the time it's obvious from the path-qualified target or the containing folder for bare md-links.
    - Plan a rewrite: link target + (optionally) link label updated to match the new filename.
-9. Default rename preference: **Option A — full rename consistency**. Every duplicate (including the canonical) gets `<stem>.<discriminator>.md`. Update incoming refs to the new name. End-state: no generic basename remains in the vault.
+9. Default rename preference: **Option A — full rename consistency**. Every duplicate (including the canonical) gets `<stem>.<discriminator>.md`. Update incoming refs to the new name. End-state: no generic basename remains in the brain.
 10. Confirm the batch with the user via `AskUserQuestion` if there's any non-trivial decision (label updates, ambiguous intent, etc.).
 11. Apply: `Edit` each referencing file → `git mv` each group file.
 12. Re-run `--show-refs <stem>` to confirm `total references: 0`.
@@ -81,7 +81,7 @@ For each group still surfaced after `--apply`:
 | `wikilink-simple` | `[[stem]]` and variants — alias `[[stem\|label]]`, anchor `[[stem#heading]]`, embed `![[stem]]` | `` `[[VAULT]]` `` |
 | `wikilink-path` | `[[a/b/stem]]` and variants, including relative `../X/stem` | `` `[[../Demo App/PROJ-305/analisis\|PROJ-305]]` `` |
 | `markdown-simple` | `](stem)` or `](stem.md)` — markdown link, no path | `` `[VAULT](VAULT.md)` `` |
-| `markdown-path` | `](a/b/stem.md)` — markdown link with path | `` `[detail](./README.obsidian-vault-common.md)` `` |
+| `markdown-path` | `](a/b/stem.md)` — markdown link with path | `` `[detail](./README.obsidian-brain-common.md)` `` |
 
 Note the asymmetry: Obsidian wikilinks omit `.md`; markdown links can include or omit it. The script's normalization strips `.md` when present so both forms map to the same stem.
 
@@ -96,7 +96,7 @@ Note the asymmetry: Obsidian wikilinks omit `.md`; markdown links can include or
 
 ## Documentation convention
 
-When writing this guide, the detector's TOOL doc, or any doc that mentions Obsidian link syntax, use a basename that **exists in the vault and is unique** for examples — `[[VAULT]]`, `[[README.obsidian-vault-common]]`, `[[AGENTS]]`, etc. — instead of fictional generic names like `[[plan]]`. The link works for the reader (didactic) and cannot create a false-positive collision in the detector. The script's `strip_code_spans` already ignores references inside backticks, but the convention is defense in depth.
+When writing this guide, the detector's TOOL doc, or any doc that mentions Obsidian link syntax, use a basename that **exists in the brain and is unique** for examples — `[[VAULT]]`, `[[README.obsidian-brain-common]]`, `[[AGENTS]]`, etc. — instead of fictional generic names like `[[plan]]`. The link works for the reader (didactic) and cannot create a false-positive collision in the detector. The script's `strip_code_spans` already ignores references inside backticks, but the convention is defense in depth.
 
 ## Known false positives
 

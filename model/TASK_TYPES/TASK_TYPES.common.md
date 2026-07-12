@@ -1,6 +1,6 @@
 # TASK_TYPES
 
-How-to-approach guides for recurring task types. When the current task matches one of the entries below, deep-read the corresponding note before starting. See `VAULT.common.md` → "TASK_TYPES" for the model.
+How-to-approach guides for recurring task types. When the current task matches one of the entries below, deep-read the corresponding note before starting. See `BRAIN.common.md` → "TASK_TYPES" for the model.
 
 ## Entries
 

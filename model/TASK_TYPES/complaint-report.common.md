@@ -15,7 +15,7 @@ Generate a complaint report from the evidence store for a given topic, then cura
 
 - [ ] Read `RULES-REVIEW-EVIDENCE.common.md` -> Sensitivity in full. Understand the `sensitive` tag implications and the git retention note.
 - [ ] Confirm the person(s) involved have notes in `MEMORY/People/`. If not, create stubs with at minimum the basename and role.
-- [ ] Decide whether this material belongs in the vault at all. The vault is git-versioned; if discovery or data-residency concerns make that unsuitable, the report stays offline and only a pointer lives in the vault. The user decides.
+- [ ] Decide whether this material belongs in the brain at all. The brain is git-versioned; if discovery or data-residency concerns make that unsuitable, the report stays offline and only a pointer lives in the brain. The user decides.
 
 ## Process
 

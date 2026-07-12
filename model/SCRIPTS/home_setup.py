@@ -273,8 +273,11 @@ def apply(
     brain_root: Path,
     common: Path,
     skip_full_reorder: bool,
+    switch_model: bool,
     reporter: Reporter,
 ) -> None:
+    from datetime import datetime, timezone
+
     status, desired = link_status(brain_root, common)
 
     if status == "missing" and not skip_full_reorder:
@@ -284,8 +287,24 @@ def apply(
 
     if status == "missing":
         link_path.symlink_to(desired, target_is_directory=True)
-    elif status != "ok":
-        raise SystemExit(f"Refusing to modify {link_path}: {status}")
+    elif status == "ok":
+        pass
+    elif status.startswith("conflict") and switch_model:
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        backup = link_path.with_name(f"{COMMON_LINK_NAME}.backup-{ts}")
+        if link_path.is_symlink() or link_path.exists():
+            link_path.rename(backup)
+        link_path.symlink_to(desired, target_is_directory=True)
+        reporter.write(f"  SWITCHED _COMMON (backup: {backup.name})")
+    elif status.startswith("conflict"):
+        current = link_path.resolve() if link_path.exists() else "(broken)"
+        raise SystemExit(
+            f"_COMMON conflict: currently points to {current}\n"
+            f"  Expected: {common.resolve()}\n"
+            f"  Pass --switch-model to repoint (a .backup-<ts> will be created)."
+        )
+    else:
+        raise SystemExit(f"Unexpected _COMMON status: {status}")
 
     task_type_wrappers = discover_task_type_wrappers(common)
     combined_wrappers = list(WRAPPERS.items()) + list(task_type_wrappers.items())
@@ -325,6 +344,7 @@ def main() -> int:
     parser.add_argument("--common", help="Path to the model root. Defaults to this script's repo model/.")
     parser.add_argument("--apply", action="store_true", help="Apply changes. Default is dry-run.")
     parser.add_argument("--skip-full-reorder", action="store_true", help="Skip staging sweep. Only attach _COMMON + wrappers.")
+    parser.add_argument("--switch-model", action="store_true", help="Repoint _COMMON if it conflicts (D25). A .backup-<ts> is created.")
     args = parser.parse_args()
     reporter = Reporter(Path(__file__).with_suffix(".log"))
     command_string = build_command_string()
@@ -352,7 +372,14 @@ def main() -> int:
         )
         if not args.apply:
             link_st, _ = link_status(brain_root, common)
-            if link_st != "ok" and not args.skip_full_reorder:
+            if link_st.startswith("conflict"):
+                reporter.write("")
+                reporter.write(f"  CONFLICT: _COMMON is {link_st}")
+                if args.switch_model:
+                    reporter.write("  --switch-model: would backup + repoint on apply")
+                else:
+                    reporter.write("  Pass --switch-model to repoint (backup created)")
+            elif link_st != "ok" and not args.skip_full_reorder:
                 reporter.write("")
                 git_mv_to_staging(brain_root, reporter, dry_run=True)
             reporter.write("Dry run only. Re-run with --apply to create missing safe items.")
@@ -363,6 +390,7 @@ def main() -> int:
             brain_root,
             common,
             skip_full_reorder=args.skip_full_reorder,
+            switch_model=args.switch_model,
             reporter=reporter,
         )
         errors = validate(brain_root, common)

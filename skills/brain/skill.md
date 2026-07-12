@@ -1,10 +1,10 @@
 ---
-name: obsidian
+name: brain
 description: >
-  Connect the current session to an Obsidian brain for reading context and documenting activity.
-  Use when the user asks to document work in Obsidian, connect to their brain, or log progress
-  to their second brain. Triggers: "document in obsidian", "connect to brain", "log to obsidian",
-  "update my brain", "obsidian", or any reference to documenting activity in the user's Obsidian brain.
+  Connect the current session to a brain for reading context and documenting activity.
+  Use when the user asks to document work in the brain, connect to it, or log progress
+  to their second brain. Triggers: "document in brain", "connect to brain", "log to brain",
+  "update my brain", "brain", or any reference to documenting activity in the user's brain.
 version: 1.0.0
 argument-hint: "[session|new-day|init|maintain|clean|order|standardize]"
 allowed-tools:

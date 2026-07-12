@@ -14,7 +14,7 @@ Generate a feedback report from the evidence store for a given person and/or rev
 
 - [ ] Confirm the person has a note in `MEMORY/People/`. If not, create one (at minimum the basename and a one-line role/context).
 - [ ] Read `RULES-REVIEW-EVIDENCE.common.md` for naming and sensitivity conventions.
-- [ ] Identify the cycle label the vault uses (H1/H2, Q1..Q4, or a local label). Keep it consistent across feedback reports.
+- [ ] Identify the cycle label the brain uses (H1/H2, Q1..Q4, or a local label). Keep it consistent across feedback reports.
 
 ## Process
 
