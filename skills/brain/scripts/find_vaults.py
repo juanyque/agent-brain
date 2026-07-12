@@ -21,7 +21,7 @@ Vault object keys:
     - path: absolute path to the vault root
     - name: directory name of the vault
     - has_agents_md: whether AGENTS.md exists at vault root (bool)
-    - has_vault_md: whether VAULT.md exists at vault root (bool)
+    - has_brain_md: whether BRAIN.md exists at vault root (bool)
     - is_nested: whether this vault lives inside another found vault (bool)
     - parent_vault: path of the parent vault if is_nested, else null
 """
@@ -50,7 +50,7 @@ def vault_info(path: Path) -> dict:
         "path": str(path),
         "name": path.name,
         "has_agents_md": (path / "AGENTS.md").is_file(),
-        "has_vault_md": (path / "VAULT.md").is_file(),
+        "has_brain_md": (path / "BRAIN.md").is_file(),
         "is_nested": False,
         "parent_vault": None,
     }

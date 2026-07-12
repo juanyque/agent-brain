@@ -26,7 +26,7 @@ from _common import Reporter, build_command_string  # noqa: E402  (lives next to
 
 WRAPPERS = {
     "AGENTS.md": "AGENTS.common.md",
-    "VAULT.md": "VAULT.common.md",
+    "BRAIN.md": "BRAIN.common.md",
     "JOBS.md": "JOBS.common.md",
     "RULES-FILE-NAMING.md": "RULES-FILE-NAMING.common.md",
     "RULES-LINKS.md": "RULES-LINKS.common.md",

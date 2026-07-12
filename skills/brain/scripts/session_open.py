@@ -326,7 +326,7 @@ def main() -> int:
     wip_path = vault_root / "WIP" / "WIP.md"
     task_types_path = vault_root / "TASK_TYPES" / "TASK_TYPES.md"
     agents_md = vault_root / "AGENTS.md"
-    vault_md = vault_root / "VAULT.md"
+    brain_md = vault_root / "BRAIN.md"
 
     wip_context = extract_wip_context(wip_path, args.cwd)
     task_types = extract_task_types(task_types_path)
@@ -375,7 +375,7 @@ def main() -> int:
     print()
 
     print("operational_files:")
-    for label, path in [("AGENTS.md", agents_md), ("VAULT.md", vault_md), ("WIP/WIP.md", wip_path), ("TASK_TYPES/TASK_TYPES.md", task_types_path)]:
+    for label, path in [("AGENTS.md", agents_md), ("BRAIN.md", brain_md), ("WIP/WIP.md", wip_path), ("TASK_TYPES/TASK_TYPES.md", task_types_path)]:
         print(f"- {label}: {'present' if path.exists() else 'missing'}")
     print()
 

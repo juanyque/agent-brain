@@ -27,7 +27,7 @@ EXPECTED_ROOT_DIRS = {
 
 EXPECTED_ROOT_FILES = {
     "AGENTS.md",
-    "VAULT.md",
+    "BRAIN.md",
     "JOBS.md",
     "JOBS_LOGS.md",
     "RULES-DAILY-NOTES.md",

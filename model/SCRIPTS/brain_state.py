@@ -23,7 +23,7 @@ STAGING_DIR_NAME = "_STAGING"
 AGENTS_DIR_NAME = "_AGENTS"
 OPERATIONAL_TOP_LEVEL_DIRS = {COMMON_LINK_NAME, STAGING_DIR_NAME, AGENTS_DIR_NAME}
 
-MARKERS = ["AGENTS.md", "VAULT.md", "JOBS.md"]
+MARKERS = ["AGENTS.md", "BRAIN.md", "JOBS.md"]
 
 
 def relative_symlink_target(source: Path, link_path: Path) -> str:
@@ -62,7 +62,7 @@ def staging_status(brain_root: Path) -> tuple[str, int]:
 def has_markers(brain_root: Path) -> bool:
     """Check if wrapper marker files exist at the brain root (D24).
 
-    Markers are wrapper files (AGENTS.md, VAULT.md, etc.) that survive a
+    Markers are wrapper files (AGENTS.md, BRAIN.md, etc.) that survive a
     git clone even when _COMMON (gitignored) does not. Their presence
     distinguishes 'attached-link-missing' from 'virgin'.
     """
