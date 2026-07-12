@@ -20,14 +20,15 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MODEL_DIR="$REPO_ROOT/model"
 FIND_HOME="$REPO_ROOT/skills/brain/scripts/find_home.py"
 
-HOME_PATH=""
+BRAIN_PATH=""
 APPLY=0
 UPDATE=0
 RUNTIME_FILTER=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --home) HOME_PATH="${2:-}"; shift 2 ;;
+    --home) BRAIN_PATH="${2:-}"; shift 2 ;;  # --brain alias
+    --brain) BRAIN_PATH="${2:-}"; shift 2 ;;
     --apply) APPLY=1; shift ;;
     --update) UPDATE=1; shift ;;
     --runtime) RUNTIME_FILTER="${2:-}"; shift 2 ;;
@@ -40,7 +41,7 @@ run() { if [[ $APPLY -eq 1 ]]; then "$@"; else printf '  (dry-run) %s\n' "$*"; f
 mode() { [[ $APPLY -eq 1 ]] && echo "apply" || echo "dry-run (pass --apply to execute)"; }
 
 # --- Step 0: resolve brain path ------------------------------------------------
-if [[ -z "$HOME_PATH" ]]; then
+if [[ -z "$BRAIN_PATH" ]]; then
   echo "== Brain resolution =="
   if [[ -f "$FIND_HOME" ]] && command -v python3 >/dev/null 2>&1; then
     echo "  Detected brain candidates:"
@@ -52,21 +53,21 @@ for h in d.get("homes", []):
     print(f"    [{h[\"notes_mode\"]:8}] {h[\"path\"]}")' || true
   fi
   echo "  (enter a path: existing notes folder/vault, or a new empty dir to create)"
-  read -r -p "Brain path: " HOME_PATH
+  read -r -p "Brain path: " BRAIN_PATH
 fi
-if [[ ! -d "$HOME_PATH" ]]; then
-  echo "  path does not exist: $HOME_PATH"
+if [[ ! -d "$BRAIN_PATH" ]]; then
+  echo "  path does not exist: $BRAIN_PATH"
   read -r -p "Create it? [y/N] " mk
   [[ "$mk" =~ ^[Yy]$ ]] || { echo "ERROR: aborting"; exit 2; }
-  run mkdir -p "$HOME_PATH"
+  run mkdir -p "$BRAIN_PATH"
 fi
-HOME_PATH="$(cd "$HOME_PATH" && pwd)"
-echo "BRAIN = $HOME_PATH  (mode: $(mode))"
+BRAIN_PATH="$(cd "$BRAIN_PATH" && pwd)"
+echo "BRAIN = $BRAIN_PATH  (mode: $(mode))"
 echo
 
 # --- Step 1: git-snapshot (rollback anchor) ------------------------------------
 echo "== git-snapshot =="
-cd "$HOME_PATH"
+cd "$BRAIN_PATH"
 if [[ ! -d ".git" ]]; then
   echo "  no git repo -> init + commit everything (rollback anchor)"
   run git init -q
@@ -95,14 +96,14 @@ echo
 
 # --- Step 3: home_setup (structure: _COMMON, wrappers, templates, staging) -----
 echo "== home_setup (structure) =="
-HOME_SETUP_ARGS=(--vault "$HOME_PATH" --common "$MODEL_DIR")
+HOME_SETUP_ARGS=(--brain "$BRAIN_PATH" --common "$MODEL_DIR")
 [[ $APPLY -eq 1 ]] && HOME_SETUP_ARGS+=(--apply)
 python3 "$SCRIPT_DIR/home_setup.py" "${HOME_SETUP_ARGS[@]}"
 echo
 
 # --- Step 4: runtime_manager (runtime config + skill link) --------------------
 echo "== runtime_manager (runtime) =="
-RT_ARGS=(--brain "$HOME_PATH" --common "$MODEL_DIR")
+RT_ARGS=(--brain "$BRAIN_PATH" --common "$MODEL_DIR")
 [[ $APPLY -eq 1 ]] && RT_ARGS+=(--apply)
 if [[ -n "$RUNTIME_FILTER" ]]; then
   IFS=',' read -ra RTS <<< "$RUNTIME_FILTER"
@@ -119,7 +120,7 @@ if [[ $APPLY -eq 0 ]]; then
 else
   fail=0
   check() { local label="$1" path="$2"; if [[ -e "$path" || -L "$path" ]]; then echo "  OK   $label"; else echo "  FAIL $label ($path)"; fail=1; fi; }
-  check "_COMMON resolves" "$HOME_PATH/_COMMON"
+  check "_COMMON resolves" "$BRAIN_PATH/_COMMON"
   check "model/SCRIPTS present" "$MODEL_DIR/SCRIPTS"
   check "skills/brain present" "$REPO_ROOT/skills/brain"
   echo

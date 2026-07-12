@@ -12,20 +12,20 @@
 # runtime replaced our symlink with a real file.
 #
 # Usage:
-#   runtime_install.sh <runtime> --home <home_path> [--apply]
+#   runtime_install.sh <runtime> --brain <brain_path> [--apply]
 #   runtime: claude | opencode   (codex: TBD)
 
 set -euo pipefail
 
-USAGE="Usage: $0 <runtime> --home <home_path> [--apply]"
+USAGE="Usage: $0 <runtime> --brain <brain_path> [--apply]"
 
 RUNTIME=""
-HOME_PATH=""
+BRAIN_PATH=""
 APPLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --home) HOME_PATH="${2:-}"; shift 2 ;;
+    --brain) BRAIN_PATH="${2:-}"; shift 2 ;;
     --apply) APPLY=1; shift ;;
     -h|--help) echo "$USAGE"; exit 0 ;;
     *) if [[ -z "$RUNTIME" ]]; then RUNTIME="$1"; shift; else echo "ERROR: unknown arg: $1" >&2; echo "$USAGE" >&2; exit 2; fi ;;
@@ -33,9 +33,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$RUNTIME" ]] || { echo "ERROR: runtime required (claude|opencode)" >&2; echo "$USAGE" >&2; exit 2; }
-[[ -n "$HOME_PATH" ]] || { echo "ERROR: --home required" >&2; echo "$USAGE" >&2; exit 2; }
+[[ -n "$BRAIN_PATH" ]] || { echo "ERROR: --brain required" >&2; echo "$USAGE" >&2; exit 2; }
 
-HOME_PATH="${HOME_PATH%/}"
+BRAIN_PATH="${BRAIN_PATH%/}"
 
 # --- Per-runtime config ------------------------------------------------------
 declare -A TARGET_DIR
@@ -56,8 +56,8 @@ OPENCODE_MAP=(
 )
 
 case "$RUNTIME" in
-  claude)   SRC_DIR="$HOME_PATH/_AGENTS/CLAUDE";   MAP=("${CLAUDE_MAP[@]}")   ;;
-  opencode) SRC_DIR="$HOME_PATH/_AGENTS/OPENCODE"; MAP=("${OPENCODE_MAP[@]}") ;;
+  claude)   SRC_DIR="$BRAIN_PATH/_AGENTS/CLAUDE";   MAP=("${CLAUDE_MAP[@]}")   ;;
+  opencode) SRC_DIR="$BRAIN_PATH/_AGENTS/OPENCODE"; MAP=("${OPENCODE_MAP[@]}") ;;
   *) echo "ERROR: unknown runtime '$RUNTIME' (supported: claude, opencode)" >&2; exit 2 ;;
 esac
 

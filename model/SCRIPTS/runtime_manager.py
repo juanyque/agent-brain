@@ -303,7 +303,7 @@ def promote_migration_doc(brain_root: Path, timestamp: str, reporter: Reporter, 
 
 def run_runtime_install(rt_name: str, brain_root: Path, apply: bool, reporter: Reporter) -> None:
     script = Path(__file__).parent / "runtime_install.sh"
-    cmd = ["bash", str(script), rt_name, "--home", str(brain_root)]
+    cmd = ["bash", str(script), rt_name, "--brain", str(brain_root)]
     if apply:
         cmd.append("--apply")
     result = subprocess.run(cmd, text=True, capture_output=True, check=False)

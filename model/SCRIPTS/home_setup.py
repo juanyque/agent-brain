@@ -52,7 +52,7 @@ def wrapper_text(local_name: str, common_name: str) -> str:
     title = Path(local_name).stem
     return (
         f"# {title}\n\n"
-        f"This vault follows the shared model in `_COMMON/{common_name}`.\n"
+        f"This brain follows the shared model in `_COMMON/{common_name}`.\n"
     )
 
 
@@ -71,13 +71,13 @@ def discover_task_type_wrappers(common: Path) -> dict[str, str]:
     return result
 
 
-def cleanup_ds_store_command(common: Path, vault: Path, applied: bool) -> list[str]:
+def cleanup_ds_store_command(common: Path, brain_root: Path, applied: bool) -> list[str]:
     repo_root = common.parent
     command = [
         sys.executable,
         str(repo_root / "skills" / "brain" / "scripts" / "cleanup_ds_store.py"),
         "--vault-root",
-        str(vault),
+        str(brain_root),
     ]
     if applied:
         command.append("--apply")
@@ -85,9 +85,9 @@ def cleanup_ds_store_command(common: Path, vault: Path, applied: bool) -> list[s
 
 
 def run_cleanup_ds_store(
-    common: Path, vault: Path, applied: bool, reporter: Reporter
+    common: Path, brain_root: Path, applied: bool, reporter: Reporter
 ) -> None:
-    command = cleanup_ds_store_command(common, vault, applied)
+    command = cleanup_ds_store_command(common, brain_root, applied)
     result = subprocess.run(command, text=True, capture_output=True, check=False)
     if result.stdout:
         for line in result.stdout.rstrip().splitlines():
@@ -101,13 +101,13 @@ def run_cleanup_ds_store(
 
 
 def cleanup_empty_dirs_recursively(
-    vault: Path,
+    brain_root: Path,
     reporter: Reporter,
     dry_run: bool,
 ) -> None:
     candidates: list[Path] = []
     try:
-        top_entries = list(vault.iterdir())
+        top_entries = list(brain_root.iterdir())
     except OSError:
         return
     for top in top_entries:
@@ -138,7 +138,7 @@ def cleanup_empty_dirs_recursively(
                 path.rmdir()
             except OSError:
                 continue
-        removed.append(path.relative_to(vault))
+        removed.append(path.relative_to(brain_root))
         removed_set.add(path)
     if not removed:
         return
@@ -150,28 +150,28 @@ def cleanup_empty_dirs_recursively(
     reporter.write("")
 
 
-def collect_movable_items(vault: Path) -> list[Path]:
+def collect_movable_items(brain_root: Path) -> list[Path]:
     return sorted(
-        p for p in vault.iterdir()
+        p for p in brain_root.iterdir()
         if not p.name.startswith(".") and p.name not in OPERATIONAL_TOP_LEVEL_DIRS
     )
 
 
 def git_mv_to_staging(
-    vault: Path,
+    brain_root: Path,
     reporter: Reporter,
     dry_run: bool,
 ) -> None:
-    staging = vault / STAGING_DIR_NAME
-    status, _count = staging_status(vault)
+    staging = brain_root / STAGING_DIR_NAME
+    status, _count = staging_status(brain_root)
 
     if status == "has-content":
         reporter.write(f"  {STAGING_DIR_NAME}: already exists with content, skipping")
         return
 
-    items = collect_movable_items(vault)
+    items = collect_movable_items(brain_root)
     if not items:
-        reporter.write(f"  {STAGING_DIR_NAME}: vault root is empty, nothing to move")
+        reporter.write(f"  {STAGING_DIR_NAME}: brain root is empty, nothing to move")
         return
 
     if status == "missing":
@@ -192,7 +192,7 @@ def git_mv_to_staging(
             else:
                 result = subprocess.run(
                     ["git", "mv", item.name, f"{STAGING_DIR_NAME}/{item.name}"],
-                    cwd=vault,
+                    cwd=brain_root,
                     text=True,
                     capture_output=True,
                     check=False,
@@ -203,35 +203,35 @@ def git_mv_to_staging(
         reporter.write(f"  (dry-run: no files moved)")
 
 
-def via_common_symlink_target(common_rel: str, link_path: Path, vault: Path) -> str:
-    rel = link_path.relative_to(vault)
+def via_common_symlink_target(common_rel: str, link_path: Path, brain_root: Path) -> str:
+    rel = link_path.relative_to(brain_root)
     depth = len(rel.parts) - 1
     prefix = ("../" * depth) if depth > 0 else ""
     return f"{prefix}{COMMON_LINK_NAME}/{common_rel}"
 
 
 def print_plan(
-    vault: Path,
+    brain_root: Path,
     common: Path,
     reporter: Reporter,
     applied: bool,
     command_string: str,
     skip_full_reorder: bool,
 ) -> None:
-    link_st, desired = link_status(vault, common)
+    link_st, desired = link_status(brain_root, common)
     reporter.write("# Brain setup (structure)")
     reporter.write("")
     reporter.write(f"mode: {'apply' if applied else 'dry-run'}")
     reporter.write(f"command: {command_string}")
-    reporter.write(f"vault: {vault}")
+    reporter.write(f"brain: {brain_root}")
     reporter.write(f"common: {common}")
     reporter.write(f"{COMMON_LINK_NAME}: {link_st} -> {desired}")
 
     if link_st != "ok" and not skip_full_reorder:
-        stg_status, stg_count = staging_status(vault)
+        stg_status, stg_count = staging_status(brain_root)
         reporter.write(f"{STAGING_DIR_NAME}: {stg_status}" + (f" ({stg_count} items)" if stg_count else ""))
         if stg_status != "has-content":
-            items = collect_movable_items(vault)
+            items = collect_movable_items(brain_root)
             reporter.write(f"  {len(items)} non-hidden items will be moved to {STAGING_DIR_NAME}/")
     elif link_st != "ok" and skip_full_reorder:
         reporter.write(f"{STAGING_DIR_NAME}: skipped by --skip-full-reorder")
@@ -242,7 +242,7 @@ def print_plan(
     task_type_wrappers = discover_task_type_wrappers(common)
     combined_wrappers = list(WRAPPERS.items()) + list(task_type_wrappers.items())
     for local_name, common_name in combined_wrappers:
-        local_path = vault / local_name
+        local_path = brain_root / local_name
         common_path = common / common_name
         if local_path.exists():
             local_status = "exists, will not overwrite"
@@ -253,7 +253,7 @@ def print_plan(
         reporter.write(f"  {local_name}: {local_status}")
     reporter.write("template symlinks:")
     for local_rel, common_rel in TEMPLATE_SYMLINKS.items():
-        local_path = vault / local_rel
+        local_path = brain_root / local_rel
         common_path = common / common_rel
         if local_path.is_symlink():
             tmpl_status = "exists (symlink)"
@@ -270,17 +270,17 @@ def print_plan(
 
 
 def apply(
-    vault: Path,
+    brain_root: Path,
     common: Path,
     skip_full_reorder: bool,
     reporter: Reporter,
 ) -> None:
-    status, desired = link_status(vault, common)
+    status, desired = link_status(brain_root, common)
 
     if status == "missing" and not skip_full_reorder:
-        git_mv_to_staging(vault, reporter, dry_run=False)
+        git_mv_to_staging(brain_root, reporter, dry_run=False)
 
-    link_path = vault / COMMON_LINK_NAME
+    link_path = brain_root / COMMON_LINK_NAME
 
     if status == "missing":
         link_path.symlink_to(desired, target_is_directory=True)
@@ -290,7 +290,7 @@ def apply(
     task_type_wrappers = discover_task_type_wrappers(common)
     combined_wrappers = list(WRAPPERS.items()) + list(task_type_wrappers.items())
     for local_name, common_name in combined_wrappers:
-        local_path = vault / local_name
+        local_path = brain_root / local_name
         common_path = common / common_name
         if local_path.exists():
             continue
@@ -300,20 +300,20 @@ def apply(
         local_path.write_text(wrapper_text(local_name, common_name), encoding="utf-8")
 
     for local_rel, common_rel in TEMPLATE_SYMLINKS.items():
-        local_path = vault / local_rel
+        local_path = brain_root / local_rel
         common_path = common / common_rel
         if local_path.exists() or local_path.is_symlink():
             continue
         if not common_path.exists():
             continue
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        target = via_common_symlink_target(common_rel, local_path, vault)
+        target = via_common_symlink_target(common_rel, local_path, brain_root)
         local_path.symlink_to(target)
 
 
-def validate(vault: Path, common: Path) -> list[str]:
+def validate(brain_root: Path, common: Path) -> list[str]:
     errors = []
-    status, _desired = link_status(vault, common)
+    status, _desired = link_status(brain_root, common)
     if status != "ok":
         errors.append(f"{COMMON_LINK_NAME} status is {status}")
     return errors
@@ -321,7 +321,7 @@ def validate(vault: Path, common: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Attach a brain to the agent-brain model (structure only)")
-    parser.add_argument("--vault", required=True, help="Path to the brain root")
+    parser.add_argument("--brain", required=True, help="Path to the brain root")
     parser.add_argument("--common", help="Path to the model root. Defaults to this script's repo model/.")
     parser.add_argument("--apply", action="store_true", help="Apply changes. Default is dry-run.")
     parser.add_argument("--skip-full-reorder", action="store_true", help="Skip staging sweep. Only attach _COMMON + wrappers.")
@@ -330,20 +330,20 @@ def main() -> int:
     command_string = build_command_string()
 
     try:
-        vault = Path(args.vault).expanduser().resolve()
+        brain_root = Path(args.brain).expanduser().resolve()
         common = resolve_common_root(args.common)
 
-        if not vault.is_dir():
-            raise SystemExit(f"Brain directory not found: {vault}")
+        if not brain_root.is_dir():
+            raise SystemExit(f"Brain directory not found: {brain_root}")
         if not common.is_dir():
             raise SystemExit(f"Model directory not found: {common}")
 
         if not args.skip_full_reorder:
-            run_cleanup_ds_store(common, vault, applied=args.apply, reporter=reporter)
-            cleanup_empty_dirs_recursively(vault, reporter, dry_run=not args.apply)
+            run_cleanup_ds_store(common, brain_root, applied=args.apply, reporter=reporter)
+            cleanup_empty_dirs_recursively(brain_root, reporter, dry_run=not args.apply)
 
         print_plan(
-            vault,
+            brain_root,
             common,
             reporter=reporter,
             applied=args.apply,
@@ -351,21 +351,21 @@ def main() -> int:
             skip_full_reorder=args.skip_full_reorder,
         )
         if not args.apply:
-            link_st, _ = link_status(vault, common)
+            link_st, _ = link_status(brain_root, common)
             if link_st != "ok" and not args.skip_full_reorder:
                 reporter.write("")
-                git_mv_to_staging(vault, reporter, dry_run=True)
+                git_mv_to_staging(brain_root, reporter, dry_run=True)
             reporter.write("Dry run only. Re-run with --apply to create missing safe items.")
             reporter.flush()
             return 0
 
         apply(
-            vault,
+            brain_root,
             common,
             skip_full_reorder=args.skip_full_reorder,
             reporter=reporter,
         )
-        errors = validate(vault, common)
+        errors = validate(brain_root, common)
         if errors:
             for error in errors:
                 reporter.write(f"ERROR: {error}")
