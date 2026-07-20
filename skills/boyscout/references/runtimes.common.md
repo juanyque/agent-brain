@@ -6,7 +6,7 @@ Deep mode reads transcripts, memories, and config files from agent runtime direc
 
 | Runtime | Path | Format |
 |---|---|---|
-| Claude Code | `~/.claude/projects/*/*.jsonl` | JSONL session transcripts |
+| Claude Code | `transcript files (see runtimes.common.md for paths)*/*.jsonl` | JSONL session transcripts |
 | OpenCode | `~/.local/share/opencode/sessions/` | Session data (check runtime docs) |
 | Codex | TBD | TBD |
 

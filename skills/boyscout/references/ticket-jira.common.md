@@ -1,6 +1,6 @@
 # ticket-jira — Jira backend (optional)
 
-Create tickets in Jira using the Jira MCP tools (`mcp__jira__createJiraIssue`, etc.).
+Create tickets in the ticket tracker using the Jira MCP tools (`mcp__jira__createJiraIssue`, etc.).
 
 ## Prerequisites
 
@@ -19,4 +19,4 @@ Call `mcp__jira__createJiraIssue` with type `Task`, using the body format from [
 
 ## After creation
 
-Print the Jira URL. The finding is removed from the backlog (Jira is source of truth).
+Print the Jira URL. The finding is removed from the backlog (ticket tracker is source of truth).

@@ -37,9 +37,9 @@ Acceptance criteria:
 
 Use the appropriate backend for ticket creation (default: GitHub Issues):
 
-- **GitHub Issues:** `gh issue create --title "..." --body-file /tmp/boyscout-ticket-body.md` — see [ticket-github.common.md](ticket-github.common.md).
+- **GitHub Issues:** `gh issue create` — see [ticket-github.common.md](ticket-github.common.md).
 - **Jira:** `mcp__jira__createJiraIssue` with type `Task` — see [ticket-jira.common.md](ticket-jira.common.md).
-- **GitLab Issues:** `glab issue create --title "..." --description "..."` — see [ticket-gitlab.common.md](ticket-gitlab.common.md).
+- **GitLab Issues:** `glab issue create` — see [ticket-gitlab.common.md](ticket-gitlab.common.md).
 
 On failure, report the error and ask the user whether to retry or skip. On success, report:
 > "Created [TICKET-123]: [summary] — [URL]"

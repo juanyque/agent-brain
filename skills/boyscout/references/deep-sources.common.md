@@ -14,7 +14,7 @@ Override via second positional arg: `/boyscout deep 7` widens to 7 days. The ove
 
 ### 1. Claude Code transcripts
 
-- **Path glob:** `~/.claude/projects/*/*.jsonl` (Claude); see [runtimes.common.md](runtimes.common.md) for other runtimes
+- **Path glob:** `transcript files (see runtimes.common.md for paths)*/*.jsonl`
 - **Filter:** `mtime` within the last `N` days.
 - **Selection:** newest first; cap at ~10 transcripts to bound cost even if the user's window is wide.
 - **What to extract:** user messages (for `repeated-instruction`), tool-use sequences (for `automation-opportunity`), conversation arcs / phases (for `promotable-flow`).

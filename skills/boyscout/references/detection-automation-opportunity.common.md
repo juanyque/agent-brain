@@ -89,7 +89,7 @@ If the script genuinely serves multiple skills, the right output is a **`promota
 
 ## Suggested target / action mapping
 
-- `target` namespace: `claude-scripts / <script-name>` (when creating a new script).
+- `target` namespace: `agent-scripts / <script-name>` (when creating a new script).
 - Action template: `Create <path>; the script owns <ceremony>; <skill> SKILL.md is updated to call it; remove the prose steps from SKILL.md.`
 - The replaced prose in SKILL.md becomes one or two lines pointing at the script + the success criterion.
 
@@ -101,7 +101,7 @@ This subagent reads transcripts that include Bash command runs and tool outputs 
 - **Never include tool output** in the finding. Describe what the tool *did*, not what it *returned*.
 - **Redact paths.** Replace usernames and external paths with placeholders (`<user>`, `<path>`, `<repo>`).
 - **Pattern, not instance.** `pattern_summary` describes the shape ("git fetch → branch → commit → push → PR"); it does not include real branch names, commit messages, or PR titles from the session.
-- **Verification rule.** After the finding is written (to backlog or to a ticket body), no string >20 characters should be a verbatim copy from any transcript file (see [runtimes.common.md](runtimes.common.md) for runtime-specific paths).
+- **Verification rule.** After the finding is written (to backlog or to a ticket body), no string >20 characters should be a verbatim copy from any transcript file in `transcript files (see runtimes.common.md for paths)`.
 
 A finding that cannot be expressed without verbatim content is a finding that should not be written. Skip and move on.
 
@@ -117,7 +117,7 @@ This detector inspects Bash command runs and tool-use sequences from transcripts
 
 ```yaml
 type: automation-opportunity
-target: claude-scripts / backlog.py
+target: agent-scripts / backlog.py
 location: user-skill/boyscout/SKILL.md (Step 1, Post-action)
 summary: "Backlog read/dedup/update/write is done by LLM with 'surgical edit' rules"
 pattern_summary: "Read backlog.md → find H3 block → modify last_seen/times_seen → write back; ~5 tool calls"

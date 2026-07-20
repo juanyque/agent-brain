@@ -8,20 +8,23 @@ Each boyscout finding captures the following fields. Collect them during Step 1
 | One-line summary | Shown in the fzf list and numbered fallback | ≤ 80 chars |
 | Target | Logical grouping key — determines which findings share a PR | `<repo> / <component>` — see convention below |
 | Location | File(s), line(s), function/test name | `path/to/file.py:42` or `module.function` (for `skill-gap`: see convention below) |
-| Type | Tagged bucket for filtering and ticket labeling | `flaky-test` \| `broken-script` \| `refactor` \| `missing-test` \| `dead-code` \| `docs-gap` \| `skill-gap` \| `tech-debt` \| `side-task` \| `repeated-instruction` \| `automation-opportunity` \| `promotable-flow` \| `other` |
+| Type | Tagged bucket for filtering and ticket labeling | `flaky-test` \| `test-isolation` \| `broken-script` \| `refactor` \| `missing-test` \| `dead-code` \| `docs-gap` \| `skill-gap` \| `tech-debt` \| `side-task` \| `repeated-instruction` \| `automation-opportunity` \| `promotable-flow` \| `other` |
 | How found | Provenance — error message, observation, test failure, code review | Free text; persisted to backlog |
 | Context | The main task or investigation that surfaced this finding | Free text, e.g. `"reviewing PR #38"`, `"implementing PROJ-258"`; persisted to backlog |
 | Estimated effort | Feeds the Step 3 decision table | `XS` (<15 min) \| `S` (<1h) \| `M` (<1 day) \| `L` (>1 day) |
 | Risk | Chance of regression or needing domain knowledge | `low` \| `medium` \| `high` |
+| Impact | Value if fixed — orthogonal to effort/risk | `low` (cosmetic; marginal DX) \| `medium` (real friction scoped to one task type) \| `high` (recurrent cross-session pain; blocks work; or the agent makes important mistakes in its absence). Required for `repeated-instruction` and `automation-opportunity`; recommended for all findings. Enables value-based filtering (`grep "impact: high"`). |
+| Confidence | Sureness that the proposed action is actually an improvement | `low` (pattern may be noise; OR action is speculative; OR could plausibly make things worse — discuss diagnosis before acting, never auto-fix) \| `medium` (pattern is clear; action requires judgement — A vs B vs C, or scope to be decided with the user) \| `high` (pattern is clear; evidence exists — cite a commit / a memory / a working analogous example; proposed action is mechanical). Required for `repeated-instruction`, `automation-opportunity`, and `promotable-flow`; recommended for all findings. `confidence: low` blocks auto-fix at Step 3. |
 | Suggested action | What fixing it would look like | File edits, test changes, refactor outline |
 | Status | Origin of this finding | `new` (found in this session) \| `pending` (loaded from backlog) |
 | Detected | First detection date + session context | ISO date string, e.g. `2026-04-23 · session PROJ-255` — see **session label format** below |
 | Last seen | Most recent session that independently detected this finding | ISO date string + session context; updated on dedup match |
 | Times seen | Count of independent re-detections across sessions | Integer ≥ 1 |
+| Source | Which scan mode produced this finding | `codebase` (default — `/boyscout` normal scan; omit field when this is the value) \| `deep-scan` (produced by `/boyscout deep` — interaction-context analysis of transcripts/memories/CLAUDE.md). Useful for triage filtering (`grep "source: deep-scan"`) and to distinguish escalation patterns: deep findings often match an existing memory (`existing_memory` field), which is the signal that the memory did not fire as intended. |
 
 **Session label format:** `YYYY-MM-DD · session <ticket-or-tool-label>` where `<ticket-or-tool-label>` is one of:
 
-- A Jira ticket code when the scan happened during ticket work: `session PROJ-255`
+- A ticket code when the scan happened during ticket work: `session PROJ-255`
 - The literal `boyscout` for standalone scans not tied to a ticket: `session boyscout`
 - Either of the above with a parenthetical when context helps: `session boyscout (PROJ-275 wrap-up)`, `session PROJ-260 PR review`
 
@@ -41,7 +44,7 @@ only the base skill name (e.g. `boyscout`, not `boyscout_juan.garcia`).
 **Target key convention:** The `target` field is the logical grouping key used to
 batch related findings into a single PR. Format: `<repo> / <component-name>`.
 
-- Use the repo short name (e.g. `consumer-eng-tools`, `all-the-things`)
+- Use the repo short name (e.g. `your-project`, `all-the-things`)
 - Use a logical component name that maps to "what PR would fix all of these":
   - `boyscout-skill` → groups SKILL.md + references/*.md for the boyscout skill
   - `card-simulator-claude-plugin` → groups CLAUDE.md, scripts, zshrc for the Card Simulator plugin
@@ -53,10 +56,10 @@ batch related findings into a single PR. Format: `<repo> / <component-name>`.
 namespaces that target the agent's configuration rather than the codebase. They live in the
 same `~/.boyscout/backlog.md` and follow the same lifecycle. Use one of:
 
-- `claude-skills / <plugin>/<skill>` — when the action updates a skill (e.g. `claude-skills / card-engineer/pr-review`).
-- `claude-config / CLAUDE.md` — when the action updates a CLAUDE.md (clarify which one in `location`).
-- `claude-memory / <memory-slug>` — when the action updates / promotes a memory entry.
-- `claude-scripts / <script-name>` — when the action creates / updates a skill's script (script path goes in `location`).
+- `agent-skills / <plugin>/<skill>` — when the action updates a skill (e.g. `agent-skills / card-engineer/pr-review`).
+- `agent-config / CLAUDE.md` — when the action updates a CLAUDE.md (clarify which one in `location`).
+- `agent-memory / <memory-slug>` — when the action updates / promotes a memory entry.
+- `agent-scripts / <script-name>` — when the action creates / updates a skill's script (script path goes in `location`).
 
 **Extra fields by deep-mode type.** The three deep-mode types each carry additional fields beyond
 the standard schema. See the detection reference files for full specifications:
@@ -92,3 +95,25 @@ This keeps the H3 block grep-friendly and consistent with the existing flat form
 YAML form that appears in the `detection-*.common.md` examples is the in-memory representation of the
 finding object; the **backlog form is always flat**. The same rule applies to any future
 list-valued extra field.
+
+## Triage decision matrix (Step 3)
+
+Suggested defaults when proposing attack-now vs ticket vs leave-in-backlog. The four dimensions
+(`effort`, `risk`, `impact`, `confidence`) are defined in the field table above.
+
+| Effort | Risk   | Impact | Confidence | Suggested action |
+|--------|--------|--------|------------|------------------|
+| XS / S | low    | high   | high       | **Attack now** (strong candidate; consume on success) |
+| XS / S | low    | medium | high       | Backlog (or attack now if in-scope of active task) |
+| XS / S | low    | low    | high       | Backlog (skip attack unless trivially in-scope) |
+| XS / S | medium | high   | high       | Ask: attack now or ticket? |
+| XS     | high   | any    | high       | Ask: attack now or ticket? |
+| S      | medium | any    | high       | Ask: attack now or ticket? |
+| S      | high   | any    | high       | Ticket (user can override) |
+| M / L  | any    | any    | any        | Ticket |
+| any    | any    | any    | **low**    | **Never auto-fix.** Discuss diagnosis with the user before any action. |
+
+When ambiguous, ask explicitly, surfacing all four dimensions so the user chooses. Example:
+
+> "Item 2: effort=S, risk=medium, impact=high, confidence=high. Fixable in ~30 min but touches
+> shared auth code. Attack now in a worktree, or create a ticket?"

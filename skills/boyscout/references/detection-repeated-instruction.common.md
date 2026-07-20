@@ -68,9 +68,9 @@ In addition to the standard schema in `finding-schema.common.md`:
 The finding's `target` and suggested `action` should point at the place that would *enforce* the rule, in this order of preference:
 
 1. **Hook in `settings.json`** — when the rule is "before/after X always do Y" (deterministic, automatable).
-2. **Skill instruction** — when the rule is context-dependent (only applies during a particular workflow). Target namespace: `claude-skills / <plugin>/<skill>`.
-3. **CLAUDE.md** — when the rule is a general principle the agent should always follow in this repo. Target namespace: `claude-config / CLAUDE.md`.
-4. **Memory of `type: feedback`** — when the rule is user-preference-shaped and cross-cwd. Target namespace: `claude-memory / <slug>`.
+2. **Skill instruction** — when the rule is context-dependent (only applies during a particular workflow). Target namespace: `agent-skills / <plugin>/<skill>`.
+3. **CLAUDE.md** — when the rule is a general principle the agent should always follow in this repo. Target namespace: `agent-config / CLAUDE.md`.
+4. **Memory of `type: feedback`** — when the rule is user-preference-shaped and cross-cwd. Target namespace: `agent-memory / <slug>`.
 
 If an `existing_memory` was found, skip option 4 (already tried) and recommend option 1, 2, or 3.
 
@@ -81,7 +81,7 @@ This subagent reads transcripts that may contain sensitive material. Follow thes
 - **Never copy verbatim** user message text into the finding. Summarise the intent.
 - **Never include** secrets, tokens, paths with usernames of external systems, or output from tools that returned sensitive data.
 - **Redact when evidence is needed.** If `occurrences` needs detail beyond `{session_label, timestamp}`, use placeholders: `<token>`, `<path>`, `<user>`, `<file>`.
-- **Verification rule.** After the finding is written (to backlog or to a ticket body), no string >20 characters should be a verbatim copy from any transcript file (see [runtimes.common.md](runtimes.common.md) for runtime-specific paths). Mentally re-read the finding before submitting.
+- **Verification rule.** After the finding is written (to backlog or to a ticket body), no string >20 characters should be a verbatim copy from any transcript file in `transcript files (see runtimes.common.md for paths)`. Mentally re-read the finding before submitting.
 
 A finding that cannot be expressed without verbatim content is a finding that should not be written. Skip and move on.
 
@@ -97,7 +97,7 @@ This detector is specifically looking for imperative phrasing from the user — 
 
 ```yaml
 type: repeated-instruction
-target: claude-config / CLAUDE.md
+target: agent-config / CLAUDE.md
 location: ~/.claude/CLAUDE.md (Git workflow section)
 summary: User repeatedly tells agent to rebase, not merge, on diverged branches
 instruction_intent: "Always rebase feature branches onto base; never merge"

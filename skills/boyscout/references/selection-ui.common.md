@@ -33,7 +33,10 @@ and `fzf` is installed before launching with a preview pane.
 **Temp file format:** First line must be the display line (used as the fzf
 list item) — format: `N. [effort][type] one-line-summary [freshness]`.
 Remaining lines hold the full detail shown in the preview pane, including
-`target`, `location`, `detected`, `last_seen`, and `times_seen`.
+`target`, `location`, `detected`, `last_seen`, `times_seen`, `impact`, and
+`confidence`. Surface `impact` + `confidence` prominently in the preview
+(e.g. directly under the summary line) — they drive the Step 3 attack-now vs
+backlog decision and benefit from quick visibility during triage.
 
 Number findings globally (1, 2, 3, …) across all groups. Group separators
 (`━━━ <target> ━━━`) are written to a header file

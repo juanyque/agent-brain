@@ -66,14 +66,14 @@ A `promotable-flow` finding has three possible shapes, ranked by preference:
 
 When the flow fits naturally inside an existing skill's scope (e.g. an extra `## How to amend a PR` section inside an existing PR-review skill), propose adding a section instead of a new skill.
 
-- `target` namespace: `claude-skills / <plugin>/<skill>`.
+- `target` namespace: `agent-skills / <plugin>/<skill>`.
 - Action: `Add section "<name>" to <skill>/SKILL.md` describing the flow.
 
 ### 2. New micro-skill (preferred when reusable across plugins)
 
 When the flow stands alone and could be invoked from multiple existing skills, propose a new skill.
 
-- `target` namespace: `claude-skills / <plugin>/<new-skill-name>`.
+- `target` namespace: `agent-skills / <plugin>/<new-skill-name>`.
 - Action: `Create new skill <plugin>/<name>` with phases, allowed-tools, references.
 - The new skill should follow the skill-creator-custom conventions (frontmatter, progressive disclosure, examples).
 
@@ -81,7 +81,7 @@ When the flow stands alone and could be invoked from multiple existing skills, p
 
 Only when the flow does not belong to any existing plugin. Propose creating it under `user-skill/` or a new plugin.
 
-- `target` namespace: `claude-skills / user-skill/<new-skill-name>`.
+- `target` namespace: `agent-skills / user-skill/<new-skill-name>`.
 - Action: same as (2) but justify the plugin choice.
 
 ## Extra finding fields
@@ -102,7 +102,7 @@ This subagent reads transcripts that may include user requests, decisions, and a
 - **Phases, not instances.** `flow_summary` describes the abstract shape ("gather context → propose options → execute"); it does not name specific files, tickets, or commits from the session.
 - **Genericity evidence is qualitative.** `genericity_evidence` may cite "appeared in 3 sessions" or "user said this is recurring", but does not quote the user.
 - **Redact paths in examples.** If the finding needs an example, use placeholders (`<repo>`, `<ticket>`, `<skill>`).
-- **Verification rule.** After the finding is written (to backlog or to a ticket body), no string >20 characters should be a verbatim copy from any transcript file (see [runtimes.common.md](runtimes.common.md) for runtime-specific paths).
+- **Verification rule.** After the finding is written (to backlog or to a ticket body), no string >20 characters should be a verbatim copy from any transcript file in `transcript files (see runtimes.common.md for paths)`.
 
 A finding that cannot be expressed without verbatim content is a finding that should not be written. Skip and move on.
 
@@ -119,7 +119,7 @@ This detector characterises multi-step flows the agent walked through. The trans
 ```yaml
 # Option 1 — new section of an existing skill
 type: promotable-flow
-target: claude-skills / card-engineer/pr-review
+target: agent-skills / card-engineer/pr-review
 location: card-engineer/pr-review/SKILL.md
 summary: "Amend a fix directly into the open PR under review (no new branch)"
 flow_summary: "Identify open PR target file → fetch PR branch → apply fix → push to PR branch"
@@ -134,7 +134,7 @@ action: "Add ## Amend Fix section to pr-review SKILL.md following the existing
 ```yaml
 # Option 2 — new micro-skill
 type: promotable-flow
-target: claude-skills / user-skill/quick-fix-pr
+target: agent-skills / user-skill/quick-fix-pr
 location: ~/.claude/skills/quick-fix-pr/ (does not exist yet)
 summary: "Worktree + branch + push + PR ceremony for a one-line fix"
 flow_summary: "Identify fix → isolate worktree → branch from base → apply → push → PR"
