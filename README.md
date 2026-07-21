@@ -7,7 +7,7 @@ agent-brain is a personal operating model for AI coding agents (Claude Code, Ope
 - A **second-brain** knowledge structure (journal, WIP, memory, tasks) that the model builds on top of any folder of notes — Obsidian is one option, not a requirement.
 - **Version-controlled runtime config & memory**: your `CLAUDE.md` / `AGENTS.md`, memory, and runtime settings live in a git-tracked *brain* and are symlinked into each runtime (`~/.claude`, `~/.config/opencode`, …), so your agent configuration and memory travel with you across machines.
 - A **session lifecycle** (daily notes, session notes, consolidation) driven by the `brain` skill.
-- A **boyscout** skill: silently spot improvement opportunities while you work, then fix them in isolated worktrees or route to tickets.
+- An optional **boyscout** skill: spot improvement opportunities while you work, then route them to an explicit remediation workflow or backlog.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ agent-brain is a personal operating model for AI coding agents (Claude Code, Ope
   - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) → `~/.claude/`
   - [OpenCode](https://opencode.ai/) → `~/.config/opencode/`
   - Shared agents dir → `~/.agents/`
-  - Codex → TBD
+  - Codex CLI → `~/.codex/` (`AGENTS.md` and `config.toml` are persisted under the private brain's `_AGENTS/CODEX/`; the brain skill is installed at `~/.agents/skills/brain`)
 
 ## Install
 
@@ -36,12 +36,7 @@ curl -fsSL https://raw.githubusercontent.com/juanyque/agent-brain/main/bootstrap
 
 ### If `_COMMON` already exists
 
-If your brain already has a `_COMMON` symlink pointing to a different model (e.g. a previous setup), the installer detects the conflict and refuses. Pass `--switch-model` to repoint (a `.backup-<ts>` of the old symlink is created):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/juanyque/agent-brain/main/bootstrap-zero.sh \
-  | bash -s -- --brain /path/to/brain --switch-model --apply
-```
+If your brain already has a `_COMMON` symlink pointing to a different model (e.g. a previous setup), the dry-run reports the change. On `--apply`, the installer preserves the existing entry as `_COMMON.backup-<ts>` and repoints `_COMMON` to agent-brain automatically. The Git snapshot created before installation provides an additional rollback anchor.
 
 ### Flags
 
@@ -49,9 +44,8 @@ curl -fsSL https://raw.githubusercontent.com/juanyque/agent-brain/main/bootstrap
 |---|---|
 | `--brain <path>` | Brain root path (skips interactive prompt) |
 | `--apply` | Execute (default: dry-run) |
-| `--switch-model` | Repoint `_COMMON` if it conflicts (D25) |
 | `--update` | `git pull --ff-only` the repo before wiring |
-| `--runtime claude,opencode` | Restrict to specific runtimes (default: all detected) |
+| `--runtime claude,opencode,agents,codex` | Restrict to a comma-separated runtime subset (default: all detected) |
 
 ## How it works
 
@@ -60,19 +54,36 @@ The installer is a thin orchestrator that delegates to two layers:
 1. **`brain_state`** — state machine (`virgin` → `attached` → `initial` → `maintenance`). Determines what flow to run based on the brain's current state.
 2. **`home_setup`** — structure: pre-cleanup, staging (for virgin brains), `_COMMON` symlink, wrapper files, templates.
 3. **`runtime_manager`** — all runtime config: detects each runtime, ingests local config into the brain (Direction A), implants brain config into local (Direction B), handles conflicts, links skills.
+4. **`runtime_health`** — read-only post-apply validation for every selected runtime, using the same mapping matrix as `runtime_manager`.
 
-Git is used as rollback anchor: a snapshot commit/tag is created before any mutation.
+Runtime policy and private configuration belong to the private brain, not this public repository.
+When a brain contains `_AGENTS/SHARED/memory/`, Codex receives a stable pointer at
+`~/.agents/brain-memory`; the bundled query tool ranks a small number of indexed notes on
+demand. Codex's own generated `~/.codex/memories/` directory remains local and separate.
+
+Git is used as rollback anchor: a local snapshot commit or annotated tag is created before any
+mutation. Snapshot messages are deterministic and snapshot signing is disabled so unattended
+bootstrap runs never open an editor or a GPG prompt. Nothing is pushed automatically.
 
 ## Skills
 
-Two skills ship with agent-brain, installed automatically by the bootstrap:
+Two skills ship with agent-brain, but only the operating skill is installed automatically:
 
-| Skill | Command | Purpose |
-|---|---|---|
-| **brain** | `/brain` | Connect to the brain, manage session lifecycle, daily notes, standardization |
-| **boyscout** | `/boyscout` | Spot improvement opportunities silently, fix in worktrees or route to tickets |
+| Skill | Command | Installation | Purpose |
+|---|---|---|---|
+| **brain** | `/brain` (Codex: `$brain`) | Automatic | Connect to the brain, manage session lifecycle, daily notes, and standardization |
+| **boyscout** | `/boyscout` (Codex: `$boyscout`) | Opt-in | Spot improvement opportunities and route them to an explicit remediation workflow or backlog |
 
-Skills live outside the brain (in `~/.<runtime>/skills/`), symlinked to the repo. They use free filenames (no `.common.md` suffix).
+Skills live outside the brain and are symlinked to the repo. Codex discovers global user skills
+under `~/.agents/skills/`; other runtimes use their own user-skill directory. Skill files use
+normal names without the `.common.md` suffix.
+
+Install `boyscout` for Codex only when wanted. Review the dry-run first:
+
+```bash
+bash ~/.local/share/agent-brain/model/SCRIPTS/skill_link.sh boyscout ~/.agents
+bash ~/.local/share/agent-brain/model/SCRIPTS/skill_link.sh boyscout ~/.agents --apply
+```
 
 ## Repository layout
 
@@ -90,6 +101,7 @@ agent-brain/
 │       ├── brain_state.py       # state machine (shared)
 │       ├── home_setup.py        # structure (cleanup, staging, _COMMON, wrappers)
 │       ├── runtime_manager.py   # runtime config (Direction A/B, conflict, skill link)
+│       ├── runtime_health.py    # post-apply checks for all supported runtimes
 │       ├── runtime_install.sh   # low-level symlink helper (called by runtime_manager)
 │       └── skill_link.sh        # manual skill installer for non-default skills
 └── skills/

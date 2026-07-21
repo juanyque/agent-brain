@@ -14,24 +14,24 @@
 
 ### Dry-run on every daily under `JOURNAL/`
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/cleanup_empty_action_categories.py --vault-root /path/to/vault
+python3 ~/.agents/skills/brain/scripts/cleanup_empty_action_categories.py --brain-root /path/to/brain
 ```
 
 ### Apply
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/cleanup_empty_action_categories.py --vault-root /path/to/vault --apply
+python3 ~/.agents/skills/brain/scripts/cleanup_empty_action_categories.py --brain-root /path/to/brain --apply
 ```
 
 ### Narrow the glob (e.g. only today's daily)
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/cleanup_empty_action_categories.py \
-  --vault-root /path/to/vault --glob "2026-05-25.md" --apply
+python3 ~/.agents/skills/brain/scripts/cleanup_empty_action_categories.py \
+  --brain-root /path/to/brain --glob "2026-05-25.md" --apply
 ```
 
 ### Other journal subdir
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/cleanup_empty_action_categories.py \
-  --vault-root /path/to/vault --journal-subdir Daily --apply
+python3 ~/.agents/skills/brain/scripts/cleanup_empty_action_categories.py \
+  --brain-root /path/to/brain --journal-subdir Daily --apply
 ```
 
 ## What counts as empty
@@ -46,7 +46,7 @@ Current placeholder map (extend in-place as the template grows):
 - `WORK`: `[[Project or context]]`, `Detailed work performed for that project/context today`
 
 ## When this runs
-- **At day rollover** — invokable by the `/obsidian` skill during Flow 1 step 3 (*"Clean the previous existing daily note by removing empty action categories"*), scoped to the previous daily via `--glob <prev-date>.md`, once wired into the maintenance scheduler. Today still callable on demand.
+- **At day rollover** — invokable by the `brain` skill during Flow 1 step 3 (*"Clean the previous existing daily note by removing empty action categories"*), scoped to the previous daily via `--glob <prev-date>.md`, once wired into the maintenance scheduler. Today still callable on demand.
 - **As a batch pass** to clean up an accumulated stack of dailies.
 - **On demand**, invoked manually by the user or agent.
 

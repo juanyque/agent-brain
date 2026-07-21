@@ -1,7 +1,7 @@
 # standardize_assessment.py
 
 ## Purpose
-- Assess a vault against the `obsidian-vault-common` structure in maintenance mode.
+- Assess a brain against the `agent-brain` structure in maintenance mode.
 - Generate a reviewable `WIP/STANDARDIZE_PROCESS.md` report without moving or deleting content.
 
 ## Scope
@@ -22,24 +22,24 @@
 
 ### Dry-run
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/standardize_assessment.py --vault-root .
+python3 ~/.agents/skills/brain/scripts/standardize_assessment.py --brain-root .
 ```
 
 ### Write assessment report
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/standardize_assessment.py --vault-root . --apply
+python3 ~/.agents/skills/brain/scripts/standardize_assessment.py --brain-root . --apply
 ```
 
 ### Custom output path
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/standardize_assessment.py --vault-root . --output WIP/STANDARDIZE_PROCESS.md --apply
+python3 ~/.agents/skills/brain/scripts/standardize_assessment.py --brain-root . --output WIP/STANDARDIZE_PROCESS.md --apply
 ```
 
 ### Extra sensitivity terms
 By default, the filename-sensitivity scan flags `credential`, `credentials`, `password`, `secret`, `token`, and `access`. Pass additional case-insensitive terms specific to your stack via `--sensitive-extra`:
 
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/standardize_assessment.py --vault-root . --sensitive-extra terraform openwisp ollama
+python3 ~/.agents/skills/brain/scripts/standardize_assessment.py --brain-root . --sensitive-extra terraform openwisp ollama
 ```
 
 ## Known limitations

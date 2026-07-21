@@ -5,8 +5,6 @@ description: >
   Use when the user asks to document work in the brain, connect to it, or log progress
   to their second brain. Triggers: "document in brain", "connect to brain", "log to brain",
   "update my brain", "brain", or any reference to documenting activity in the user's brain.
-version: 1.0.0
-argument-hint: "[session|new-day|init|maintain|clean|order|standardize]"
 allowed-tools:
   - Read
   - Edit
@@ -16,12 +14,12 @@ allowed-tools:
   - AskUserQuestion
   - Bash(python3:*, git mv:*, mkdir:*)
 metadata:
-  short-description: Connect to Obsidian brain and document activity
+  short-description: Connect to a notes brain and document activity
 ---
 
-# Obsidian Brain Connector
+# Brain Connector
 
-Connect the current session to an Obsidian brain, load its operating model, and document session activity there.
+Connect the current session to a notes brain, load its operating model, and document session activity there. Obsidian vaults are supported, but Obsidian is not required.
 
 ## Invocation routing
 
@@ -35,10 +33,10 @@ Do not run broad brain maintenance, standardization, or semantic reorganization 
 
 - Python 3.x (stdlib only — scripts have no external dependencies).
 - `git` on PATH (used for `git mv` during brain reorganization).
-- An Obsidian brain to connect to.
-- The skill installed in a runtime directory (`~/.agents/skills/`, `~/.claude/skills/`, or `~/.codex/skills/`) via `SCRIPTS/skill_setup.py` from the `obsidian-vault-common` repository.
+- A notes brain to connect to.
+- The `brain` skill installed by the agent-brain bootstrap. Codex discovers the user skill at `~/.agents/skills/brain`; Claude uses `~/.claude/skills/brain`.
 
-> **Runtime path note:** command examples below use `~/.agents/skills/obsidian/scripts/...` as the canonical install location. If your runtime is different, adjust paths to `~/.claude/skills/obsidian/scripts/`, `~/.codex/skills/obsidian/scripts/`, or wherever `skill_setup.py` installed the skill on your machine.
+> **Runtime path note:** command examples use `~/.agents/skills/brain/scripts/...`, the Codex user-skill location. In another runtime, use its installed `brain/scripts/` path, such as `~/.claude/skills/brain/scripts/`.
 
 ## Brain resolution
 
@@ -77,7 +75,7 @@ Once a brain path is confirmed, run `session_open.py` to load context and prepar
 If you cannot resolve the real id, **stop and ask the user** rather than inventing one.
 
 ```bash
-python3 ~/.claude/skills/obsidian/scripts/session_open.py \
+python3 ~/.agents/skills/brain/scripts/session_open.py \
   --brain-root "<brain_path>" \
   --session-id "<REAL session id from your runtime>" \
   --runtime <claude|opencode|codex> \
@@ -94,7 +92,7 @@ After reviewing the digest, announce to the user that the brain is connected and
 After the user acknowledges the digest (or when the session open is routine), pass `--apply` to create the session note and register it in today's daily `# Sessions` block:
 
 ```bash
-python3 ~/.claude/skills/obsidian/scripts/session_open.py \
+python3 ~/.agents/skills/brain/scripts/session_open.py \
   --brain-root "<brain_path>" \
   --session-id "<REAL session id>" \
   --runtime <claude|opencode|codex> \
@@ -105,7 +103,7 @@ python3 ~/.claude/skills/obsidian/scripts/session_open.py \
 
 **Day rollover**: if the digest reports `day_rollover_detected: yes`, run the day-rollover protocol (Flow 1 / Flow 2 Scenario B per `_COMMON/RULES-SESSION-LIFECYCLE.md`) before work, then re-run `session_open.py --apply` to register the session in today's newly created daily.
 
-**If the brain has no operational files** (`AGENTS.md`, `BRAIN.md` all missing): ask the user whether to proceed with generic Obsidian conventions, and be conservative about writes.
+**If the brain has no operational files** (`AGENTS.md`, `BRAIN.md` all missing): ask the user whether to proceed with generic notes conventions, and be conservative about writes.
 
 **Multi-session coordination**: the digest's `open_sessions:` list is the canonical source of peer session ids. For each peer session id, respect its scope per `_COMMON/RULES-SESSION-LIFECYCLE.md` → "Multi-session coordination" — do not edit or move artifacts inside another session's scope without an explicit handoff.
 
@@ -153,7 +151,7 @@ Each project declares its documentation home in its `AGENTS.md`, `CLAUDE.md`, or
 |---|---|
 | `## Documentation home` → this repo | Project documentation lives in the project's own repository. |
 | `## Documentation home` → external tool (Notion, Confluence, wiki) | Project documentation lives in the named external tool. Include link. |
-| No declaration | **Default: the Obsidian brain** is the project's documentation home. |
+| No declaration | **Default: the brain** is the project's documentation home. |
 
 When in doubt, default to the brain. The brain is always a valid destination; the project's declared home may or may not exist.
 
@@ -173,7 +171,7 @@ If a single note contains both "what another person needs" and "what I did", spl
 
 Key terms used throughout the maintenance and setup workflows below:
 
-- **`_COMMON`** — brain-local symlink pointing to the `obsidian-vault-common` checkout. Its presence signals the brain is attached to the shared operating model.
+- **`_COMMON`** — brain-local symlink pointing to the `agent-brain/model` directory. Its presence signals the brain is attached to the shared operating model.
 - **`_STAGING/`** — temporary directory in the brain root used during initial standardization to hold all original content before it is classified and moved into the target structure (`JOURNAL/`, `WIP/`, `MEMORY/`, etc.). Its presence signals Initial mode; its absence signals Maintenance mode.
 - **`_AGENTS/`** — on-demand home (created by `home_setup.py`) for brain-internal directories that act as the source of truth for an external agent runtime (e.g. `_AGENTS/CLAUDE/`, referenced via symlinks under `~/.claude/`). Sits alongside `_COMMON` and `_STAGING` as an operational top-level directory, never as content.
 - **`QUARANTINE/TRASH/`** — destination for content that looks discardable but must never be deleted automatically. Items remain there until the user explicitly approves permanent deletion.
@@ -186,6 +184,7 @@ The runtime skill exposes deterministic helper tools under its installed `script
 
 - `find_home.py` — resolve candidate brains from a path (notes-agnostic: obsidian, generic, empty).
 - `find_related_notes.py` — find notes related to project keywords.
+- `memory_query.py` — rank a few curated-memory candidates from index metadata without loading note bodies. Use only when prior cross-session guidance may help; open only relevant returned notes.
 - `session_open.py` — session-start ceremony: emits a compact digest, creates session note, updates daily `# Sessions`. Args: `--brain-root`, `--session-id` (real id from the agent runtime — never a timestamp), `--runtime` (claude|opencode|codex; controls resume-command format), `--session-label` (opt), `--cwd` (opt), `--apply`. Dry-run by default.
 - `session_close.py` — session-close ceremony. Subcommands: `handoff <session-id>` (→ handoff-only), `consolidate <session-id> [--archive]` (→ consolidated, optional git mv to QUARANTINE/TRASH/). Args: `--brain-root`, `--apply`. Dry-run by default.
 - `session_bootstrap.py` — legacy: inspect daily/session state and print verbose kickoff prompt. Preserved for callers that depend on it; prefer `session_open.py` for new sessions.
@@ -194,7 +193,7 @@ The runtime skill exposes deterministic helper tools under its installed `script
 - `attachments_audit.py` — audit all `ATTACHMENTS/` folders under a chosen scope and optionally relocate only safe cases with `git mv`.
 - `canvas_path_repair.py` — audit `.canvas` file-node paths and optionally repair only uniquely resolvable broken paths.
 - `cleanup_ds_store.py` — remove `.DS_Store` noise files from visible brain content. Safe (does not destroy information); runs automatically in `home_setup.py` before the empty-dir sweep, and as a maintenance pre-check.
-- `cleanup_empty_action_categories.py` — remove empty / placeholder-only action categories from daily notes (`# Actions` section). Dry-run by default. Skips legacy-shape dailies without `# Actions`. Pass `--skip-if-open-sessions` to refuse cleaning a daily that still has open session notes pending consolidation (exit code 2). Intended hook for `/obsidian` day-rollover cleanup.
+- `cleanup_empty_action_categories.py` — remove empty / placeholder-only action categories from daily notes (`# Actions` section). Dry-run by default. Skips legacy-shape dailies without `# Actions`. Pass `--skip-if-open-sessions` to refuse cleaning a daily that still has open session notes pending consolidation (exit code 2). Intended hook for `brain` day-rollover cleanup.
 - `check_basename_collisions.py` — detect `*.md` basename collisions brain-wide. Counts incoming references (wikilink-simple / wikilink-path / markdown-simple / markdown-path) across `.md` + `.canvas` (refs inside code spans are skipped — Obsidian does not resolve them). If all four counters are 0, suggests renaming every instance and `--apply` executes via `git mv`. Otherwise computes per-file attribution and auto-renames the files no reference points at, leaving files that are referenced to interactive review via `--show-refs <basename>`. `--exclude-path` skips runtime-governed subtrees (e.g. `_AGENTS/CLAUDE/memory/`).
 
 Tool documentation lives next to the scripts using Obsidian-safe common names:
@@ -205,6 +204,7 @@ Tool documentation lives next to the scripts using Obsidian-safe common names:
 - `TOOL.cleanup-ds-store.md`
 - `TOOL.cleanup-empty-action-categories.md`
 - `TOOL.maintenance-scheduler.md`
+- `TOOL.memory-query.md`
 - `TOOL.session-bootstrap.md`
 - `TOOL.standardize-assessment.md`
 
@@ -212,20 +212,20 @@ All tools that move or rewrite files are dry-run by default. Apply only after re
 
 ### Script conventions
 
-- Common lifecycle setup scripts live under `<common_path>/SCRIPTS/`.
-- Runtime skill tools live under `<common_path>/SKILLS/obsidian/scripts/` and are exposed through installed runtime symlinks such as `~/.agents/skills/obsidian/scripts/`.
-- Python scripts and latest-run logs use CLI-oriented basenames, while Markdown docs keep Obsidian-safe `.md` names. Example family: `skill_setup.py`, `SCRIPT.skill-setup.md`, and `skill_setup.log`.
+- Common lifecycle setup scripts live under `<agent-brain>/model/SCRIPTS/`.
+- Runtime skill tools live under `<agent-brain>/skills/brain/scripts/` and are exposed through installed runtime symlinks such as `~/.agents/skills/brain/scripts/`.
+- Python scripts and latest-run logs use CLI-oriented basenames, while Markdown docs keep notes-safe `.md` names.
 - Skill tool docs use Obsidian-safe names such as `TOOL.attachments-audit.md`.
 - Scripts are dry-run by default when they create, link, move, or rewrite files.
 - Every run prints to console and writes the latest `.log`; logs are runtime artifacts and should not be committed.
 
 ## Common lifecycle workflows
 
-Some brains may use the shared `obsidian-vault-common` operating model through a brain-local `_COMMON` symlink. When the user asks to set up, update, verify, or install the shared brain model, prefer deterministic scripts from the common checkout instead of manual edits.
+Brains use the shared `agent-brain` operating model through a brain-local `_COMMON` symlink. When the user asks to set up, update, verify, or install the model, prefer deterministic scripts from the agent-brain checkout instead of manual edits.
 
 ### Maintain, clean, order, or standardize a brain
 
-When the user invokes `/obsidian init`, `/obsidian maintain`, `/obsidian clean`, `/obsidian order`, `/obsidian standardize`, or natural-language requests like "ordena el brain", "haz mantenimiento", "limpia el brain", or "revisa el brain", run the guided brain maintenance engine: mechanical setup check → mode detection → drain `_STAGING/` (Initial mode) or run assessment (Maintenance mode).
+When the user invokes `brain init`, `brain maintain`, `brain clean`, `brain order`, `brain standardize`, or natural-language requests like "ordena el brain", "haz mantenimiento", "limpia el brain", or "revisa el brain", run the guided brain maintenance engine: mechanical setup check → mode detection → drain `_STAGING/` (Initial mode) or run assessment (Maintenance mode).
 
 The full 4-step workflow is in [references/brain-maintenance.md](references/brain-maintenance.md).
 
@@ -233,20 +233,20 @@ Do not silently perform semantic reorganization. The first output should explain
 
 ### Setup and attachment operations
 
-For one-time setup or repair: locate the common checkout, attach a brain to it via `home_setup.py`, or install/repair the runtime skill via `skill_setup.py`. All commands follow the dry-run-first pattern.
+For one-time setup or repair: locate the agent-brain checkout, attach a brain via `bootstrap-zero.sh`/`home_setup.py`, or install/repair a runtime skill via `skill_link.sh`. All commands follow the dry-run-first pattern.
 
 The full commands and decision logic are in [references/setup-and-attach.md](references/setup-and-attach.md).
 
 ## How to verify
 
-Run `/obsidian` (and its variants) in a brain and confirm:
-- `/obsidian` from inside an attached brain directory connects to it directly without prompting.
-- `/obsidian` from outside any brain asks for a path or surfaces detected brains.
+Invoke `brain` (explicitly as `$brain` in Codex, or by a matching natural-language request) and confirm:
+- From inside an attached brain directory, it connects directly without prompting.
+- From outside any brain, it asks for a path or surfaces detected brains.
 - After connection, `session_open.py` is called via Bash and its compact digest appears in the response; no separate Read calls are made for `AGENTS.md`, `BRAIN.md`, `WIP/WIP.md`, or `TASK_TYPES/TASK_TYPES.md`.
 - From a working directory matching a project (e.g. `~/workspace/<project>/`), related WIP items appear pre-selected in the selection form; unrelated notes are not loaded.
-- `/obsidian close session` (or `wrap up`) triggers `session_close.py` in dry-run first; the status transition (`open → handoff-only` or `open → consolidated`) is printed; `--apply` writes the Status line and removes the `wip` tag on consolidate.
-- `/obsidian init` on a brain with `_STAGING/` enters Initial mode and reads `WIP/STANDARDIZE_PROCESS.md` before any moves.
-- `/obsidian maintain` (or any maintenance trigger) on a brain without `_STAGING/` runs `maintenance_scheduler.py` and presents due/review jobs before structural assessment.
+- `brain close session` (or `wrap up`) triggers `session_close.py` in dry-run first; the status transition (`open → handoff-only` or `open → consolidated`) is printed; `--apply` writes the Status line and removes the `wip` tag on consolidate.
+- `brain init` on a brain with `_STAGING/` enters Initial mode and reads `WIP/STANDARDIZE_PROCESS.md` before any moves.
+- `brain maintain` (or any maintenance trigger) on a brain without `_STAGING/` runs `maintenance_scheduler.py` and presents due/review jobs before structural assessment.
 - Running `cleanup_empty_action_categories.py --skip-if-open-sessions` exits with code 2 and prints which session notes block cleanup when a daily has open sessions pending consolidation.
 - All file moves use `git mv` (no plain copy+delete) when the brain is a Git repo. Discardable items go to `QUARANTINE/TRASH/`, not deletion.
 
@@ -268,7 +268,7 @@ If any file cannot be read, stop immediately and tell the user:
 - Never modify `.obsidian/` unless the user explicitly requests it.
 - Never delete content from the brain. Prefer moving, renaming, or consolidating. If cleanup suggests deletion, move the candidate to `QUARANTINE/TRASH/` with traceability and wait for explicit user approval before permanent deletion.
 - `home_setup.py` may rewrite external symlinks under canonical agent runtime homes (`~/.agents`, `~/.claude`, `~/.codex`, plus any `--runtime-home`) when it moves runtime-tied directories into `_AGENTS/`. Originals are preserved as `.bak.<timestamp>` siblings and the rewrites are recorded in `WIP/AGENTS_MIGRATION.<date>.md`. Never delete the `.bak` files automatically — they belong to the user to verify and clean up.
-- The Bash `python3:*` allowance is for invoking the documented runtime skill scripts and lifecycle scripts under `<common_path>/SCRIPTS/` and `<common_path>/SKILLS/obsidian/scripts/`. Never run inline `python3 -c "..."` expressions or arbitrary user-supplied Python files; if a task seems to require it, ask the user explicitly first.
+- The Bash `python3:*` allowance is for invoking the documented runtime skill scripts and lifecycle scripts under `<agent-brain>/model/SCRIPTS/` and `<agent-brain>/skills/brain/scripts/`. Never run inline `python3 -c "..."` expressions or arbitrary user-supplied Python files; if a task seems to require it, ask the user explicitly first.
 - Never pass `--skip-full-reorder` to `home_setup.py` autonomously. The choice between full reorder and skipping the staging sweep is always the user's. Before invoking the script with that flag, ask the user via `AskUserQuestion` and respect their answer. Do not infer the choice from brain size, content, or any other heuristic — the default is full reorder.
 - Never drain `_STAGING/` content autonomously. Every batch — including purely mechanical date-based moves (e.g. daily notes by year) and scaffolding writes (e.g. `WIP/WIP.md`, `WIP/STANDARDIZE_PROCESS.md`) — requires explicit user confirmation via `AskUserQuestion` immediately before any `git mv` or file write is executed. Reversibility through Git is not authorization. Default to one batch per session and stop unless the user explicitly asks to continue. See `references/brain-maintenance.md` step 3 for the full gate pattern.
 - If the user's brain has a local `TEMPLATES/Daily Note Template.md` whose shape differs from the common source (`_COMMON/TEMPLATES/TEMPLATE.daily-note.md`), pause and propose unification — analyze what the local has that the common does not, suggest enriching the common to absorb the local additions, then collapse to a single shared template. Do not auto-replace either side and do not perpetuate the divergence by writing notes against the local-only shape.

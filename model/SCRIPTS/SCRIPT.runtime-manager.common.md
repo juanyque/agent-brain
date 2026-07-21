@@ -6,8 +6,8 @@ All runtime wiring for a brain (D21/D26). Replaces the runtime logic previously 
 
 ## What it does
 
-1. **Discovery** — detects local runtimes (`~/.claude/`, `~/.config/opencode/`) and brain-side config (`_AGENTS/<RT>/`).
-2. **Decision matrix** per runtime:
+1. **Discovery** — detects local runtimes (`~/.claude/`, `~/.config/opencode/`, `~/.codex/`) and brain-side config (`_AGENTS/<RT>/`).
+2. **Decision matrix** per mapped file or directory:
 
    | Brain `_AGENTS/<RT>/` | Local `~/.<RT>/` | Action |
    |---|---|---|
@@ -18,7 +18,7 @@ All runtime wiring for a brain (D21/D26). Replaces the runtime logic previously 
    | no | no | Skip |
 
 3. **Old-layout migration** — detects external symlinks pointing into the brain, moves targets to `_AGENTS/`, rewrites symlinks.
-4. **Skill link** — symlinks `~/.<RT>/skills/brain` → `agent-brain/skills/brain`.
+4. **Skill link** — symlinks each runtime's user skill location to `agent-brain/skills/brain`. Codex uses the official user location `~/.agents/skills/brain`.
 
 ## Usage
 
@@ -38,9 +38,9 @@ When the local runtime has config but the brain doesn't:
 
 When both sides have unmanaged config:
 1. Copy local config → `INBOX/_RUNTIME/<RT>/` (quarantine).
-2. `git add` + commit the quarantine.
+2. Stage the quarantine as part of the deterministic safety snapshot workflow.
 3. Implant brain version (Direction B).
-4. Post-process: agent offers interactive merge per [runtime-merge reference](../../../skills/brain/references/runtime-merge.common.md).
+4. Post-process: agent offers an interactive merge per the brain skill's runtime-merge reference.
 
 ## Runtime configs
 
@@ -48,3 +48,8 @@ When both sides have unmanaged config:
 |---|---|---|---|
 | claude | `~/.claude/` | `CLAUDE/` | `CLAUDE.runtime.claude.md→CLAUDE.md`, `settings.json`, `memory` |
 | opencode | `~/.config/opencode/` | `OPENCODE/` | `AGENTS.runtime.opencode.md→AGENTS.md`, `opencode.json`, `oh-my-openagent.json` |
+| codex | `~/.codex/` | `CODEX/` | `AGENTS.runtime.codex.md→AGENTS.md`, `config.toml`; skill at `~/.agents/skills/brain` |
+
+If `_AGENTS/SHARED/memory/` exists, Codex also receives a read-only discovery link at
+`~/.agents/brain-memory`. The installer does not replace or relocate Codex's native,
+generated `~/.codex/memories/` state.

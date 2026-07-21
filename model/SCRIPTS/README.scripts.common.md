@@ -40,3 +40,16 @@ python3 SCRIPTS/vault_setup.py --vault /path/to/vault --apply
 ```
 
 Creates `_COMMON` when missing and creates only missing wrapper files. Existing local files are reported and never overwritten.
+
+## `runtime_health.py`
+
+Verify the post-apply wiring for Claude, OpenCode, Agents, and Codex using the same mapping matrix
+as `runtime_manager.py`. Full doc: `SCRIPT.runtime-health.common.md`.
+
+```bash
+python3 SCRIPTS/runtime_health.py --brain /path/to/brain
+python3 SCRIPTS/runtime_health.py --brain /path/to/brain --runtime claude
+```
+
+The check is read-only. Inactive runtimes are skipped; broken mappings, skill links, shared-memory
+links, and private-file permissions fail with a non-zero exit code.

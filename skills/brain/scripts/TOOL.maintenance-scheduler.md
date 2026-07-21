@@ -20,17 +20,17 @@
 
 ### Human-readable report
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/maintenance_scheduler.py --vault-root .
+python3 ~/.agents/skills/brain/scripts/maintenance_scheduler.py --brain-root .
 ```
 
 ### Machine-readable report
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/maintenance_scheduler.py --vault-root . --json
+python3 ~/.agents/skills/brain/scripts/maintenance_scheduler.py --brain-root . --json
 ```
 
 ### Test with a fixed date
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/maintenance_scheduler.py --vault-root . --date 2026-05-16
+python3 ~/.agents/skills/brain/scripts/maintenance_scheduler.py --brain-root . --date 2026-05-16
 ```
 
 ## Safety model

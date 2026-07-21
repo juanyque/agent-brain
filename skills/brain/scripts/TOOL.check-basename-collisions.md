@@ -12,19 +12,19 @@
 ## Usage
 
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/check_basename_collisions.py --vault-root /path/to/vault
+python3 ~/.agents/skills/brain/scripts/check_basename_collisions.py --brain-root /path/to/brain
 ```
 
 With exclusion (recommended for vaults using `_AGENTS/CLAUDE/memory/`):
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/check_basename_collisions.py \
-  --vault-root /path/to/vault \
+python3 ~/.agents/skills/brain/scripts/check_basename_collisions.py \
+  --brain-root /path/to/brain \
   --exclude-path _AGENTS/CLAUDE/memory
 ```
 
 The full report is written to stdout. Pipe to a file if needed:
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/check_basename_collisions.py --vault-root /path/to/vault > collisions.md
+python3 ~/.agents/skills/brain/scripts/check_basename_collisions.py --brain-root /path/to/brain > collisions.md
 ```
 
 ## Reference kinds (the four counters)
@@ -91,8 +91,8 @@ For repeated-pattern duplicates (e.g. `plan.md` × 67 in per-ticket folders), th
 To process a group with references, use `--show-refs <basename>` instead of writing ad-hoc grep commands. This reuses the script's own regex (single source of truth), so the references the agent finds are exactly the ones the counter found.
 
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/check_basename_collisions.py \
-  --vault-root /path/to/vault \
+python3 ~/.agents/skills/brain/scripts/check_basename_collisions.py \
+  --brain-root /path/to/brain \
   --exclude-path _AGENTS/CLAUDE/memory \
   --show-refs decisiones
 ```
@@ -116,8 +116,8 @@ Per-file resolution is best-effort:
 ## Auto-apply (`--apply`)
 
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/check_basename_collisions.py \
-  --vault-root /path/to/vault \
+python3 ~/.agents/skills/brain/scripts/check_basename_collisions.py \
+  --brain-root /path/to/brain \
   --exclude-path _AGENTS/CLAUDE/memory \
   --apply
 ```
@@ -182,7 +182,7 @@ The script does not auto-disambiguate to keep the algorithm simple; the case is 
 
 ## Documentation convention: prefer real-but-unique basenames in examples
 
-When writing TOOL documentation, TASK_TYPE guides, or any doc that mentions Obsidian link syntax, use a basename that **exists in the vault and is unique** (e.g. `[[VAULT]]`, `[[README.obsidian-vault-common]]`) instead of a fictional generic name (`[[plan]]`, `[[notes]]`).
+When writing TOOL documentation, TASK_TYPE guides, or any doc that mentions Obsidian link syntax, use a basename that **exists in the brain and is unique** (e.g. `[[BRAIN]]`) instead of a fictional generic name (`[[plan]]`, `[[notes]]`).
 
 **Why**:
 - The link works for the reader (didactic).

@@ -227,14 +227,16 @@ def print_plan(
     reporter.write(f"common: {common}")
     reporter.write(f"{COMMON_LINK_NAME}: {link_st} -> {desired}")
 
-    if link_st != "ok" and not skip_full_reorder:
+    if link_st == "missing" and not skip_full_reorder:
         stg_status, stg_count = staging_status(brain_root)
         reporter.write(f"{STAGING_DIR_NAME}: {stg_status}" + (f" ({stg_count} items)" if stg_count else ""))
         if stg_status != "has-content":
             items = collect_movable_items(brain_root)
             reporter.write(f"  {len(items)} non-hidden items will be moved to {STAGING_DIR_NAME}/")
-    elif link_st != "ok" and skip_full_reorder:
+    elif link_st == "missing" and skip_full_reorder:
         reporter.write(f"{STAGING_DIR_NAME}: skipped by --skip-full-reorder")
+    elif link_st.startswith("conflict"):
+        reporter.write(f"{STAGING_DIR_NAME}: unchanged while resolving {COMMON_LINK_NAME} conflict")
     elif link_st == "ok":
         reporter.write(f"{COMMON_LINK_NAME}: already attached")
 
@@ -376,7 +378,7 @@ def main() -> int:
                 reporter.write("")
                 reporter.write(f"  CONFLICT: _COMMON is {link_st}")
                 if args.switch_model:
-                    reporter.write("  --switch-model: would backup + repoint on apply")
+                    reporter.write("  would backup existing _COMMON + repoint on apply")
                 else:
                     reporter.write("  Pass --switch-model to repoint (backup created)")
             elif link_st != "ok" and not args.skip_full_reorder:

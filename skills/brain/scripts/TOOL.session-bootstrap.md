@@ -17,7 +17,7 @@
 
 ## Usage
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/session_bootstrap.py --vault-root .
+python3 ~/.agents/skills/brain/scripts/session_bootstrap.py --brain-root .
 ```
 
 ## Output

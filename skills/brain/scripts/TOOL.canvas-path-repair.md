@@ -22,18 +22,18 @@
 
 ### Dry-run
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/canvas_path_repair.py --vault-root . --scope-root .
+python3 ~/.agents/skills/brain/scripts/canvas_path_repair.py --brain-root . --scope-root .
 ```
 
 ### Apply safe rewrites
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/canvas_path_repair.py --vault-root . --scope-root . --apply
+python3 ~/.agents/skills/brain/scripts/canvas_path_repair.py --brain-root . --scope-root . --apply
 ```
 
 ## Logging
 - Every run prints to the console.
 - Every run overwrites the latest execution log at:
-  - `~/.agents/skills/obsidian/scripts/canvas_path_repair.log`
+  - `~/.agents/skills/brain/scripts/canvas_path_repair.log`
 
 ## Known limitations
 - It only repairs canvas nodes of `type: "file"`.

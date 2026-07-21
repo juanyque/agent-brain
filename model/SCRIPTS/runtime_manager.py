@@ -54,6 +54,18 @@ RUNTIME_CONFIGS = {
             ("AGENTS.runtime.agents.md", "AGENTS.md"),
         ],
     },
+    # Codex discovers user skills in ~/.agents/skills. Its private, user-level
+    # config is persisted by the brain without coupling it to the public model.
+    "codex": {
+        "local_dir": Path("~/.codex"),
+        "agents_subdir": "CODEX",
+        "mappings": [
+            ("AGENTS.runtime.codex.md", "AGENTS.md"),
+            ("config.toml", "config.toml"),
+        ],
+        "skills_dir": Path("~/.agents/skills"),
+        "private_targets": {"config.toml"},
+    },
 }
 
 RUNTIME_HOMES = [Path("~/.agents"), Path("~/.claude"), Path("~/.codex")]
@@ -308,11 +320,23 @@ def promote_migration_doc(brain_root: Path, timestamp: str, reporter: Reporter, 
         pass
 
 
-def run_runtime_install(rt_name: str, brain_root: Path, apply: bool, reporter: Reporter) -> None:
+def run_runtime_install(
+    rt_name: str,
+    brain_root: Path,
+    apply: bool,
+    reporter: Reporter,
+    assume_target_missing: set[str] | None = None,
+    assume_source_present: set[str] | None = None,
+) -> None:
     script = Path(__file__).parent / "runtime_install.sh"
     cmd = ["bash", str(script), rt_name, "--brain", str(brain_root)]
     if apply:
         cmd.append("--apply")
+    else:
+        for target in sorted(assume_target_missing or set()):
+            cmd.extend(["--assume-target-missing", target])
+        for source in sorted(assume_source_present or set()):
+            cmd.extend(["--assume-source-present", source])
     result = subprocess.run(cmd, text=True, capture_output=True, check=False)
     if result.stdout:
         for line in result.stdout.rstrip().splitlines():
@@ -321,12 +345,16 @@ def run_runtime_install(rt_name: str, brain_root: Path, apply: bool, reporter: R
         for line in result.stderr.rstrip().splitlines():
             reporter.write(f"  STDERR: {line}")
     if result.returncode != 0:
-        reporter.write(f"  WARNING: runtime_install exited with code {result.returncode}")
+        raise SystemExit(f"runtime_install failed for {rt_name} with exit code {result.returncode}")
 
 
 def ingest_local_to_brain(
-    rt_name: str, brain_root: Path, reporter: Reporter, dry_run: bool
-) -> None:
+    rt_name: str,
+    brain_root: Path,
+    reporter: Reporter,
+    dry_run: bool,
+    only_targets: set[str] | None = None,
+) -> tuple[set[str], set[str]]:
     config = RUNTIME_CONFIGS[rt_name]
     local_dir = config["local_dir"].expanduser()
     agents_dir = brain_agents_subdir(brain_root, rt_name)
@@ -335,7 +363,11 @@ def ingest_local_to_brain(
     if not dry_run:
         agents_dir.mkdir(parents=True, exist_ok=True)
 
+    ingested_sources: set[str] = set()
+    removed_targets: set[str] = set()
     for brain_source, local_target in config["mappings"]:
+        if only_targets is not None and local_target not in only_targets:
+            continue
         local_path = local_dir / local_target
         brain_path = agents_dir / brain_source
         if not local_path.exists() and not local_path.is_symlink():
@@ -344,6 +376,8 @@ def ingest_local_to_brain(
         if local_path.is_symlink():
             reporter.write(f"    SKIP {local_target} (already a symlink — likely managed)")
             continue
+        ingested_sources.add(brain_source)
+        removed_targets.add(local_target)
         reporter.write(f"    MOVE {local_target} -> _AGENTS/{config['agents_subdir']}/{brain_source}")
         if not dry_run:
             if local_path.is_dir():
@@ -354,12 +388,19 @@ def ingest_local_to_brain(
                 import shutil
                 shutil.copy2(local_path, brain_path)
                 local_path.unlink()
+            if local_target in config.get("private_targets", set()):
+                brain_path.chmod(0o600)
             subprocess.run(["git", "add", str(brain_path)], cwd=brain_root, check=False, capture_output=True)
+    return ingested_sources, removed_targets
 
 
 def quarantine_local(
-    rt_name: str, brain_root: Path, reporter: Reporter, dry_run: bool
-) -> None:
+    rt_name: str,
+    brain_root: Path,
+    reporter: Reporter,
+    dry_run: bool,
+    only_targets: set[str] | None = None,
+) -> set[str]:
     config = RUNTIME_CONFIGS[rt_name]
     local_dir = config["local_dir"].expanduser()
     quarantine_dir = brain_root / INBOX_RUNTIME_DIR_NAME / config["agents_subdir"]
@@ -368,10 +409,14 @@ def quarantine_local(
     if not dry_run:
         quarantine_dir.mkdir(parents=True, exist_ok=True)
 
+    quarantined_targets: set[str] = set()
     for brain_source, local_target in config["mappings"]:
+        if only_targets is not None and local_target not in only_targets:
+            continue
         local_path = local_dir / local_target
         if not local_path.exists() or local_path.is_symlink():
             continue
+        quarantined_targets.add(local_target)
         q_path = quarantine_dir / local_target
         reporter.write(f"    QUARANTINE {local_target} -> INBOX/_RUNTIME/{config['agents_subdir']}/{local_target}")
         if not dry_run:
@@ -383,28 +428,50 @@ def quarantine_local(
                 shutil.copy2(local_path, q_path)
                 local_path.unlink()
             subprocess.run(["git", "add", str(q_path)], cwd=brain_root, check=False, capture_output=True)
+    return quarantined_targets
 
 
 def link_skill(rt_name: str, brain_root: Path, reporter: Reporter, dry_run: bool) -> None:
     repo_root = resolve_repo_root()
     config = RUNTIME_CONFIGS[rt_name]
     local_dir = config["local_dir"].expanduser()
-    skills_dir = local_dir / "skills"
+    skills_dir = config.get("skills_dir", local_dir / "skills").expanduser()
     link = skills_dir / "brain"
     target = repo_root / "skills" / "brain"
 
     if link.is_symlink() and link.resolve() == target.resolve():
-        reporter.write(f"  OK    skill brain ({rt_name}) already linked")
+        reporter.write(f"  OK    skill brain ({rt_name}) already linked at {link}")
         return
     if link.exists() or link.is_symlink():
         reporter.write(f"  BACKUP {link} (exists, not our symlink)")
         if not dry_run:
             backup = link.with_name(link.name + f".backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
             link.rename(backup)
-    reporter.write(f"  LINK  skill brain ({rt_name}) -> {target}")
+    reporter.write(f"  LINK  skill brain ({rt_name}): {link} -> {target}")
     if not dry_run:
         skills_dir.mkdir(parents=True, exist_ok=True)
         link.symlink_to(target)
+
+
+def link_shared_memory(brain_root: Path, reporter: Reporter, dry_run: bool) -> None:
+    source = brain_root / AGENTS_DIR_NAME / "SHARED" / "memory"
+    link = Path("~/.agents/brain-memory").expanduser()
+
+    if not source.is_dir():
+        reporter.write(f"  SKIP  shared memory (source missing: {source})")
+        return
+    if link.is_symlink() and link.resolve() == source.resolve():
+        reporter.write(f"  OK    shared memory already linked at {link}")
+        return
+    if link.exists() or link.is_symlink():
+        reporter.write(f"  BACKUP {link} (exists, not our symlink)")
+        if not dry_run:
+            backup = link.with_name(link.name + f".backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+            link.rename(backup)
+    reporter.write(f"  LINK  shared memory: {link} -> {source}")
+    if not dry_run:
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(source)
 
 
 def process_runtime(
@@ -428,39 +495,77 @@ def process_runtime(
             reporter.write("  SKIP (local dir not present)")
         return
 
-    brain_rt_dir = brain_agents_subdir(brain_root, rt_name)
-    local_exists = local_dir.is_dir()
-    brain_exists = brain_rt_dir.is_dir()
-
     reporter.write(f"-- runtime: {rt_name} --")
+    brain_rt_dir = brain_agents_subdir(brain_root, rt_name)
+    ingest_targets: set[str] = set()
+    quarantine_targets: set[str] = set()
+    available_sources: set[str] = set()
 
-    if not local_exists and not brain_exists:
-        reporter.write("  SKIP (neither local nor brain _AGENTS present)")
-        return
+    for brain_source, local_target in config["mappings"]:
+        brain_path = brain_rt_dir / brain_source
+        local_path = local_dir / local_target
+        brain_present = brain_path.exists() or brain_path.is_symlink()
+        local_present = local_path.exists() or local_path.is_symlink()
+        local_correct = False
+        if local_path.is_symlink() and brain_present:
+            try:
+                local_correct = local_path.resolve() == brain_path.resolve()
+            except OSError:
+                local_correct = False
 
-    if brain_exists and not local_exists:
-        reporter.write("  Direction B: implant brain -> local")
-        run_runtime_install(rt_name, brain_root, apply=not dry_run, reporter=reporter)
+        if brain_present:
+            available_sources.add(brain_source)
+            if local_present and not local_path.is_symlink():
+                quarantine_targets.add(local_target)
+            elif local_correct:
+                reporter.write(f"  OK    {local_target} already linked")
+        elif local_present and not local_path.is_symlink():
+            ingest_targets.add(local_target)
+        elif local_path.is_symlink():
+            reporter.write(
+                f"  WARNING {local_target} is a symlink but brain source is missing: {brain_path}"
+            )
 
-    elif not brain_exists and local_exists:
-        ingest_local_to_brain(rt_name, brain_root, reporter, dry_run)
-        run_runtime_install(rt_name, brain_root, apply=not dry_run, reporter=reporter)
+    ingested_sources: set[str] = set()
+    removed_targets: set[str] = set()
+    if ingest_targets:
+        ingested_sources, removed_targets = ingest_local_to_brain(
+            rt_name,
+            brain_root,
+            reporter,
+            dry_run,
+            only_targets=ingest_targets,
+        )
+        available_sources.update(ingested_sources)
 
-    elif brain_exists and local_exists:
-        has_unmanaged = False
-        for _src, tgt in config["mappings"]:
-            lp = local_dir / tgt
-            if lp.exists() and not lp.is_symlink():
-                has_unmanaged = True
-                break
-        if has_unmanaged:
-            quarantine_local(rt_name, brain_root, reporter, dry_run)
-            run_runtime_install(rt_name, brain_root, apply=not dry_run, reporter=reporter)
-        else:
-            reporter.write("  OK (local already symlinks into brain)")
-            run_runtime_install(rt_name, brain_root, apply=not dry_run, reporter=reporter)
+    quarantined_targets: set[str] = set()
+    if quarantine_targets:
+        quarantined_targets = quarantine_local(
+            rt_name,
+            brain_root,
+            reporter,
+            dry_run,
+            only_targets=quarantine_targets,
+        )
 
-    link_skill(rt_name, brain_root, reporter, dry_run)
+    if available_sources:
+        if not ingest_targets and not quarantine_targets:
+            reporter.write("  Direction B: implant/verify brain -> local")
+        run_runtime_install(
+            rt_name,
+            brain_root,
+            apply=not dry_run,
+            reporter=reporter,
+            assume_target_missing=(removed_targets | quarantined_targets) if dry_run else None,
+            assume_source_present=ingested_sources if dry_run else None,
+        )
+    else:
+        reporter.write("  SKIP (no local or brain-managed config found)")
+
+    if local_dir.is_dir() or available_sources:
+        link_skill(rt_name, brain_root, reporter, dry_run)
+    if rt_name == "codex" and (local_dir.is_dir() or available_sources):
+        link_shared_memory(brain_root, reporter, dry_run)
 
 
 def main() -> int:
@@ -468,7 +573,7 @@ def main() -> int:
     parser.add_argument("--brain", required=True, help="Path to the brain root")
     parser.add_argument("--common", help="Path to the model root (for repo resolution). Defaults to this script's model/.")
     parser.add_argument("--apply", action="store_true", help="Apply changes. Default is dry-run.")
-    parser.add_argument("--runtime", action="append", help="Restrict to specific runtime (claude, opencode). Can be passed more than once.")
+    parser.add_argument("--runtime", action="append", help="Restrict to a specific runtime (claude, opencode, agents, codex). Can be passed more than once.")
     parser.add_argument("--runtime-home", action="append", help="Additional runtime home to scan for symlinks. Can be passed more than once.")
     args = parser.parse_args()
     reporter = Reporter(Path(__file__).with_suffix(".log"))

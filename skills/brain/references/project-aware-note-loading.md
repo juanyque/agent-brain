@@ -21,7 +21,7 @@ You already have WIP.md loaded. Mentally match the keywords against active WIP i
 Run the related-notes script to find additional notes beyond WIP:
 
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/find_related_notes.py --brain <brain_path> --keywords "lerp example-co"
+python3 ~/.agents/skills/brain/scripts/find_related_notes.py --brain <brain_path> --keywords "lerp example-co"
 ```
 
 This searches note filenames by default. The script returns JSON with matched notes (path, title, preview line).

@@ -34,23 +34,23 @@
 
 ### Dry-run
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/attachments_audit.py --vault-root . --scope-root JOURNAL --quarantine-dir QUARANTINE/ATTACHMENTS
+python3 ~/.agents/skills/brain/scripts/attachments_audit.py --brain-root . --scope-root JOURNAL --quarantine-dir QUARANTINE/ATTACHMENTS
 ```
 
 ### Apply safe moves
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/attachments_audit.py --vault-root . --scope-root JOURNAL --quarantine-dir QUARANTINE/ATTACHMENTS --apply
+python3 ~/.agents/skills/brain/scripts/attachments_audit.py --brain-root . --scope-root JOURNAL --quarantine-dir QUARANTINE/ATTACHMENTS --apply
 ```
 
 ### Scope a single ATTACHMENTS folder explicitly
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/attachments_audit.py --vault-root . --scope-root JOURNAL/ATTACHMENTS --quarantine-dir QUARANTINE/ATTACHMENTS
+python3 ~/.agents/skills/brain/scripts/attachments_audit.py --brain-root . --scope-root JOURNAL/ATTACHMENTS --quarantine-dir QUARANTINE/ATTACHMENTS
 ```
 
 ## Logging
 - Every run prints to the console.
 - Every run also overwrites the latest execution log at:
-  - `~/.agents/skills/obsidian/scripts/attachments_audit.log`
+  - `~/.agents/skills/brain/scripts/attachments_audit.log`
 
 ## Apply-mode behavior
 - Safe relocation and quarantine moves are applied only with `--apply`.

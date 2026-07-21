@@ -14,17 +14,17 @@
 
 ### Dry-run
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/cleanup_ds_store.py --vault-root /path/to/vault
+python3 ~/.agents/skills/brain/scripts/cleanup_ds_store.py --brain-root /path/to/brain
 ```
 
 ### Apply
 ```bash
-python3 ~/.agents/skills/obsidian/scripts/cleanup_ds_store.py --vault-root /path/to/vault --apply
+python3 ~/.agents/skills/brain/scripts/cleanup_ds_store.py --brain-root /path/to/brain --apply
 ```
 
 ## When this runs
 - **Automatically inside `vault_setup.py`** before `cleanup_empty_dirs_recursively`, so directories that hold only `.DS_Store` are correctly detected as empty afterwards. Gated by `--skip-full-reorder`: when the user opts out of vault reordering, this sweep is also skipped.
-- **As a safe pre-check during `/obsidian init` maintenance mode**, run automatically without per-action confirmation. Removing `.DS_Store` does not destroy information, so it is one of the few maintenance actions that does not require an `AskUserQuestion` gate.
+- **As a safe pre-check during `brain init` maintenance mode**, run automatically without per-action confirmation. Removing `.DS_Store` does not destroy information, so it is one of the few maintenance actions that does not require an `AskUserQuestion` gate.
 - **On demand**, invoked manually by the user or agent at any time.
 
 ## Known limitations

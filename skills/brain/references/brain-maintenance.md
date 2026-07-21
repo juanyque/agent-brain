@@ -1,6 +1,6 @@
 # Brain maintenance workflow
 
-The full workflow triggered by `/obsidian init`, `/obsidian maintain`, `/obsidian clean`, `/obsidian order`, `/obsidian standardize`, or natural-language requests like "ordena el brain", "haz mantenimiento", "limpia el brain".
+The full workflow triggered by `brain init`, `brain maintain`, `brain clean`, `brain order`, `brain standardize`, or natural-language requests like "ordena el brain", "haz mantenimiento", "limpia el brain".
 
 The user should not need to know internal tool names. The skill resolves the brain, checks setup state, chooses the correct mode, runs safe deterministic tools, and presents decisions only when human judgment is needed.
 
@@ -25,7 +25,7 @@ The process supports two operational modes, determined by the presence of `_STAG
   ```
   This refreshes missing wrappers/templates and synchronizes the runtime skill installation via `skill_setup.py` unless `--skip-skill` is passed. Because `_COMMON` is already attached, `home_setup.py` must not move content into `_STAGING/`; it only applies its idempotent maintenance-safe setup steps.
 - If `_COMMON` does not exist, **you MUST ask the user before running `home_setup.py --apply`**. The choice between full reorder and skipping the staging sweep is a user decision, not an agent decision.
-  - **Required:** invoke `AskUserQuestion` with a question equivalent to: "¿Quieres hacer una ordenación completa del brain? (mueve todo el contenido a `_STAGING/` para drenar después por áreas vía `/obsidian init`, además de migrar runtime-tied dirs a `_AGENTS/` y crear `_COMMON` + wrappers)". Offer at least two options: full reorder (default, recommended for new brains) and skip staging sweep.
+  - **Required:** invoke `AskUserQuestion` with a question equivalent to: "¿Quieres hacer una ordenación completa del brain? (mueve todo el contenido a `_STAGING/` para drenar después por áreas vía `brain init`, además de migrar runtime-tied dirs a `_AGENTS/` y crear `_COMMON` + wrappers)". Offer at least two options: full reorder (default, recommended for new brains) and skip staging sweep.
   - **Forbidden:** do not assume the user wants to skip based on brain size, number of items at root, presence of existing organization, or any other heuristic. The default is full reorder; deviating from it requires the user's explicit answer to the question.
   - **After the answer:**
     - If the user chose **full reorder** → run `python3 <common_path>/SCRIPTS/home_setup.py --brain <brain_path> --apply` (no `--skip-full-reorder`).
@@ -38,7 +38,7 @@ The process supports two operational modes, determined by the presence of `_STAG
 
 ## 3. Initial mode: drain `_STAGING/`
 
-**Hard rule: every batch in this drain — mechanical or content — requires explicit per-batch user confirmation via `AskUserQuestion` immediately before any `git mv` is executed. Reversibility through Git is not authorization. A single `/obsidian init` session normally moves one batch and stops; the next batch belongs to the next session (or to an explicit "continue" answer from the user).**
+**Hard rule: every batch in this drain — mechanical or content — requires explicit per-batch user confirmation via `AskUserQuestion` immediately before any `git mv` is executed. Reversibility through Git is not authorization. A single `brain init` session normally moves one batch and stops; the next batch belongs to the next session (or to an explicit "continue" answer from the user).**
 
 ### 3.1. Read prior state (no user confirmation needed; read-only)
 
@@ -69,14 +69,14 @@ After a batch is applied, ask separately for any of the following before executi
 
 - **Attachments audit** (still requires user confirmation):
   ```bash
-  python3 ~/.agents/skills/obsidian/scripts/attachments_audit.py --brain-root <brain_path> --scope-root <scope_path> --quarantine-dir QUARANTINE/ATTACHMENTS
-  python3 ~/.agents/skills/obsidian/scripts/attachments_audit.py --brain-root <brain_path> --scope-root <scope_path> --quarantine-dir QUARANTINE/ATTACHMENTS --apply
+  python3 ~/.agents/skills/brain/scripts/attachments_audit.py --brain-root <brain_path> --scope-root <scope_path> --quarantine-dir QUARANTINE/ATTACHMENTS
+  python3 ~/.agents/skills/brain/scripts/attachments_audit.py --brain-root <brain_path> --scope-root <scope_path> --quarantine-dir QUARANTINE/ATTACHMENTS --apply
   ```
   Run dry-run automatically (read-only is fine), but `--apply` only after a confirmation question with the audit report attached.
 - **Canvas repair** (same pattern as attachments audit):
   ```bash
-  python3 ~/.agents/skills/obsidian/scripts/canvas_path_repair.py --brain-root <brain_path> --scope-root <scope_path>
-  python3 ~/.agents/skills/obsidian/scripts/canvas_path_repair.py --brain-root <brain_path> --scope-root <scope_path> --apply
+  python3 ~/.agents/skills/brain/scripts/canvas_path_repair.py --brain-root <brain_path> --scope-root <scope_path>
+  python3 ~/.agents/skills/brain/scripts/canvas_path_repair.py --brain-root <brain_path> --scope-root <scope_path> --apply
   ```
 - **Update `WIP/STANDARDIZE_PROCESS.md`** with: files moved, destinations and rationale, tool results, unresolved items, next recommended batch. The write itself is a small confirmation (the user usually says yes, but the question states what will be recorded).
 
@@ -107,24 +107,24 @@ After a batch is applied, ask separately for any of the following before executi
 
 - First run the `.DS_Store` sweep — safe noise removal, runs automatically without per-action confirmation:
   ```bash
-  python3 ~/.agents/skills/obsidian/scripts/cleanup_ds_store.py --brain-root <brain_path> --apply
+  python3 ~/.agents/skills/brain/scripts/cleanup_ds_store.py --brain-root <brain_path> --apply
   ```
   This is one of the few maintenance actions allowed to run without a confirmation gate: removing `.DS_Store` does not destroy information. Other maintenance actions still require per-action confirmation per the header's narrow auto-apply list.
 - Then run the maintenance scheduler:
   ```bash
-  python3 ~/.agents/skills/obsidian/scripts/maintenance_scheduler.py --brain-root <brain_path>
+  python3 ~/.agents/skills/brain/scripts/maintenance_scheduler.py --brain-root <brain_path>
   ```
 - Present due/review recurring jobs to the user before structural cleanup. Daily, Weekly, Monthly, and Yearly routines are maintenance; Session consolidation is event-triggered and should be reviewed when relevant. Execute clearly safe routine steps automatically when the rules define them; ask for decisions when judgment is required.
 - Always record every maintenance or re-verification pass in today's daily note under `# Sessions`, including force-all test runs. Use the real session id or resume command, the maintenance scope, and a short outcome summary.
 - For session consolidation, load `RULES-SESSION-LIFECYCLE.md` and apply its closing gate before moving any session note out of `WIP/SESSIONS/`. If a previous note has unchecked checklist items, either leave it as `stale-follow-up` or write the explicit reason why each unchecked item does not block closure.
 - Only after recurring maintenance is reviewed, run an assessment of the full brain structure in dry-run mode:
   ```bash
-  python3 ~/.agents/skills/obsidian/scripts/standardize_assessment.py --brain-root <brain_path>
+  python3 ~/.agents/skills/brain/scripts/standardize_assessment.py --brain-root <brain_path>
   ```
 - Compare with the common target structure: `INBOX/`, `WIP/`, `JOURNAL/`, `MEMORY/`, `BACKLOG/`, `REPORTS/`, `TEMPLATES/`, `SCRIPTS/`, and `QUARANTINE/` where needed.
 - Generate or update `WIP/STANDARDIZE_PROCESS.md` only after reviewing the dry-run report:
   ```bash
-  python3 ~/.agents/skills/obsidian/scripts/standardize_assessment.py --brain-root <brain_path> --apply
+  python3 ~/.agents/skills/brain/scripts/standardize_assessment.py --brain-root <brain_path> --apply
   ```
 - The assessment must not move, delete, or rewrite brain content except for writing the report when `--apply` is passed.
 - Present the assessment to the user before making semantic changes. Safe deterministic fixes may be applied automatically when they are reversible and non-destructive; ambiguous or destructive decisions require user approval.
