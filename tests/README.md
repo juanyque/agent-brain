@@ -36,6 +36,7 @@ summary and process exit code.
 | `test_session_open.py` | Runtime-specific recovery commands, original cwd persistence, clean daily preparation, local/common template conflict refusal, idempotent session-note and daily registration, duplicate removal, and postcondition failures. |
 | `test_session_close.py` | Dry-run safety, idempotent handoff/consolidation, safe refusal to archive untracked notes, and repeatable tracked archival. |
 | `test_brain_check.py` | Read-only verification that active WIP notes are registered in `WIP/WIP.md`, for both Obsidian wikilinks and standard Markdown links. |
+| `test_find_related_notes.py` | CLI behavior across filename/content/both note discovery modes and structured missing-brain errors. |
 
 ## Test design rules
 

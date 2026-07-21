@@ -181,7 +181,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    vault = Path(args.brain).expanduser().resolve()
+    brain_root = Path(args.brain).expanduser().resolve()
     if not brain_root.is_dir():
         print(json.dumps({
             "vault": str(brain_root),
@@ -189,7 +189,7 @@ def main() -> int:
             "mode": args.mode,
             "notes": [],
             "count": 0,
-            "error": f"Brain path does not exist: {vault}",
+            "error": f"Brain path does not exist: {brain_root}",
         }))
         return 1
 
