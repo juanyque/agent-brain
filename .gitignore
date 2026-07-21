@@ -4,3 +4,4 @@ __pycache__/
 
 # Script run logs (runtime artifacts, not source)
 *.log
+.DS_Store
