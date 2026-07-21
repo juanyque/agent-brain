@@ -2,7 +2,7 @@
 
 Detects deterministic interactions the LLM executes step-by-step that should be replaced by a script. The cost is double: tokens spent on prose-as-procedure, plus non-determinism (the LLM may execute it differently next time).
 
-Called by a subagent spawned in step D4 of the `## Deep mode` workflow in `SKILL.boyscout.common.md`.
+Called by a subagent spawned in step D4 of the `## Deep mode` workflow in `SKILL.boyscout.md`.
 
 ## Output cap
 
@@ -10,7 +10,7 @@ Return at most **10 findings**, prioritised by estimated impact. The parent appl
 
 ## Input sources
 
-From `deep-sources.common.md`:
+From `deep-sources.md`:
 
 - **Primary:** transcripts (#1) — tool-use sequences and Bash command runs.
 - **Context:** CLAUDE.md files (#3) — to assess whether the ceremony is already described as a workflow that should be scripted.
@@ -65,7 +65,7 @@ The boundary is fuzzy — a `git fetch && git checkout -b` is deterministic; "wr
 
 ## Extra finding fields
 
-In addition to the standard schema in `finding-schema.common.md`:
+In addition to the standard schema in `finding-schema.md`:
 
 | Field | Type | Notes |
 |---|---|---|
@@ -101,7 +101,7 @@ This subagent reads transcripts that include Bash command runs and tool outputs 
 - **Never include tool output** in the finding. Describe what the tool *did*, not what it *returned*.
 - **Redact paths.** Replace usernames and external paths with placeholders (`<user>`, `<path>`, `<repo>`).
 - **Pattern, not instance.** `pattern_summary` describes the shape ("git fetch → branch → commit → push → PR"); it does not include real branch names, commit messages, or PR titles from the session.
-- **Verification rule.** After the finding is written (to backlog or to a ticket body), no string >20 characters should be a verbatim copy from any transcript file in `transcript files (see runtimes.common.md for paths)`.
+- **Verification rule.** After the finding is written (to backlog or to a ticket body), no string >20 characters should be a verbatim copy from any transcript file in `transcript files (see runtimes.md for paths)`.
 
 A finding that cannot be expressed without verbatim content is a finding that should not be written. Skip and move on.
 

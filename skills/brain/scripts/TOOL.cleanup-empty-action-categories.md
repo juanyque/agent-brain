@@ -2,7 +2,7 @@
 
 ## Purpose
 - Remove empty placeholder action categories from daily notes.
-- Daily notes created from `TEMPLATE.daily-note.common.md` ship with scaffolding action categories (`* [[LEARN]]:`, `* [[READ]]:`, `* [[VIEWED]]:`, etc.). At end-of-day cleanup the unused ones should be removed while preserving categories with real content. See `VAULT.common.md` § JOURNAL: *"Empty template action categories should be cleaned when a day is closed, while preserving real content and metadata"*.
+- Daily notes created from `TEMPLATE.daily-note.md` ship with scaffolding action categories (`* [[LEARN]]:`, `* [[READ]]:`, `* [[VIEWED]]:`, etc.). At end-of-day cleanup the unused ones should be removed while preserving categories with real content. See `VAULT.md` § JOURNAL: *"Empty template action categories should be cleaned when a day is closed, while preserving real content and metadata"*.
 
 ## Safety model
 - **Dry-run by default.** Pass `--apply` to write changes.

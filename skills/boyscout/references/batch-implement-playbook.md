@@ -4,7 +4,7 @@ Loaded when `/boyscout` is invoked as `/boyscout batch` (or `/boyscout implement
 through several backlog findings in one guided sitting — explaining each in plain language, deciding
 per item, implementing, verifying, and pruning the backlog as work lands. It is the multi-finding
 counterpart to the single-finding attack-now path (Step 4A); the worktree mechanics still come from
-[worktree-playbook.common.md](worktree-playbook.common.md).
+[worktree-playbook.md](worktree-playbook.md).
 
 ## When to use
 
@@ -12,13 +12,13 @@ counterpart to the single-finding attack-now path (Step 4A); the worktree mechan
   a batch rather than ticket them.
 - A focused "let's clean these up" session, as opposed to the passive scan or the one-off attack-now.
 
-If the findings span unrelated repos/owners, prefer [Backlog → Tickets mode](backlog-to-tickets.common.md) — a
+If the findings span unrelated repos/owners, prefer [Backlog → Tickets mode](backlog-to-tickets.md) — a
 single PR must not mix ownership boundaries (one PR per CODEOWNERS team).
 
 ## Workflow
 
 **B1. Load + select.** Load the backlog (`backlog.py list --json`), present the grouped selection UI
-(see [selection-ui.common.md](selection-ui.common.md)), and let the user pick the findings to work through. Validate
+(see [selection-ui.md](selection-ui.md)), and let the user pick the findings to work through. Validate
 first (`backlog.py validate`) so a corrupt file is fixed before any work starts.
 
 **B2. Explain each selected finding in plain language.** For every selected item, before touching code,
@@ -33,11 +33,11 @@ share context). Four outcomes:
 | **Implement** | Fix it now in this session's branch (see B4). |
 | **Skip** | Leave in backlog unchanged. |
 | **Defer** | Leave in backlog; note it was reviewed (bump `last_seen` via `backlog.py touch` so it doesn't read as stale). |
-| **Convert to ticket** | Route to Jira (Step 4B / [ticket-template.common.md](ticket-template.common.md)); then `backlog.py remove`. |
+| **Convert to ticket** | Route to Jira (Step 4B / [ticket-template.md](ticket-template.md)); then `backlog.py remove`. |
 
 **B4. Group into logical batches.** Findings sharing a `target` (or that naturally belong in one
 reviewable change) form one commit. Implement a batch in an isolated worktree on a single branch from
-an up-to-date base (worktree-playbook.common.md). Keep each commit coherent — a reviewer should be able to read
+an up-to-date base (worktree-playbook.md). Keep each commit coherent — a reviewer should be able to read
 it as one idea.
 
 **B5. Pause-and-verify after each batch.** Run the relevant check before committing — tests / linter for

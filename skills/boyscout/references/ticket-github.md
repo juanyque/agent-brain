@@ -17,7 +17,7 @@ gh issue create \
   --label "<effort>:<risk>"
 ```
 
-The body file is prepared from [ticket-template.common.md](ticket-template.common.md).
+The body file is prepared from [ticket-template.md](ticket-template.md).
 
 ## Project key detection
 

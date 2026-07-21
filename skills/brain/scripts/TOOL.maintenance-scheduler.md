@@ -40,7 +40,7 @@ python3 ~/.agents/skills/obsidian/scripts/maintenance_scheduler.py --vault-root 
 - The agent presents due/review tasks to the user before doing any routine.
 
 ## `JOBS_LOGS.md` parsing contract
-- Preferred entries use the format documented in `JOBS.common.md`: `run`, `period`, `status`, `summary`, plus optional `run_at`, `refs`, and `next`.
+- Preferred entries use the format documented in `JOBS.md`: `run`, `period`, `status`, `summary`, plus optional `run_at`, `refs`, and `next`.
 - The scheduler reads `run`, `period`, and `status` from each job section, and uses optional `run_at` to choose/report the latest same-day entry more precisely.
 - It still tolerates older free-form entries by scanning for dates, but new entries should be structured.
 - Keep a small rolling history per job: normally 5 entries and at most 10 unless extra context is intentionally preserved elsewhere.

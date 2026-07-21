@@ -66,9 +66,9 @@ the standard schema. See the detection reference files for full specifications:
 
 | Type | Extra fields | Reference |
 |---|---|---|
-| `repeated-instruction` | `instruction_intent`, `occurrences`, `existing_memory` | `detection-repeated-instruction.common.md` |
-| `automation-opportunity` | `pattern_summary`, `target_skill`, `proposed_script_name` | `detection-automation-opportunity.common.md` |
-| `promotable-flow` | `flow_summary`, `proposed_skill_name`, `genericity_evidence` | `detection-promotable-flow.common.md` |
+| `repeated-instruction` | `instruction_intent`, `occurrences`, `existing_memory` | `detection-repeated-instruction.md` |
+| `automation-opportunity` | `pattern_summary`, `target_skill`, `proposed_script_name` | `detection-automation-opportunity.md` |
+| `promotable-flow` | `flow_summary`, `proposed_skill_name`, `genericity_evidence` | `detection-promotable-flow.md` |
 
 Extra fields are persisted alongside the standard fields in the backlog (as additional `- key: value`
 lines under the H3 block) and surfaced in the fzf preview.
@@ -76,7 +76,7 @@ lines under the H3 block) and surfaced in the fzf preview.
 Cap at **10 new findings per run**. Pending findings from the backlog are added on top (no separate cap).
 If more than 10 new findings exist, prioritize by estimated impact and note that others were omitted.
 In `/boyscout deep` mode the cap is **shared across the three subagents** — not 10 per type. Each
-subagent also independently caps at 10 (declared in its `detection-*.common.md` "Output cap" section),
+subagent also independently caps at 10 (declared in its `detection-*.md` "Output cap" section),
 so the worst-case fan-in to the parent is 3 × 10 = 30; the parent then applies the final joint
 cap of 10 after the fan-out returns.
 
@@ -92,7 +92,7 @@ form:
 ```
 
 This keeps the H3 block grep-friendly and consistent with the existing flat format. The nested
-YAML form that appears in the `detection-*.common.md` examples is the in-memory representation of the
+YAML form that appears in the `detection-*.md` examples is the in-memory representation of the
 finding object; the **backlog form is always flat**. The same rule applies to any future
 list-valued extra field.
 

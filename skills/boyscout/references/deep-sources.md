@@ -14,7 +14,7 @@ Override via second positional arg: `/boyscout deep 7` widens to 7 days. The ove
 
 ### 1. Claude Code transcripts
 
-- **Path glob:** `transcript files (see runtimes.common.md for paths)*/*.jsonl`
+- **Path glob:** `transcript files (see runtimes.md for paths)*/*.jsonl`
 - **Filter:** `mtime` within the last `N` days.
 - **Selection:** newest first; cap at ~10 transcripts to bound cost even if the user's window is wide.
 - **What to extract:** user messages (for `repeated-instruction`), tool-use sequences (for `automation-opportunity`), conversation arcs / phases (for `promotable-flow`).
@@ -24,7 +24,7 @@ Override via second positional arg: `/boyscout deep 7` widens to 7 days. The ove
 
 - **Path:** `~/.claude/memory/`
 - **Selection rule:** only files referenced from `~/.claude/memory/MEMORY.md` and any project-specific `~/.claude/memory/projects/<project>/MEMORY.md` indexes. Orphan files in the directory are **not read**.
-- **Why this matters:** memories of `type: feedback` are the dedup + escalation key for `repeated-instruction` findings (see `detection-repeated-instruction.common.md`). A finding that matches an existing `feedback` memory is evidence the memory was not enough.
+- **Why this matters:** memories of `type: feedback` are the dedup + escalation key for `repeated-instruction` findings (see `detection-repeated-instruction.md`). A finding that matches an existing `feedback` memory is evidence the memory was not enough.
 
 ### 3. CLAUDE.md files
 
@@ -72,4 +72,4 @@ The following are intentionally excluded and must not be added without revising 
 - Browser history, screenshots, or any non-textual context.
 - Anything in `/tmp`.
 
-If a future enhancement needs new sources, update this file first (closed-list rule), then update the relevant `detection-*.common.md` to consume them.
+If a future enhancement needs new sources, update this file first (closed-list rule), then update the relevant `detection-*.md` to consume them.

@@ -48,7 +48,7 @@ Invoke `/boyscout deep` (see [Deep mode](#deep-mode-boyscout-deep-days) below) t
 
 ### Step 1 — Identify all opportunities
 
-**1a. Load the backlog.** Load entries with `python3 scripts/backlog.py list --json` (run from the skill dir). If the file doesn't exist, `pending_findings = []`. If `python3 scripts/backlog.py validate` reports problems, fix them first (see Failure modes) — the path is often a symlink, so always mutate via `backlog.py`, never by hand. See [references/backlog.common.md](references/backlog.common.md).
+**1a. Load the backlog.** Load entries with `python3 scripts/backlog.py list --json` (run from the skill dir). If the file doesn't exist, `pending_findings = []`. If `python3 scripts/backlog.py validate` reports problems, fix them first (see Failure modes) — the path is often a symlink, so always mutate via `backlog.py`, never by hand. See [references/backlog.md](references/backlog.md).
 
 **1b. Scan for new opportunities.** Scan the context available (files touched, errors seen, test output, code read) and build `new_findings[]`, up to **10 new findings per run**.
 
@@ -56,7 +56,7 @@ Invoke `/boyscout deep` (see [Deep mode](#deep-mode-boyscout-deep-days) below) t
 
 **1d. Combine.** `all_findings = new_findings + pending_findings`
 
-For each finding, collect the fields in [references/finding-schema.common.md](references/finding-schema.common.md): one-line summary, target, location, type, how found, context, estimated effort, risk, and suggested action.
+For each finding, collect the fields in [references/finding-schema.md](references/finding-schema.md): one-line summary, target, location, type, how found, context, estimated effort, risk, and suggested action.
 
 **1e. Resolved sweep.** If `pending_findings` is empty, skip this step. Otherwise, before presenting the selection form, show the pending backlog entries numbered locally (1, 2, 3… — Step 2 assigns fresh global numbers after any removals), then ask the user: *"Any backlog entries you know are already resolved? Enter numbers to remove before we continue."* Remove the selected entries from `all_findings` and delete their blocks with `python3 scripts/backlog.py remove --target "<target>" --summary "<summary>"`. This zero-effort prompt prevents stale entries from accumulating across sessions.
 
@@ -64,7 +64,7 @@ For each finding, collect the fields in [references/finding-schema.common.md](re
 
 ### Step 2 — Present the selection form
 
-Launch `fzf` multi-select with per-finding detail previews, grouped by `target`. If `fzf` fails, fall back to `AskUserQuestion` with a numbered list. The exact command, temp-file layout, grouping format, and freshness indicators (`[NEW]`, `[PENDING · date · ×N]`, `[STALE?]`) are in [references/selection-ui.common.md](references/selection-ui.common.md).
+Launch `fzf` multi-select with per-finding detail previews, grouped by `target`. If `fzf` fails, fall back to `AskUserQuestion` with a numbered list. The exact command, temp-file layout, grouping format, and freshness indicators (`[NEW]`, `[PENDING · date · ×N]`, `[STALE?]`) are in [references/selection-ui.md](references/selection-ui.md).
 
 **Staleness:** findings with `last_seen` > 7 days ago are marked `[STALE?]`. To remove stale findings from the backlog, use `/boyscout clean`.
 
@@ -84,9 +84,9 @@ The attack-now path is recommended when:
 
 **`confidence: low` blocks auto-fix.** If a finding has `confidence: low`, never propose attack-now — the proposed action may be speculative or could plausibly make things worse. Ask the user to discuss diagnosis first, not the fix.
 
-**Special case — in-review PR.** If a finding targets a file already modified in an open PR currently under review (detected from session context — e.g. running `/boyscout` mid-review — or by asking the user), the attack-now variant becomes **"Fix in existing PR branch"** instead of a new worktree. This avoids a separate PR for a one-line follow-up. See the "Fixing into the PR currently under review" section of [references/worktree-playbook.common.md](references/worktree-playbook.common.md) for the exact commands. If the PR is not `OPEN`, fall back to the worktree variant.
+**Special case — in-review PR.** If a finding targets a file already modified in an open PR currently under review (detected from session context — e.g. running `/boyscout` mid-review — or by asking the user), the attack-now variant becomes **"Fix in existing PR branch"** instead of a new worktree. This avoids a separate PR for a one-line follow-up. See the "Fixing into the PR currently under review" section of [references/worktree-playbook.md](references/worktree-playbook.md) for the exact commands. If the PR is not `OPEN`, fall back to the worktree variant.
 
-**Decision matrix.** Use the suggested-action table in [references/finding-schema.common.md](references/finding-schema.common.md) § "Triage decision matrix (Step 3)" to map (effort, risk, impact, confidence) → attack-now / ticket / backlog. Key rows: `XS/S · low · high · high` → attack now; `M/L` (any) → ticket; `confidence: low` (any) → never auto-fix, discuss diagnosis first. When ambiguous, ask explicitly surfacing all four dimensions.
+**Decision matrix.** Use the suggested-action table in [references/finding-schema.md](references/finding-schema.md) § "Triage decision matrix (Step 3)" to map (effort, risk, impact, confidence) → attack-now / ticket / backlog. Key rows: `XS/S · low · high · high` → attack now; `M/L` (any) → ticket; `confidence: low` (any) → never auto-fix, discuss diagnosis first. When ambiguous, ask explicitly surfacing all four dimensions.
 
 **Before spawning any subagents for attack-now or ticketing, show a confirmation summary:**
 
@@ -104,11 +104,11 @@ Wait for explicit confirmation before doing anything.
 
 ### Step 4A — Attack now (isolated worktree)
 
-Fix each selected item in an isolated worktree on a branch from the up-to-date base. See [references/worktree-playbook.common.md](references/worktree-playbook.common.md) for the exact commands, the `skill-gap` variant (different repo, no worktree), and the "fix into the PR currently under review" variant.
+Fix each selected item in an isolated worktree on a branch from the up-to-date base. See [references/worktree-playbook.md](references/worktree-playbook.md) for the exact commands, the `skill-gap` variant (different repo, no worktree), and the "fix into the PR currently under review" variant.
 
 **Multi-finding targets:** When multiple selected findings share the same `target` key, pass them all to a single subagent — all fixes go in one branch and one PR. Inform the user: "Items X and Y share target `<repo> / <component>` — they will be fixed together in one PR."
 
-**Consume on success.** After a fix lands successfully (PR opened, or commit pushed to existing PR), delete the corresponding entry from `~/.boyscout/backlog.md`. This is the "consume on attack" pattern — attack-now turns a pending backlog entry into resolved state, removing the entry rather than leaving it stale. See [references/backlog.common.md](references/backlog.common.md) § "Consume on attack" for the surgical-edit rules. If the attack started from a `new` finding (never written to the backlog), no removal is needed.
+**Consume on success.** After a fix lands successfully (PR opened, or commit pushed to existing PR), delete the corresponding entry from `~/.boyscout/backlog.md`. This is the "consume on attack" pattern — attack-now turns a pending backlog entry into resolved state, removing the entry rather than leaving it stale. See [references/backlog.md](references/backlog.md) § "Consume on attack" for the surgical-edit rules. If the attack started from a `new` finding (never written to the backlog), no removal is needed.
 
 ### Step 4B — Create ticket
 
@@ -119,15 +119,15 @@ Determine ticket backend and project (default: GitHub Issues via `gh`):
 3. **cwd is not a git repo, OR finding type is `skill-gap`:** ask the user for the target repo/project.
 
 Then create using the appropriate backend:
-- **GitHub Issues (default):** see [references/ticket-github.common.md](references/ticket-github.common.md) — uses `gh issue create`.
-- **Jira:** see [references/ticket-jira.common.md](references/ticket-jira.common.md) — requires Jira MCP.
-- **GitLab Issues:** see [references/ticket-gitlab.common.md](references/ticket-gitlab.common.md) — uses `glab issue create`.
+- **GitHub Issues (default):** see [references/ticket-github.md](references/ticket-github.md) — uses `gh issue create`.
+- **Jira:** see [references/ticket-jira.md](references/ticket-jira.md) — requires Jira MCP.
+- **GitLab Issues:** see [references/ticket-gitlab.md](references/ticket-gitlab.md) — uses `glab issue create`.
 
-Use the body format in [references/ticket-template.common.md](references/ticket-template.common.md) regardless of backend.
+Use the body format in [references/ticket-template.md](references/ticket-template.md) regardless of backend.
 
 ### Post-action — Update the backlog
 
-After all actions complete, apply every backlog change through `python3 scripts/backlog.py` — it owns the file format, so no hand-editing (the path is often a symlink the harness can't `Edit`/`Write` through, and prose surgical-edits are what once orphaned an entry). See [references/backlog.common.md](references/backlog.common.md) for the format the script implements.
+After all actions complete, apply every backlog change through `python3 scripts/backlog.py` — it owns the file format, so no hand-editing (the path is often a symlink the harness can't `Edit`/`Write` through, and prose surgical-edits are what once orphaned an entry). See [references/backlog.md](references/backlog.md) for the format the script implements.
 
 1. `mkdir -p ~/.boyscout` if it doesn't exist (`backlog.py add` does this on first write).
 2. **Attacked findings (PR landed)** → `backlog.py remove --target … --summary …` — consume-on-success pattern.
@@ -138,7 +138,7 @@ After all actions complete, apply every backlog change through `python3 scripts/
 
 Run `python3 scripts/backlog.py validate` after the batch to confirm the file is still well-formed.
 
-**Backward compatibility.** Legacy pending entries without `impact` / `confidence` remain valid; treat missing fields as `medium` for the matrix and never auto-fix without confirming the missing dimensions first. Full rules in [references/backlog.common.md](references/backlog.common.md) § "Backward compatibility".
+**Backward compatibility.** Legacy pending entries without `impact` / `confidence` remain valid; treat missing fields as `medium` for the matrix and never auto-fix without confirming the missing dimensions first. Full rules in [references/backlog.md](references/backlog.md) § "Backward compatibility".
 
 ---
 
@@ -147,7 +147,7 @@ Run `python3 scripts/backlog.py validate` after the batch to confirm the file is
 When invoked as `/boyscout clean`, skip the normal scan and enter backlog management mode.
 
 1. **Load the backlog.** Read `~/.boyscout/backlog.md`. If empty or missing, print "Backlog is empty." and stop.
-2. **Present the deletion form.** Show all backlog findings in the same grouped selection UI (see [references/selection-ui.common.md](references/selection-ui.common.md)), with prompt: `"Select findings to remove from the backlog >"`.
+2. **Present the deletion form.** Show all backlog findings in the same grouped selection UI (see [references/selection-ui.md](references/selection-ui.md)), with prompt: `"Select findings to remove from the backlog >"`.
 3. **Confirm.** List the selected findings and ask: `"Remove these N findings from the backlog? (yes / no)"`
 4. **Remove.** On confirmation, delete each selected finding with `python3 scripts/backlog.py remove --target … --summary …` and print a summary of what was removed.
 
@@ -161,7 +161,7 @@ The normal fix/ticket workflow is not invoked in clean mode — selected finding
 
 When invoked as `/boyscout deep`, skip the normal codebase scan and analyse the **interaction context** of recent sessions instead — repeated instructions, deterministic ceremonies the agent ran by hand, and ad-hoc flows worth promoting to a skill. It replaces Step 1b with a parallel 3-subagent multi-source scan (one per finding type), then rejoins the main workflow at Step 1c (dedup). Default window 2 days; `/boyscout deep 7` widens it. Mutually exclusive with `clean`.
 
-The full workflow (D1–D6), the closed source list, the PII / untrusted-transcript guardrail, target namespaces, and deep-mode verification live in [references/deep-mode.common.md](references/deep-mode.common.md) — loaded only on `/boyscout deep`.
+The full workflow (D1–D6), the closed source list, the PII / untrusted-transcript guardrail, target namespaces, and deep-mode verification live in [references/deep-mode.md](references/deep-mode.md) — loaded only on `/boyscout deep`.
 
 ---
 
@@ -173,19 +173,19 @@ When invoked as `/boyscout doctor`, run the skill's self-test and report — no 
 python3 scripts/doctor.py
 ```
 
-It asserts: every `references/*.common.md` named in the Dependencies table exists and is non-empty; the deep-mode types in `finding-schema.common.md` each have a matching `detection-*.common.md` brief (and vice-versa); the backlog (if present) passes `backlog.py validate`; and `deep-mode.common.md`'s D4 fan-out links every detection brief. Exits non-zero on any failure, so it doubles as the pre-PR gate when changing boyscout itself. Pass `--backlog <path>` to check a specific backlog file.
+It asserts: every `references/*.md` named in the Dependencies table exists and is non-empty; the deep-mode types in `finding-schema.md` each have a matching `detection-*.md` brief (and vice-versa); the backlog (if present) passes `backlog.py validate`; and `deep-mode.md`'s D4 fan-out links every detection brief. Exits non-zero on any failure, so it doubles as the pre-PR gate when changing boyscout itself. Pass `--backlog <path>` to check a specific backlog file.
 
 ---
 
 ## Batch-implement mode (`/boyscout batch`)
 
-When invoked as `/boyscout batch` (or `/boyscout implement`), work through several selected backlog findings in one guided sitting: explain each in plain language → ask **implement / skip / defer / convert-to-ticket** per item → implement in logical batches (one commit per coherent change, same `target` → same PR) → pause-and-verify before each commit → prune consumed findings from the backlog *after* each commit. The full procedure and pitfalls are in [references/batch-implement-playbook.common.md](references/batch-implement-playbook.common.md). Worktree mechanics come from [references/worktree-playbook.common.md](references/worktree-playbook.common.md); a batch must never mix CODEOWNERS boundaries.
+When invoked as `/boyscout batch` (or `/boyscout implement`), work through several selected backlog findings in one guided sitting: explain each in plain language → ask **implement / skip / defer / convert-to-ticket** per item → implement in logical batches (one commit per coherent change, same `target` → same PR) → pause-and-verify before each commit → prune consumed findings from the backlog *after* each commit. The full procedure and pitfalls are in [references/batch-implement-playbook.md](references/batch-implement-playbook.md). Worktree mechanics come from [references/worktree-playbook.md](references/worktree-playbook.md); a batch must never mix CODEOWNERS boundaries.
 
 ---
 
 ## Backlog → Tickets mode (`/boyscout tickets`)
 
-When invoked as `/boyscout tickets`, convert an aged/themed slice of the backlog into tracked tickets: filter candidates (by target, age via `backlog.py sweep`, dedup via `backlog.py dedup-check`) → propose theme groupings (`AskUserQuestion`) → accept a template ticket URL/key and inherit its epic/labels/components → create the epic + child tickets → prune consumed findings → summarise with ticket URLs. The full procedure is in [references/backlog-to-tickets.common.md](references/backlog-to-tickets.common.md).
+When invoked as `/boyscout tickets`, convert an aged/themed slice of the backlog into tracked tickets: filter candidates (by target, age via `backlog.py sweep`, dedup via `backlog.py dedup-check`) → propose theme groupings (`AskUserQuestion`) → accept a template ticket URL/key and inherit its epic/labels/components → create the epic + child tickets → prune consumed findings → summarise with ticket URLs. The full procedure is in [references/backlog-to-tickets.md](references/backlog-to-tickets.md).
 
 ---
 
@@ -220,7 +220,7 @@ Run `/boyscout` in a repo with known issues and confirm:
 - Re-running boyscout after a skip increments `times_seen` for the re-detected finding (no duplicate entry)
 - Running `/boyscout clean` shows the full backlog grouped by target; selecting findings and confirming removes them
 
-For deep mode, see the verification checklist in [references/deep-mode.common.md](references/deep-mode.common.md).
+For deep mode, see the verification checklist in [references/deep-mode.md](references/deep-mode.md).
 
 ---
 
@@ -228,20 +228,20 @@ For deep mode, see the verification checklist in [references/deep-mode.common.md
 
 Required files in `references/`. Read each file when first referenced by a step.
 If any file cannot be read, stop immediately and tell the user:
-`Reference file references/<name>.common.md is missing — reinstall the skill via /skill-manager.`
+`Reference file references/<name>.md is missing — reinstall the skill .`
 
 | File | Step | Load |
 |------|------|------|
-| `references/finding-schema.common.md` | Step 1, Deep mode | always |
-| `references/selection-ui.common.md` | Step 2 | always |
-| `references/worktree-playbook.common.md` | Step 4A | always |
-| `references/ticket-template.common.md` | Step 4B | always |
-| `references/backlog.common.md` | Step 1, Post-action | always |
-| `references/deep-mode.common.md` | Deep mode | conditional — only on `/boyscout deep` |
-| `references/batch-implement-playbook.common.md` | Batch-implement mode | conditional — only on `/boyscout batch` |
-| `references/backlog-to-tickets.common.md` | Backlog → Tickets mode | conditional — only on `/boyscout tickets` |
+| `references/finding-schema.md` | Step 1, Deep mode | always |
+| `references/selection-ui.md` | Step 2 | always |
+| `references/worktree-playbook.md` | Step 4A | always |
+| `references/ticket-template.md` | Step 4B | always |
+| `references/backlog.md` | Step 1, Post-action | always |
+| `references/deep-mode.md` | Deep mode | conditional — only on `/boyscout deep` |
+| `references/batch-implement-playbook.md` | Batch-implement mode | conditional — only on `/boyscout batch` |
+| `references/backlog-to-tickets.md` | Backlog → Tickets mode | conditional — only on `/boyscout tickets` |
 
-`references/deep-mode.common.md` in turn loads `deep-sources.common.md` and the three `detection-*.common.md` subagent briefs — only on `/boyscout deep`.
+`references/deep-mode.md` in turn loads `deep-sources.md` and the three `detection-*.md` subagent briefs — only on `/boyscout deep`.
 
 Deterministic helpers live in `scripts/` (`backlog.py`, `doctor.py`) — invoked by the steps above, not "loaded".
 

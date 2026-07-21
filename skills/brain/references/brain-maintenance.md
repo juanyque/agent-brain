@@ -99,7 +99,7 @@ After a batch is applied, ask separately for any of the following before executi
 
 ### 3.8. Special case: daily-note template divergence
 
-- If the user's brain has a local `TEMPLATES/Daily Note Template.md` that differs from the common source (`_COMMON/TEMPLATES/TEMPLATE.daily-note.common.md`), **do not auto-resolve the divergence**. Do not symlink the common over the local, do not create today's daily note using either shape silently, do not move on.
+- If the user's brain has a local `TEMPLATES/Daily Note Template.md` that differs from the common source (`_COMMON/TEMPLATES/TEMPLATE.daily-note.md`), **do not auto-resolve the divergence**. Do not symlink the common over the local, do not create today's daily note using either shape silently, do not move on.
 - Surface the diff to the user and propose unification: enrich the common template with the local additions, then collapse to a single shared template via symlink. This converges runtimes across brains instead of perpetuating per-brain divergence.
 - Record the divergence + unification proposal in `WIP/STANDARDIZE_PROCESS.md` as a pending decision. Do not write today's daily note until the user has resolved this.
 

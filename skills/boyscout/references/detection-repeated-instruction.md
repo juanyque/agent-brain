@@ -2,7 +2,7 @@
 
 Detects instructions the user has had to give the agent more than once — in the current session or across recent sessions. Each occurrence is an interrupt for the user; the goal of this finding is to bake the rule into a permanent location (skill, CLAUDE.md, hook, memory) so it stops being said.
 
-Called by a subagent spawned in step D4 of the `## Deep mode` workflow in `SKILL.boyscout.common.md`.
+Called by a subagent spawned in step D4 of the `## Deep mode` workflow in `SKILL.boyscout.md`.
 
 ## Output cap
 
@@ -10,7 +10,7 @@ Return at most **10 findings**, prioritised by estimated impact. The parent appl
 
 ## Input sources
 
-From `deep-sources.common.md`:
+From `deep-sources.md`:
 
 - **Primary:** transcripts (#1) — user messages in the last N days.
 - **Secondary:** active memories (#2) — to detect dedup + escalation against existing `feedback` memories.
@@ -55,7 +55,7 @@ The `existing_memory` field captures the slug of the matching memory if any.
 
 ## Extra finding fields
 
-In addition to the standard schema in `finding-schema.common.md`:
+In addition to the standard schema in `finding-schema.md`:
 
 | Field | Type | Notes |
 |---|---|---|
@@ -81,7 +81,7 @@ This subagent reads transcripts that may contain sensitive material. Follow thes
 - **Never copy verbatim** user message text into the finding. Summarise the intent.
 - **Never include** secrets, tokens, paths with usernames of external systems, or output from tools that returned sensitive data.
 - **Redact when evidence is needed.** If `occurrences` needs detail beyond `{session_label, timestamp}`, use placeholders: `<token>`, `<path>`, `<user>`, `<file>`.
-- **Verification rule.** After the finding is written (to backlog or to a ticket body), no string >20 characters should be a verbatim copy from any transcript file in `transcript files (see runtimes.common.md for paths)`. Mentally re-read the finding before submitting.
+- **Verification rule.** After the finding is written (to backlog or to a ticket body), no string >20 characters should be a verbatim copy from any transcript file in `transcript files (see runtimes.md for paths)`. Mentally re-read the finding before submitting.
 
 A finding that cannot be expressed without verbatim content is a finding that should not be written. Skip and move on.
 

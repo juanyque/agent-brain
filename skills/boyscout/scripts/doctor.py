@@ -6,14 +6,14 @@ Each check prints PASS/FAIL; the process exits non-zero if any check fails, so
 it can gate a pre-PR hook.
 
 Checks:
-  1. Every `references/*.common.md` named in SKILL.boyscout.common.md's Dependencies table
+  1. Every `references/*.md` named in SKILL.md's Dependencies table
      exists and is non-empty.
   2. The deep-mode finding types (repeated-instruction, automation-opportunity,
-     promotable-flow) declared in the Type enum of finding-schema.common.md each have a
-     matching detection-<type>.common.md brief, and vice-versa.
+     promotable-flow) declared in the Type enum of finding-schema.md each have a
+     matching detection-<type>.md brief, and vice-versa.
   3. The backlog file (if present) parses cleanly via backlog.py validate.
-  4. Subagent-brief consistency: references/deep-mode.common.md (the D4 fan-out) links
-     every detection-*.common.md brief that exists.
+  4. Subagent-brief consistency: references/deep-mode.md (the D4 fan-out) links
+     every detection-*.md brief that exists.
 """
 
 from __future__ import annotations
@@ -33,13 +33,13 @@ def read(path):
 
 
 def check_dependencies(skill_dir):
-    """Every references/*.common.md in SKILL.boyscout.common.md's Dependencies table exists + non-empty."""
+    """Every references/*.md in SKILL.md's Dependencies table exists + non-empty."""
     problems = []
-    skill_md = os.path.join(skill_dir, "SKILL.boyscout.common.md")
+    skill_md = os.path.join(skill_dir, "SKILL.md")
     text = read(skill_md)
     referenced = sorted(set(re.findall(r"references/[A-Za-z0-9_-]+\.common\.md", text)))
     if not referenced:
-        problems.append("SKILL.boyscout.common.md references no reference files (unexpected)")
+        problems.append("SKILL.md references no reference files (unexpected)")
     for rel in referenced:
         path = os.path.join(skill_dir, rel)
         if not os.path.exists(path):
@@ -50,21 +50,21 @@ def check_dependencies(skill_dir):
 
 
 def check_type_enum(skill_dir):
-    """Deep-mode types in finding-schema.common.md's enum each have a detection brief."""
+    """Deep-mode types in finding-schema.md's enum each have a detection brief."""
     problems = []
-    schema = read(os.path.join(skill_dir, "references", "finding-schema.common.md"))
+    schema = read(os.path.join(skill_dir, "references", "finding-schema.md"))
     for t in DEEP_TYPES:
         if t not in schema:
-            problems.append(f"finding-schema.common.md Type enum is missing '{t}'")
-        brief = os.path.join(skill_dir, "references", f"detection-{t}.common.md")
+            problems.append(f"finding-schema.md Type enum is missing '{t}'")
+        brief = os.path.join(skill_dir, "references", f"detection-{t}.md")
         if not os.path.exists(brief):
-            problems.append(f"missing detection brief: detection-{t}.common.md")
-    # reverse: every detection-*.common.md corresponds to a known deep type
+            problems.append(f"missing detection brief: detection-{t}.md")
+    # reverse: every detection-*.md corresponds to a known deep type
     refs = os.path.join(skill_dir, "references")
     for fn in os.listdir(refs):
         m = re.match(r"detection-(.+)\.common\.md$", fn)
         if m and m.group(1) not in DEEP_TYPES:
-            problems.append(f"detection-{m.group(1)}.common.md has no matching entry in DEEP_TYPES")
+            problems.append(f"detection-{m.group(1)}.md has no matching entry in DEEP_TYPES")
     return problems
 
 
@@ -128,13 +128,13 @@ def check_backlog_roundtrip(skill_dir):
 
 
 def check_subagent_briefs(skill_dir):
-    """deep-mode.common.md (the D4 fan-out) links every detection-*.common.md that exists."""
+    """deep-mode.md (the D4 fan-out) links every detection-*.md that exists."""
     problems = []
-    deep = read(os.path.join(skill_dir, "references", "deep-mode.common.md"))
+    deep = read(os.path.join(skill_dir, "references", "deep-mode.md"))
     for t in DEEP_TYPES:
-        brief = f"detection-{t}.common.md"
+        brief = f"detection-{t}.md"
         if os.path.exists(os.path.join(skill_dir, "references", brief)) and brief not in deep:
-            problems.append(f"deep-mode.common.md D4 does not link {brief}")
+            problems.append(f"deep-mode.md D4 does not link {brief}")
     return problems
 
 
@@ -162,7 +162,7 @@ def main(argv=None):
     report("type-enum / detection-brief parity", check_type_enum(args.skill_dir))
     bl_problems, bl_note = check_backlog(args.skill_dir, args.backlog)
     report("backlog structure", bl_problems, bl_note)
-    report("subagent-brief consistency (deep-mode.common.md D4)", check_subagent_briefs(args.skill_dir))
+    report("subagent-brief consistency (deep-mode.md D4)", check_subagent_briefs(args.skill_dir))
     report("backlog.py round-trip (parser smoke test)", check_backlog_roundtrip(args.skill_dir))
 
     print()

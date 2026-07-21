@@ -16,7 +16,7 @@ glab issue create \
   --label "boyscout"
 ```
 
-The body file is prepared from [ticket-template.common.md](ticket-template.common.md).
+The body file is prepared from [ticket-template.md](ticket-template.md).
 
 ## After creation
 

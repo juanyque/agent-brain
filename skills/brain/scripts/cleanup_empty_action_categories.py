@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Remove empty placeholder action categories from daily notes.
 
-Daily notes created from `TEMPLATE.daily-note.common.md` ship with placeholder
+Daily notes created from `TEMPLATE.daily-note.md` ship with placeholder
 action categories (`* [[LEARN]]:`, `* [[READ]]:`, etc.). At end-of-day cleanup
 the unused ones should be removed while preserving categories with real
 content. Some categories (`OBJECTIVES`, `WORK`) ship with placeholder children

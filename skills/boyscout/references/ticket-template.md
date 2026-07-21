@@ -37,9 +37,9 @@ Acceptance criteria:
 
 Use the appropriate backend for ticket creation (default: GitHub Issues):
 
-- **GitHub Issues:** `gh issue create` — see [ticket-github.common.md](ticket-github.common.md).
-- **Jira:** `mcp__jira__createJiraIssue` with type `Task` — see [ticket-jira.common.md](ticket-jira.common.md).
-- **GitLab Issues:** `glab issue create` — see [ticket-gitlab.common.md](ticket-gitlab.common.md).
+- **GitHub Issues:** `gh issue create` — see [ticket-github.md](ticket-github.md).
+- **Jira:** `mcp__jira__createJiraIssue` with type `Task` — see [ticket-jira.md](ticket-jira.md).
+- **GitLab Issues:** `glab issue create` — see [ticket-gitlab.md](ticket-gitlab.md).
 
 On failure, report the error and ask the user whether to retry or skip. On success, report:
 > "Created [TICKET-123]: [summary] — [URL]"

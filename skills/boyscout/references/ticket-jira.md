@@ -15,7 +15,7 @@ Create tickets in the ticket tracker using the Jira MCP tools (`mcp__jira__creat
 
 ## Create issue
 
-Call `mcp__jira__createJiraIssue` with type `Task`, using the body format from [ticket-template.common.md](ticket-template.common.md). Resolve parent epic via `mcp__jira__getJiraIssue` if a ticket-prefixed branch was detected.
+Call `mcp__jira__createJiraIssue` with type `Task`, using the body format from [ticket-template.md](ticket-template.md). Resolve parent epic via `mcp__jira__getJiraIssue` if a ticket-prefixed branch was detected.
 
 ## After creation
 

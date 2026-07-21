@@ -64,9 +64,9 @@ All mutations go through `scripts/backlog.py`, which owns the parse/serialize co
 ---
 
 Notes on the example:
-- `impact` and `confidence` are recommended for all findings and required for the three deep-mode types (`repeated-instruction`, `automation-opportunity`, `promotable-flow`) — see `finding-schema.common.md` for per-level heuristics. `confidence: low` blocks auto-fix at Step 3 of the SKILL workflow.
+- `impact` and `confidence` are recommended for all findings and required for the three deep-mode types (`repeated-instruction`, `automation-opportunity`, `promotable-flow`) — see `finding-schema.md` for per-level heuristics. `confidence: low` blocks auto-fix at Step 3 of the SKILL workflow.
 - `source` is omitted when the value is `codebase` (the default for normal `/boyscout` scans). `/boyscout deep` adds `- source: deep-scan` to its findings.
-- Deep-mode types also carry type-specific extra fields (`instruction_intent`, `occurrences`, `pattern_summary`, `target_skill`, `proposed_script_name`, `flow_summary`, `proposed_skill_name`, `genericity_evidence`) as additional `- key: value` lines under the H3. See `finding-schema.common.md`.
+- Deep-mode types also carry type-specific extra fields (`instruction_intent`, `occurrences`, `pattern_summary`, `target_skill`, `proposed_script_name`, `flow_summary`, `proposed_skill_name`, `genericity_evidence`) as additional `- key: value` lines under the H3. See `finding-schema.md`.
 
 ## <repo> / <other-component>
 
@@ -124,7 +124,7 @@ is one finding. Separate findings within the same target with `---`.
 `~/.boyscout/backlog.md`. They are distinguished by their `target` namespace (`agent-skills /
 …`, `agent-config / …`, `agent-memory / …`, `agent-scripts / …`) and by their `type`
 (`repeated-instruction`, `automation-opportunity`, `promotable-flow`). Lifecycle and dedup
-rules are identical to codebase findings. Extra fields (see `finding-schema.common.md`) are
+rules are identical to codebase findings. Extra fields (see `finding-schema.md`) are
 persisted as additional `- key: value` lines under the H3 block.
 
 ## Backward compatibility — legacy pending entries without `impact` / `confidence`

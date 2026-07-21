@@ -1,11 +1,11 @@
 # Backlog → Tickets mode
 
-> **Backend:** This reference describes the Jira bulk-ticket flow. For GitHub Issues or GitLab, the equivalent uses `gh issue create` / `glab issue create` with labels and milestones instead of epics. Adapt the create steps per [ticket-github.common.md](ticket-github.common.md) or [ticket-gitlab.common.md](ticket-gitlab.common.md).
+> **Backend:** This reference describes the Jira bulk-ticket flow. For GitHub Issues or GitLab, the equivalent uses `gh issue create` / `glab issue create` with labels and milestones instead of epics. Adapt the create steps per [ticket-github.md](ticket-github.md) or [ticket-gitlab.md](ticket-gitlab.md).
 
 Loaded when `/boyscout` is invoked as `/boyscout tickets`. Use it to convert an aged or themed slice of
 the backlog into tracked tickets — typically an epic plus child tickets — when the findings are too
 many or too large to attack inline. It is the bulk counterpart to the single-finding ticket path
-(Step 4B); the ticket body format comes from [ticket-template.common.md](ticket-template.common.md).
+(Step 4B); the ticket body format comes from [ticket-template.md](ticket-template.md).
 
 ## When to use
 
@@ -29,7 +29,7 @@ inherit these so they land in the right place on the board. If no template is gi
 Step 4B ladder (project `PROJ`, current KTLO epic), confirmed with the user.
 
 **T4. Create the epic + children.** Create with `mcp__jira__createJiraIssue` inheriting the template's
-epic/labels/components. Body format per [ticket-template.common.md](ticket-template.common.md), all content in English.
+epic/labels/components. Body format per [ticket-template.md](ticket-template.md), all content in English.
 
 > **Multiline-description gotcha:** `mcp__jira__createJiraIssue` double-escapes `\n` in the `description`
 > field, so a multiline body renders as literal `\n`. Create the issue with a minimal/one-line description,
