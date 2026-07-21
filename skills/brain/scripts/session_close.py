@@ -8,7 +8,9 @@ Subcommands:
   consolidate <session-id>          Mark session as consolidated (work preserved, session done).
     [--archive]                     Additionally move the note to QUARANTINE/TRASH/ via git mv.
 
-Dry-run by default; pass --apply to write changes.
+Dry-run by default; pass --apply to write changes. State transitions and archives
+are idempotent. Archival preflights Git tracking and destination safety before
+editing the note, and restores the original content if git mv fails.
 """
 
 from __future__ import annotations
@@ -95,6 +97,17 @@ def find_session_note(brain_root: Path, session_id: str) -> Path | None:
     return None
 
 
+def find_archived_session_note(brain_root: Path, session_id: str) -> Path | None:
+    trash_dir = brain_root / "QUARANTINE" / "TRASH"
+    if not trash_dir.is_dir():
+        return None
+    matches = sorted(
+        (path for path in trash_dir.glob("*.md") if session_id in path.name),
+        reverse=True,
+    )
+    return matches[0] if matches else None
+
+
 def read_session_status(note_path: Path) -> str | None:
     try:
         for line in note_path.read_text(encoding="utf-8").splitlines():
@@ -161,14 +174,36 @@ def remove_wip_tag(note_path: Path, apply: bool) -> bool:
     return True
 
 
-def git_mv(src: Path, dst: Path, apply: bool) -> bool:
+def archive_preflight(brain_root: Path, src: Path, dst: Path) -> tuple[bool, str]:
+    """Refuse an archive that git cannot perform before mutating the note."""
+    if dst.exists() or dst.is_symlink():
+        return False, f"archive destination already exists: {dst.relative_to(brain_root)}"
+    try:
+        src_rel = src.relative_to(brain_root)
+    except ValueError:
+        return False, "session note is outside the brain repository"
+    result = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", str(src_rel)],
+        cwd=brain_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False, f"session note is not tracked by Git: {src_rel}"
+    return True, ""
+
+
+def git_mv(src: Path, dst: Path, brain_root: Path, apply: bool) -> bool:
     """Run git mv src dst. Return True on success."""
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    cmd = ["git", "mv", str(src), str(dst)]
+    src_rel = src.relative_to(brain_root)
+    dst_rel = dst.relative_to(brain_root)
+    cmd = ["git", "mv", str(src_rel), str(dst_rel)]
     if not apply:
         print(f"  would run: {' '.join(cmd)}")
         return True
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(cmd, cwd=brain_root, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         print(f"ERROR: git mv failed: {result.stderr.strip()}", file=sys.stderr)
         return False
@@ -188,6 +223,14 @@ def main() -> int:
 
     note_path = find_session_note(brain_root, session_id)
     if note_path is None:
+        if subcommand == "consolidate" and args.archive:
+            archived = find_archived_session_note(brain_root, session_id)
+            if archived is not None and read_session_status(archived) == "consolidated":
+                print("# Session close — consolidate")
+                print(f"mode: {mode}")
+                print(f"session_note: {archived.relative_to(brain_root)}")
+                print("status: already consolidated and archived")
+                return 0
         print(f"ERROR: session note not found for id '{session_id}'", file=sys.stderr)
         print(f"  searched in: {brain_root / 'WIP' / 'SESSIONS'}", file=sys.stderr)
         return 1
@@ -196,15 +239,24 @@ def main() -> int:
     if current_status is None:
         print(f"WARNING: could not read Status line from {note_path.name}")
 
+    new_status = "handoff-only" if subcommand == "handoff" else "consolidated"
+    already_target = current_status == new_status
     allowed_from = VALID_TRANSITIONS[subcommand]
-    if current_status and current_status not in allowed_from:
+    if current_status and not already_target and current_status not in allowed_from:
         print(f"ERROR: invalid state transition.", file=sys.stderr)
         print(f"  current status: {current_status}", file=sys.stderr)
         print(f"  '{subcommand}' requires status to be one of: {', '.join(allowed_from)}", file=sys.stderr)
         return 1
 
     note_rel = note_path.relative_to(brain_root)
-    new_status = "handoff-only" if subcommand == "handoff" else "consolidated"
+
+    trash_dir = brain_root / "QUARANTINE" / "TRASH"
+    archive_dst = trash_dir / note_path.name
+    if subcommand == "consolidate" and args.archive:
+        preflight_ok, preflight_error = archive_preflight(brain_root, note_path, archive_dst)
+        if not preflight_ok:
+            print(f"ERROR: {preflight_error}", file=sys.stderr)
+            return 1
 
     print(f"# Session close — {subcommand}")
     print(f"mode: {mode}")
@@ -212,13 +264,17 @@ def main() -> int:
     print(f"status: {current_status} → {new_status}")
     print()
 
-    ok, old = patch_status(note_path, new_status, apply=args.apply)
-    if ok:
-        action = "updated" if args.apply else "would update"
-        print(f"  {action}: Status: {old} → {new_status}")
+    original_text = note_path.read_text(encoding="utf-8")
+    if already_target:
+        print(f"  unchanged: Status already {new_status}")
     else:
-        print(f"  ERROR patching status: {old}", file=sys.stderr)
-        return 1
+        ok, old = patch_status(note_path, new_status, apply=args.apply)
+        if ok:
+            action = "updated" if args.apply else "would update"
+            print(f"  {action}: Status: {old} → {new_status}")
+        else:
+            print(f"  ERROR patching status: {old}", file=sys.stderr)
+            return 1
 
     if subcommand == "consolidate":
         wip_changed = remove_wip_tag(note_path, apply=args.apply)
@@ -227,10 +283,11 @@ def main() -> int:
             print(f"  {action}: 'wip' tag from frontmatter")
 
         if args.archive:
-            trash_dir = brain_root / "QUARANTINE" / "TRASH"
-            dst = trash_dir / note_path.name
-            ok = git_mv(note_path, dst, apply=args.apply)
+            ok = git_mv(note_path, archive_dst, brain_root, apply=args.apply)
             if not ok:
+                if args.apply and note_path.exists():
+                    note_path.write_text(original_text, encoding="utf-8")
+                    print("  rolled back session-note content after archive failure", file=sys.stderr)
                 return 1
             action = "moved" if args.apply else "would move"
             print(f"  {action}: {note_rel} → QUARANTINE/TRASH/{note_path.name}")

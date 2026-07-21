@@ -5,9 +5,6 @@ tags: [daily]
 <% tp.file.cursor() %>
 
 # Sessions
-- REPLACE WITH REAL SESSION_ID AND SHORT SUMMARY: `<runtime resume command>` — project/context: short outcome
-- Example (OpenCode): `opencode -s ses_abc123` — Example project: configuration validated
-- Example (Claude Code): `claude --resume ses_abc123` — Example project: configuration validated
 
 # Actions
 * [[LEARN]]:

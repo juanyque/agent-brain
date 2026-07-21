@@ -5,8 +5,10 @@ Single-script replacement for the ~15 Read/Bash calls that opening a vault sessi
 
 1. Resolves vault state (daily notes, open sessions, warnings).
 2. Reads context files and emits a compact digest (<30 lines).
-3. (--apply) Creates the session note from TEMPLATE.wip-session.common.md.
-4. (--apply) Appends the session entry to today's daily note # Sessions block.
+3. (--prepare-daily) Prepares today's daily note after rollover decisions are complete.
+4. (--apply) Creates the session note from TEMPLATE.wip-session.common.md.
+5. (--apply) Upserts the session entry in today's daily note # Sessions block.
+6. Verifies the session/daily postconditions after apply.
 
 Dry-run by default; pass --apply to write files.
 """
@@ -17,8 +19,9 @@ import argparse
 import json
 import os
 import re
+import shlex
 import sys
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
@@ -27,10 +30,22 @@ SESSIONS_HEADER_RE = re.compile(r"^# Sessions\s*$")
 HEADING_RE = re.compile(r"^#{1,3} ")
 TASK_TYPE_ITEM_RE = re.compile(r"^- \[\[")
 STATUS_RE = re.compile(r"^-\s+Status:\s*(.+)$")
+SESSION_SCAFFOLD_PREFIXES = (
+    "- REPLACE WITH REAL SESSION_ID",
+    "- Example (OpenCode):",
+    "- Example (Claude Code):",
+    "- Example (Codex):",
+)
 
 TEMPLATE_CANDIDATES = [
     Path("TEMPLATES/TEMPLATE.wip-session.common.md"),
     Path("_COMMON/TEMPLATES/TEMPLATE.wip-session.common.md"),
+]
+
+DAILY_TEMPLATE_CANDIDATES = [
+    Path("TEMPLATES/Daily Note Template.md"),
+    Path("TEMPLATES/TEMPLATE.daily-note.common.md"),
+    Path("_COMMON/TEMPLATES/TEMPLATE.daily-note.common.md"),
 ]
 
 
@@ -63,12 +78,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cwd",
         default="",
-        help="Current working directory for WIP context filtering.",
+        help="Current working directory for WIP context filtering and the paste-ready "
+        "session recovery command.",
+    )
+    parser.add_argument(
+        "--prepare-daily",
+        action="store_true",
+        help="Create today's daily from the configured template when it is missing. "
+        "Use only after the day-rollover review is complete. The created # Sessions "
+        "block is empty and ready for deterministic registration.",
     )
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Write session note and update daily note. Default is dry-run.",
+        help="Write session note and upsert the daily registration. Default is dry-run.",
     )
     return parser.parse_args()
 
@@ -81,16 +104,27 @@ def detect_runtime() -> str:
     return "generic"
 
 
-def resume_command(runtime: str, session_id: str) -> str:
+def normalize_cwd(cwd: str) -> str:
+    path = Path(cwd).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    return str(path)
+
+
+def resume_command(runtime: str, session_id: str, cwd: str = "") -> str:
     r = (runtime or "").strip().lower()
     if r == "claude":
-        return f"claude --resume {session_id}"
-    if r == "opencode":
-        return f"opencode -s {session_id}"
-    if r == "codex":
-        return f"codex resume {session_id}"
-    # Never claim a wrong runtime: fall back to the bare id so the mistake is visible.
-    return session_id
+        command = f"claude --resume {session_id}"
+    elif r == "opencode":
+        command = f"opencode -s {session_id}"
+    elif r == "codex":
+        command = f"codex resume {session_id}"
+    else:
+        # Never claim a wrong runtime: fall back to the bare id so the mistake is visible.
+        return session_id
+    if cwd:
+        return f"cd {shlex.quote(normalize_cwd(cwd))} && {command}"
+    return command
 
 
 def slugify(text: str) -> str:
@@ -157,6 +191,29 @@ def find_template(brain_root: Path) -> Path | None:
         if path.exists():
             return path
     return None
+
+
+def find_daily_template(brain_root: Path) -> Path | None:
+    """Return the preferred daily template, refusing a local/common divergence."""
+    existing = [brain_root / candidate for candidate in DAILY_TEMPLATE_CANDIDATES]
+    existing = [path for path in existing if path.exists()]
+    if not existing:
+        return None
+
+    local = brain_root / DAILY_TEMPLATE_CANDIDATES[0]
+    common = next((path for path in existing[1:] if path.exists()), None)
+    if local.exists() and common is not None:
+        same_target = False
+        try:
+            same_target = local.resolve() == common.resolve()
+        except OSError:
+            pass
+        if not same_target and read_text_safe(local) != read_text_safe(common):
+            raise ValueError(
+                "local and common daily templates diverge; reconcile them before creating "
+                "today's daily"
+            )
+    return existing[0]
 
 
 def is_session_open(note_path: Path) -> bool:
@@ -244,13 +301,20 @@ def instantiate_session_template(
     topic: str,
     session_id: str,
     runtime: str,
+    cwd: str,
 ) -> str:
     text = read_text_safe(template_path)
     text = text.replace(
         "# Session <date> / <topic> / <id>",
         f"# Session {date} / {topic} / {session_id}",
     )
-    resume_block = f"## Resume command\n- `{resume_command(runtime, session_id)}`"
+    resume_lines = [
+        "## Resume command",
+        f"- `{resume_command(runtime, session_id, cwd)}`",
+    ]
+    if cwd:
+        resume_lines.append(f"- Working directory: `{normalize_cwd(cwd)}`")
+    resume_block = "\n".join(resume_lines)
     text = re.sub(
         r"## Resume command\n.*?(?=\n## |\Z)",
         resume_block + "\n",
@@ -260,41 +324,214 @@ def instantiate_session_template(
     return text
 
 
-def build_sessions_entry(session_id: str, topic: str, slug: str, runtime: str) -> str:
-    label = topic.replace("-", "/") if topic else session_id[:8]
-    return f"- `{resume_command(runtime, session_id)}` — {label}. Session note: [[{slug}]]."
-
-
-def append_to_sessions_block(daily_path: Path, entry: str, apply: bool) -> bool:
-    text = read_text_safe(daily_path)
+def upsert_session_recovery(
+    note_path: Path,
+    session_id: str,
+    runtime: str,
+    cwd: str,
+    apply: bool,
+) -> str:
+    """Make an existing session note's recovery block canonical and idempotent."""
+    text = read_text_safe(note_path)
     if not text:
-        return False
-    lines = text.splitlines(keepends=True)
+        return "missing-note"
+    resume_lines = [
+        "## Resume command",
+        f"- `{resume_command(runtime, session_id, cwd)}`",
+    ]
+    if cwd:
+        resume_lines.append(f"- Working directory: `{normalize_cwd(cwd)}`")
+    replacement = "\n".join(resume_lines) + "\n"
+    new_text, replacements = re.subn(
+        r"## Resume command\n.*?(?=\n## |\Z)",
+        replacement,
+        text,
+        count=1,
+        flags=re.DOTALL,
+    )
+    if replacements == 0:
+        return "missing-section"
+    if new_text == text:
+        return "unchanged"
+    if apply:
+        note_path.write_text(new_text, encoding="utf-8")
+    return "updated"
+
+
+def build_sessions_entry(
+    session_id: str,
+    topic: str,
+    slug: str,
+    runtime: str,
+    cwd: str,
+) -> str:
+    label = topic.replace("-", "/") if topic else session_id[:8]
+    return (
+        f"- `{resume_command(runtime, session_id, cwd)}` — {label}. "
+        f"Session note: [[{slug}]]."
+    )
+
+
+def _sessions_block_bounds(lines: list[str]) -> tuple[int, int] | None:
     header_idx = None
     for i, line in enumerate(lines):
-        if SESSIONS_HEADER_RE.match(line.rstrip("\n")):
+        if SESSIONS_HEADER_RE.match(line.rstrip("\r\n")):
             header_idx = i
             break
     if header_idx is None:
-        return False
+        return None
 
-    # Find end of # Sessions block (next top-level header, not # Sessions itself)
-    j = header_idx + 1
-    while j < len(lines):
-        stripped = lines[j].rstrip("\n")
+    end_idx = header_idx + 1
+    while end_idx < len(lines):
+        stripped = lines[end_idx].rstrip("\r\n")
         if stripped.startswith("# ") and not SESSIONS_HEADER_RE.match(stripped):
             break
-        j += 1
-    # Walk back past trailing blank lines to insert after last real entry
-    k = j - 1
-    while k > header_idx and lines[k].strip() == "":
-        k -= 1
-    insert_idx = k + 1
+        end_idx += 1
+    return header_idx, end_idx
 
-    lines.insert(insert_idx, entry + "\n")
+
+def _is_sessions_scaffold(line: str) -> bool:
+    return line.strip().startswith(SESSION_SCAFFOLD_PREFIXES)
+
+
+def _entry_with_preserved_summary(existing: str, desired: str) -> str:
+    """Replace only the recovery command, preserving a user-edited summary."""
+    desired_parts = desired.split("`", 2)
+    start = existing.find("`")
+    end = existing.find("`", start + 1) if start >= 0 else -1
+    if len(desired_parts) == 3 and start >= 0 and end > start:
+        newline = "\n" if existing.endswith("\n") else ""
+        current = existing.rstrip("\r\n")
+        return current[: start + 1] + desired_parts[1] + current[end:] + newline
+    return desired + ("\n" if existing.endswith("\n") else "")
+
+
+def upsert_sessions_entry(
+    daily_path: Path,
+    entry: str,
+    session_id: str,
+    apply: bool,
+) -> str:
+    """Ensure exactly one canonical registration for session_id.
+
+    Returns one of: missing-daily, missing-header, added, updated, unchanged.
+    Known template scaffold lines are removed from # Sessions as part of the same
+    deterministic update.
+    """
+    text = read_text_safe(daily_path)
+    if not text:
+        return "missing-daily"
+    lines = text.splitlines(keepends=True)
+    bounds = _sessions_block_bounds(lines)
+    if bounds is None:
+        return "missing-header"
+    header_idx, end_idx = bounds
+
+    body = lines[header_idx + 1 : end_idx]
+    cleaned: list[str] = []
+    found = 0
+    scaffold_removed = False
+    for line in body:
+        if _is_sessions_scaffold(line):
+            scaffold_removed = True
+            continue
+        if session_id in line:
+            found += 1
+            if found == 1:
+                cleaned.append(_entry_with_preserved_summary(line, entry))
+            continue
+        cleaned.append(line)
+
+    if found == 0:
+        insert_idx = len(cleaned)
+        while insert_idx > 0 and cleaned[insert_idx - 1].strip() == "":
+            insert_idx -= 1
+        cleaned.insert(insert_idx, entry + "\n")
+
+    new_lines = lines[: header_idx + 1] + cleaned + lines[end_idx:]
+    new_text = "".join(new_lines)
+    changed = new_text != text
+    if apply and changed:
+        daily_path.write_text(new_text, encoding="utf-8")
+
+    if found == 0:
+        return "added"
+    if changed or found > 1 or scaffold_removed:
+        return "updated"
+    return "unchanged"
+
+
+def instantiate_daily_template(template_path: Path, day: str) -> str:
+    """Instantiate navigation and leave # Sessions empty for script ownership."""
+    current = date.fromisoformat(day)
+    text = read_text_safe(template_path)
+    text = text.replace("<% tp.date.yesterday() %>", str(current - timedelta(days=1)))
+    text = text.replace("<% tp.date.tomorrow() %>", str(current + timedelta(days=1)))
+    text = text.replace("<% tp.file.cursor() %>\n", "")
+
+    lines = text.splitlines(keepends=True)
+    bounds = _sessions_block_bounds(lines)
+    if bounds is None:
+        raise ValueError("daily template has no # Sessions block")
+    header_idx, end_idx = bounds
+    body = [line for line in lines[header_idx + 1 : end_idx] if not _is_sessions_scaffold(line)]
+    return "".join(lines[: header_idx + 1] + body + lines[end_idx:])
+
+
+def prepare_daily_note(
+    brain_root: Path,
+    daily_path: Path,
+    day: str,
+    apply: bool,
+) -> str:
+    """Create today's daily deterministically; never overwrite an existing note."""
+    if daily_path.exists():
+        return "unchanged"
+    template = find_daily_template(brain_root)
+    if template is None:
+        return "missing-template"
+    content = instantiate_daily_template(template, day)
     if apply:
-        daily_path.write_text("".join(lines), encoding="utf-8")
-    return True
+        daily_path.parent.mkdir(parents=True, exist_ok=True)
+        daily_path.write_text(content, encoding="utf-8")
+    return "created" if apply else "would-create"
+
+
+def validate_session_postconditions(
+    daily_path: Path,
+    session_note_path: Path,
+    session_id: str,
+    runtime: str,
+    cwd: str,
+) -> list[str]:
+    """Return invariant violations after a session-open apply."""
+    errors: list[str] = []
+    expected_command = resume_command(runtime, session_id, cwd)
+    if not session_note_path.exists():
+        errors.append(f"session note missing: {session_note_path}")
+    else:
+        note_text = read_text_safe(session_note_path)
+        if expected_command not in note_text:
+            errors.append("session note does not contain the expected recovery command")
+        if cwd and normalize_cwd(cwd) not in note_text:
+            errors.append("session note does not contain the original working directory")
+
+    daily_text = read_text_safe(daily_path)
+    daily_lines = daily_text.splitlines(keepends=True)
+    bounds = _sessions_block_bounds(daily_lines)
+    if bounds is None:
+        errors.append("daily note has no # Sessions block")
+        return errors
+    header_idx, end_idx = bounds
+    body = daily_lines[header_idx + 1 : end_idx]
+    registrations = [line for line in body if session_id in line]
+    if len(registrations) != 1:
+        errors.append(f"expected one daily registration for {session_id}, found {len(registrations)}")
+    elif expected_command not in registrations[0]:
+        errors.append("daily registration does not contain the expected recovery command")
+    if any(_is_sessions_scaffold(line) for line in body):
+        errors.append("daily # Sessions still contains template scaffold")
+    return errors
 
 
 def main() -> int:
@@ -354,7 +591,10 @@ def main() -> int:
     print(f"latest_daily: {latest_daily}")
     print(f"day_rollover_detected: {'yes — run day-rollover protocol before work' if day_rollover else 'no'}")
     print(f"session_id: {args.session_id}")
-    print(f"runtime: {runtime}  (resume: {resume_command(runtime, args.session_id)})")
+    print(
+        f"runtime: {runtime}  "
+        f"(resume: {resume_command(runtime, args.session_id, args.cwd)})"
+    )
     print(f"topic: {topic}")
     if existing_note:
         note_action = "continuing (prior day)"
@@ -363,7 +603,13 @@ def main() -> int:
     else:
         note_action = "creating" if args.apply else "would-create"
     print(f"session_note: {effective_note_rel}  ({note_action})")
-    print(f"daily_update: {journal_folder}/{today}.md  ({'appending' if args.apply else 'would-append'})")
+    if not today_exists and args.prepare_daily:
+        daily_action = "preparing + upserting" if args.apply else "would-prepare + upsert"
+    elif today_exists:
+        daily_action = "upserting" if args.apply else "would-upsert"
+    else:
+        daily_action = "missing — registration deferred"
+    print(f"daily_update: {journal_folder}/{today}.md  ({daily_action})")
     print()
 
     print("open_sessions:")
@@ -392,15 +638,65 @@ def main() -> int:
         print()
 
     # ── Apply: create session note + update daily ───────────────────────────────
-    sessions_entry = build_sessions_entry(args.session_id, topic, effective_slug, runtime)
+    sessions_entry = build_sessions_entry(
+        args.session_id,
+        topic,
+        effective_slug,
+        runtime,
+        args.cwd,
+    )
 
     if args.apply:
+        if args.prepare_daily:
+            try:
+                daily_prepare_action = prepare_daily_note(
+                    brain_root,
+                    today_path,
+                    today,
+                    apply=True,
+                )
+            except ValueError as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 1
+            if daily_prepare_action == "missing-template":
+                print("ERROR: daily note template not found — daily not created.", file=sys.stderr)
+                return 1
+            print(f"daily_prepare: {daily_prepare_action}: {journal_folder}/{today}.md")
+            today_exists = today_path.exists()
+
         if existing_note:
-            print(f"session note already exists (prior day), skipping creation: {effective_note_rel}")
+            recovery_action = upsert_session_recovery(
+                brain_root / effective_note_rel,
+                args.session_id,
+                runtime,
+                args.cwd,
+                apply=True,
+            )
+            print(
+                f"session note already exists (prior day): {effective_note_rel} "
+                f"(recovery {recovery_action})"
+            )
         elif session_note_path.exists():
-            print(f"WARNING: session note already exists, skipping: {session_note_rel}")
+            recovery_action = upsert_session_recovery(
+                session_note_path,
+                args.session_id,
+                runtime,
+                args.cwd,
+                apply=True,
+            )
+            print(
+                f"session note already exists: {session_note_rel} "
+                f"(recovery {recovery_action})"
+            )
         elif template_path:
-            content = instantiate_session_template(template_path, today, topic, args.session_id, runtime)
+            content = instantiate_session_template(
+                template_path,
+                today,
+                topic,
+                args.session_id,
+                runtime,
+                args.cwd,
+            )
             session_note_path.parent.mkdir(parents=True, exist_ok=True)
             session_note_path.write_text(content, encoding="utf-8")
             print(f"created: {session_note_rel}")
@@ -409,27 +705,77 @@ def main() -> int:
             return 1
 
         if today_exists:
-            ok = append_to_sessions_block(today_path, sessions_entry, apply=True)
-            if ok:
-                print(f"updated: {journal_folder}/{today}.md  (appended to # Sessions)")
-            else:
-                print(f"WARNING: # Sessions block not found in {journal_folder}/{today}.md — entry not appended.", file=sys.stderr)
+            daily_registration = upsert_sessions_entry(
+                today_path,
+                sessions_entry,
+                args.session_id,
+                apply=True,
+            )
+            if daily_registration in ("missing-daily", "missing-header"):
+                print(
+                    f"ERROR: session registration failed ({daily_registration}) in "
+                    f"{journal_folder}/{today}.md.",
+                    file=sys.stderr,
+                )
                 print(f"  Add manually: {sessions_entry}")
+                return 1
+            else:
+                print(
+                    f"daily_registration: {daily_registration}: "
+                    f"{journal_folder}/{today}.md"
+                )
+
+                effective_note_path = brain_root / effective_note_rel
+                postcondition_errors = validate_session_postconditions(
+                    today_path,
+                    effective_note_path,
+                    args.session_id,
+                    runtime,
+                    args.cwd,
+                )
+                if postcondition_errors:
+                    print("POSTCONDITION FAILED:", file=sys.stderr)
+                    for error in postcondition_errors:
+                        print(f"  - {error}", file=sys.stderr)
+                    return 1
+                print("postconditions: OK")
         else:
             print(f"NOTE: today's daily note is missing ({journal_folder}/{today}.md).")
-            print(f"  Create today's daily first (day-rollover protocol), then run --apply again.")
+            print(
+                "  Complete the day-rollover review, then re-run with "
+                "--prepare-daily --apply."
+            )
             print(f"  Entry to add under # Sessions: {sessions_entry}")
     else:
         if existing_note:
             print(f"session note already exists (prior day), would skip creation: {effective_note_rel}")
         else:
             print(f"would-create: {session_note_rel}")
-        if today_exists:
-            print(f"would-append to: {journal_folder}/{today}.md")
+        if today_exists or args.prepare_daily:
+            if not today_exists:
+                try:
+                    daily_prepare_action = prepare_daily_note(
+                        brain_root,
+                        today_path,
+                        today,
+                        apply=False,
+                    )
+                except ValueError as exc:
+                    print(f"ERROR: {exc}", file=sys.stderr)
+                    return 1
+                if daily_prepare_action == "missing-template":
+                    print("ERROR: daily note template not found.", file=sys.stderr)
+                    return 1
+                print(f"daily_prepare: {daily_prepare_action}: {journal_folder}/{today}.md")
+            print(f"would-upsert in: {journal_folder}/{today}.md")
             print(f"  entry: {sessions_entry}")
         else:
             print(f"NOTE: today's daily ({journal_folder}/{today}.md) is missing — # Sessions append deferred.")
-            print(f"  Entry to add after creating today's daily: {sessions_entry}")
+            print(
+                "  Complete the day-rollover review, then pass --prepare-daily "
+                "with --apply."
+            )
+            print(f"  Entry to upsert after creating today's daily: {sessions_entry}")
 
     return 0
 

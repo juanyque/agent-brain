@@ -9,8 +9,10 @@ tags: [session, wip]
 
 ## Resume command
 - The exact command depends on your agent runtime.
-- Example (OpenCode): `opencode -s ses_abc123 - example-co_infra switches config` — get the id via `opencode session list`.
-- Example (Claude Code): `claude --resume ses_abc123` — list available sessions via the runtime's session-list command.
+- Working directory: `/absolute/path/used-to-launch-the-session`.
+- Example (OpenCode): `cd /path/to/project && opencode -s ses_abc123` — get the id via `opencode session list`.
+- Example (Claude Code): `cd /path/to/project && claude --resume ses_abc123`.
+- Example (Codex): `cd /path/to/project && codex resume <uuid>` — get the id from the runtime-provided `$CODEX_THREAD_ID` when available.
 
 ## Current objective
 -

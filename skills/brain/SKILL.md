@@ -64,13 +64,19 @@ If one brain has `has_agents_md: true` and others do not, prefer the one with op
 
 Once a brain path is confirmed, run `session_open.py` to load context and prepare the session in one call.
 
+Run `session_open.py` immediately after resolution. Do not pre-read the brain's `AGENTS.md`,
+`BRAIN.md`, `WIP/WIP.md`, `TASK_TYPES/TASK_TYPES.md`, or their `_COMMON/*.common.md`
+sources; global runtime instructions are already loaded and the compact digest is the intended
+entrypoint.
+
 **Resolve the real session id and runtime BEFORE invoking the script** — never pass a timestamp fallback and never let the script guess a wrong runtime. The calling agent always knows its own runtime:
 
 | Runtime | Resolve session id | Pass `--runtime` |
 |---|---|---|
 | Claude Code | read `$CLAUDE_CODE_SESSION_ID` | `--runtime claude` (or omit; auto-detected via env) |
 | OpenCode | run `opencode session list`, pick the active session | `--runtime opencode` (**required** — no env var) |
-| Codex / other | consult the runtime's session-listing command | `--runtime codex` (or `generic`) |
+| Codex | read `$CODEX_THREAD_ID` (runtime-provided; not a public API) | `--runtime codex` |
+| Other | consult the runtime's session-listing command | `--runtime generic` |
 
 If you cannot resolve the real id, **stop and ask the user** rather than inventing one.
 
@@ -83,13 +89,13 @@ python3 ~/.agents/skills/brain/scripts/session_open.py \
   --cwd "$(pwd)"
 ```
 
-The `--runtime` flag controls the resume-command format emitted in the session note and the daily `# Sessions` entry (`opencode -s <id>`, `claude --resume <id>`, etc.). If omitted, the script falls back to `detect_runtime()` (Claude only, via env); any unknown runtime emits a bare session id so a wrong resume command is never silently written.
+The `--runtime` flag controls the resume-command format emitted in the session note and the daily `# Sessions` entry (`opencode -s <id>`, `claude --resume <id>`, `codex resume <id>`, etc.). The supplied `--cwd` is recorded and prefixed as `cd <cwd> && ...`, because runtime configuration and project guidance are resolved from the launch directory. If `--runtime` is omitted, the script falls back to `detect_runtime()` (Claude only, via env); any unknown runtime emits a bare session id so a wrong runtime is never silently claimed.
 
 The script emits a compact digest (~20-30 lines): brain state, today's daily info, open sessions list, WIP items filtered by cwd, TASK_TYPES one-liners, and any warnings. **Do not additionally read `AGENTS.md`, `BRAIN.md`, `WIP/WIP.md`, or `TASK_TYPES/TASK_TYPES.md` — the digest is the only brain context the main agent needs.**
 
 After reviewing the digest, announce to the user that the brain is connected and briefly summarize active context.
 
-After the user acknowledges the digest (or when the session open is routine), pass `--apply` to create the session note and register it in today's daily `# Sessions` block:
+After the user acknowledges the digest (or when the session open is routine), pass `--apply` to create the session note and idempotently register it in today's daily `# Sessions` block:
 
 ```bash
 python3 ~/.agents/skills/brain/scripts/session_open.py \
@@ -101,11 +107,15 @@ python3 ~/.agents/skills/brain/scripts/session_open.py \
   --apply
 ```
 
-**Day rollover**: if the digest reports `day_rollover_detected: yes`, run the day-rollover protocol (Flow 1 / Flow 2 Scenario B per `_COMMON/RULES-SESSION-LIFECYCLE.md`) before work, then re-run `session_open.py --apply` to register the session in today's newly created daily.
+`--apply` is safe to repeat: the script upserts by full session id, preserves a user-edited
+daily summary, removes known `# Sessions` template scaffold, and verifies that the session
+note and daily contain one canonical recovery command.
+
+**Day rollover**: if the digest reports `day_rollover_detected: yes`, load the brain-local `RULES-SESSION-LIFECYCLE.md` when present, otherwise `_COMMON/RULES-SESSION-LIFECYCLE.common.md`, and run the semantic review in Flow 1 / Flow 2 Scenario B first. When that review is complete, run `session_open.py --prepare-daily --apply` once. `--prepare-daily` instantiates navigation and leaves `# Sessions` empty before the same command performs the idempotent registration. It refuses divergent local/common daily templates instead of choosing one silently.
 
 **If the brain has no operational files** (`AGENTS.md`, `BRAIN.md` all missing): ask the user whether to proceed with generic notes conventions, and be conservative about writes.
 
-**Multi-session coordination**: the digest's `open_sessions:` list is the canonical source of peer session ids. For each peer session id, respect its scope per `_COMMON/RULES-SESSION-LIFECYCLE.md` → "Multi-session coordination" — do not edit or move artifacts inside another session's scope without an explicit handoff.
+**Multi-session coordination**: the digest's `open_sessions:` list is the canonical source of peer session ids. For each peer session id, respect its scope per the brain-local `RULES-SESSION-LIFECYCLE.md`, or `_COMMON/RULES-SESSION-LIFECYCLE.common.md` when the wrapper is unavailable, under "Multi-session coordination" — do not edit or move artifacts inside another session's scope without an explicit handoff.
 
 **Fallback** (if `session_open.py` is unavailable): read the operational files manually in this order: `AGENTS.md` → `BRAIN.md` → `WIP/WIP.md` → `TASK_TYPES/TASK_TYPES.md`, run `session_bootstrap.py --brain-root <brain_path>`, then create the session note and update the daily manually per `RULES-SESSION-LIFECYCLE.md` Flow 2.
 
@@ -119,11 +129,17 @@ The full 5-step workflow (keyword extraction, WIP cross-reference, script invoca
 
 Document **meaningful** session activity in the brain — not everything, only what has lasting value:
 
-- **Daily-note rule pre-check**: before writing to a daily note, read the brain-local `RULES-DAILY-NOTES.md` if it exists, otherwise read `_COMMON/RULES-DAILY-NOTES.md`. Validate the planned edit against cleanup timing, `# Sessions` traceability, and project-section uniqueness before writing.
+- **Daily-note rule pre-check**: before writing to a daily note, read the brain-local `RULES-DAILY-NOTES.md` if it exists, otherwise read `_COMMON/RULES-DAILY-NOTES.common.md`. Validate the planned edit against cleanup timing, `# Sessions` traceability, and project-section uniqueness before writing.
 - **Daily note**: record significant progress, decisions, and next actions in today's daily note under `JOURNAL/`. Create it if it does not exist, following the brain's daily note template and linking conventions.
 - **WIP updates**: if the session touches active WIP items, update the relevant WIP notes.
+- **WIP dashboard invariant**: every active non-session note under `WIP/` must be linked
+  from `WIP/WIP.md`. After creating or activating one, run `brain_check.py --wip-note
+  <brain-relative-path>`; do not report completion if the check fails.
 - **Session note**: if the brain uses session notes (`WIP/SESSIONS/`), create or update the session note.
 - **New notes**: only create new notes when the session produces knowledge worth preserving beyond the current task.
+- **Post-apply truth**: write durable notes from the resulting state, not the approval plan.
+  Completed checks are evidence rather than TODOs, and temporary handoffs are sources,
+  not durable references unless the user explicitly promotes them.
 
 Follow all formatting conventions, frontmatter schemas, and linking patterns defined in the brain's `AGENTS.md` and `BRAIN.md`. Do not invent new conventions — match what already exists.
 
@@ -185,8 +201,12 @@ The runtime skill exposes deterministic helper tools under its installed `script
 - `find_home.py` — resolve candidate brains from a path (notes-agnostic: obsidian, generic, empty).
 - `find_related_notes.py` — find notes related to project keywords.
 - `memory_query.py` — rank a few curated-memory candidates from index metadata without loading note bodies. Use only when prior cross-session guidance may help; open only relevant returned notes.
-- `session_open.py` — session-start ceremony: emits a compact digest, creates session note, updates daily `# Sessions`. Args: `--brain-root`, `--session-id` (real id from the agent runtime — never a timestamp), `--runtime` (claude|opencode|codex; controls resume-command format), `--session-label` (opt), `--cwd` (opt), `--apply`. Dry-run by default.
-- `session_close.py` — session-close ceremony. Subcommands: `handoff <session-id>` (→ handoff-only), `consolidate <session-id> [--archive]` (→ consolidated, optional git mv to QUARANTINE/TRASH/). Args: `--brain-root`, `--apply`. Dry-run by default.
+- `session_open.py` — session-start ceremony: emits a compact digest, optionally prepares a missing daily after rollover review, creates/updates the session note, idempotently upserts daily `# Sessions`, and verifies postconditions. Args: `--brain-root`, `--session-id` (real id from the agent runtime — never a timestamp), `--runtime` (claude|opencode|codex; controls resume-command format), `--session-label` (opt), `--cwd` (opt), `--prepare-daily` (opt), `--apply`. Dry-run by default.
+- `brain_check.py` — read-only postcondition checker. Verifies a session has exactly one
+  daily registration with the expected runtime/cwd recovery command, and/or verifies
+  active WIP notes are registered in `WIP/WIP.md`. Args: `--brain-root`, optional session
+  tuple (`--session-id`, `--runtime`, `--cwd`, `--date`), and repeatable `--wip-note`.
+- `session_close.py` — idempotent session-close ceremony. Subcommands: `handoff <session-id>` (→ handoff-only), `consolidate <session-id> [--archive]` (→ consolidated, optional `git mv` to `QUARANTINE/TRASH/`). Archive apply refuses untracked notes or occupied destinations before editing the note and rolls back note content if the move fails. Args: `--brain-root`, `--apply`. Dry-run by default.
 - `session_bootstrap.py` — legacy: inspect daily/session state and print verbose kickoff prompt. Preserved for callers that depend on it; prefer `session_open.py` for new sessions.
 - `maintenance_scheduler.py` — decide which recurring Daily/Weekly/Monthly/Yearly/session maintenance jobs are due.
 - `standardize_assessment.py` — assess an organized brain in maintenance mode and generate/update `WIP/STANDARDIZE_PROCESS.md`.
@@ -198,6 +218,7 @@ The runtime skill exposes deterministic helper tools under its installed `script
 
 Tool documentation lives next to the scripts using Obsidian-safe common names:
 
+- `TOOL.brain-check.md`
 - `TOOL.attachments-audit.md`
 - `TOOL.canvas-path-repair.md`
 - `TOOL.check-basename-collisions.md`

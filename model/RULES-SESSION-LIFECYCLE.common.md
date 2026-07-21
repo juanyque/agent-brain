@@ -20,11 +20,12 @@ This file is the canonical procedure for session lifecycle decisions.
   3. Cwd basename (`demo-app`, `org-marketplace`, brain root → `<brain-name>`).
   4. `unspecified-<YYYYMMDD-HHMM>` as last-resort fallback.
   Never block on the topic field via `AskUserQuestion`. The user can rename the file in place if they prefer a different label — that round-trip is cheap; the round-trip to ask is not.
-- A session note must use the real session id from the agent runtime (OpenCode, Claude Code, Codex, etc.) in its resume command. Example (OpenCode): `opencode -s ses_abc123`. Example (Claude Code): `claude --resume <uuid>`.
+- A session note must use the real session id from the agent runtime (OpenCode, Claude Code, Codex, etc.) in its resume command. It must also record the absolute working directory and provide a paste-ready recovery command that changes to that directory before resuming, because project guidance and runtime configuration depend on the launch directory. Examples: `cd /path/to/project && opencode -s ses_abc123`, `cd /path/to/project && claude --resume <uuid>`, and `cd /path/to/project && codex resume <uuid>`.
 - Identify the current session id from inside the running session:
   - **Claude Code**: read the `CLAUDE_CODE_SESSION_ID` environment variable (a UUID like `fb2f1974-7eb1-4dda-9cb2-a26bc4328e30`). This env var is not part of the publicly documented API but is consistently set by the CLI runtime. Fallback if it ever becomes empty: take the basename (minus `.jsonl`) of the newest file under `~/.claude/projects/<encoded-cwd>/`, where `<encoded-cwd>` is the current working directory with both `/` and `.` replaced by `-`. Canonical shell expression: `pwd | tr '/.' '-'`. Examples: `/Users/foo/bar` → `-Users-foo-bar`; `/Users/user/workspace/foo` → `-Users-user-workspace-foo` (the `.` in `jane.smith` must also be substituted, not only the `/`).
   - **OpenCode**: `opencode session list` and pick the active one.
-  - **Codex / other runtimes**: consult the runtime's own session-listing command; document the equivalent here when known.
+  - **Codex**: read the runtime-provided `CODEX_THREAD_ID` environment variable and resume with `codex resume <uuid>`. The environment variable is observed runtime behavior, not a public API; if it is unavailable, stop rather than inventing an id. Codex also supports `-C` / `--cd`; the shared model emits `cd <cwd> && codex resume <uuid>` so recovery has one uniform shape across runtimes.
+  - **Other runtimes**: consult the runtime's own session-listing command; document the equivalent here when known.
 - If none of the runtime-specific methods works, leave a clearly-marked placeholder in the session note and the daily's `# Sessions` entry, and ask the user to fill it.
 - Track explicit session state in the note: `open`, `handoff-only`, `consolidated`, or `stale-follow-up`.
 - A session note should stay short and contain:
@@ -97,9 +98,12 @@ The day has not been started yet. Start it as part of the session, consolidating
    - **Migrate the previous day's unfinished `* [[TODO]]:` items** — review the list with the user, carry unfinished items into today's `* [[TODO]]:`, promote real tasks to `WIP/`/`BACKLOG/`, drop done/obsolete ones (per `RULES-DAILY-NOTES.md` → TODO carryover).
    - Run the **Objectives review** pass for the previous day (`RULES-DAILY-NOTES.md` → Objectives review) before any cleanup.
 4. Clean the previous daily note by removing empty action categories, **scoped to that single daily** — but **only if that day has no open session note still pending consolidation** (any session the rollover above left live). The cleanup removes only empty placeholders, never real content; still, if a session that worked that day is still open, **defer this cleanup** so its template sections survive until it consolidates. A deferred day is cleaned later — by a later rollover when those sessions close, or by the Daily maintenance job. A note may only be cleaned once its date is no longer today (see `RULES-DAILY-NOTES.md` → Cleanup timing). Command, when it does run: `_COMMON/SKILLS/obsidian/scripts/cleanup_empty_action_categories.py --brain-root <brain> --glob <prev-date>.md --apply` (e.g. `--glob 2026-06-08.md`).
-5. Create today's daily note from the template, with navigation links (previous day → today).
-6. Create the new session note with the real current session id (first durable artifact — before deep context).
-7. Add the session id or resume command to today's daily note under `# Sessions`.
+5. Run `session_open.py --prepare-daily --apply` with the real session id, runtime,
+   and cwd. After the review steps above, this one idempotent operation creates today's
+   daily from the template with navigation links and an empty `# Sessions`, creates or
+   updates the session note, and upserts exactly one daily registration.
+6. Confirm the script's postcondition check passes before adding semantic detail to the
+   daily or session note.
 
 The current session trace is mandatory even when daily-note state is incomplete.
 
@@ -124,6 +128,11 @@ The current session trace is mandatory even when previous sessions are intention
 ## Consolidation rules
 
 - Work belongs to the day it was actually done, not the day when consolidation happens.
+- Durable records must describe the state after the approved operation. Do not persist
+  planning-only phrases such as "waiting for approval" once approval has been given.
+- A completed verification is evidence, not a pending task. Temporary handoff files may
+  be used as sources during consolidation but must not become durable references unless
+  the user explicitly promotes them.
 - Do not duplicate full session transcripts into daily notes; summarize durable progress, decisions, blockers, and next actions.
 - Prefer moving fully consolidated session notes to `QUARANTINE/TRASH/` for reversible cleanup rather than keeping them active. Permanent deletion requires explicit user approval.
 - Before moving a fully consolidated session note out of `WIP/SESSIONS/`, remove the `wip` tag from its frontmatter so closed notes do not appear in active WIP views.

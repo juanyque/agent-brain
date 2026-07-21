@@ -78,6 +78,11 @@ Skills live outside the brain and are symlinked to the repo. Codex discovers glo
 under `~/.agents/skills/`; other runtimes use their own user-skill directory. Skill files use
 normal names without the `.common.md` suffix.
 
+The brain skill's session-open apply is idempotent: it creates or updates one session note,
+upserts exactly one daily recovery entry keyed by the full session ID, preserves a manually
+edited summary, and checks the resulting session/daily state. Active WIP notes can be checked
+against the `WIP/WIP.md` dashboard with the bundled read-only `brain_check.py` tool.
+
 Install `boyscout` for Codex only when wanted. Review the dry-run first:
 
 ```bash
@@ -107,7 +112,7 @@ agent-brain/
 └── skills/
     ├── brain/            # session lifecycle, daily notes, maintenance
     │   ├── SKILL.md
-    │   ├── scripts/      # session_open.py, find_home.py, maintenance_scheduler.py, ...
+    │   ├── scripts/      # session_open.py, brain_check.py, find_home.py, ...
     │   └── references/   # project-aware-loading, setup-and-attach, brain-maintenance, runtime-merge
     └── boyscout/         # improvement-spotting + backlog management
         ├── SKILL.md
@@ -116,6 +121,18 @@ agent-brain/
 ```
 
 Files under `model/` keep the `.common.md` naming convention because they live inside a brain (via `_COMMON`) and must stay link-safe for notes apps. `skills/` and the repo root use normal names.
+
+## Tests
+
+The stdlib-only test suite runs entirely against temporary brains, homes, and Git
+repositories:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+See [`tests/README.md`](tests/README.md) for the covered contracts, individual-test
+commands, and fixture rules.
 
 ## Origin
 

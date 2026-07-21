@@ -15,9 +15,12 @@ Use this rule when creating, rolling over, cleaning, or correcting daily notes i
 ## Sessions section
 
 - Use `# Sessions` for compact traceability only:
-  - real session id or resume command
+  - paste-ready recovery command containing the real session id and original working directory
   - project/context touched
   - short outcome summary
+- Let `session_open.py` own registration in this section. Its update is an idempotent
+  upsert keyed by the full session id: re-running it must leave exactly one entry and
+  preserve any user-edited summary while correcting the recovery command.
 - Keep detailed work under `# Actions` → `* [[WORK]]:`.
 
 ## Cleanup timing
