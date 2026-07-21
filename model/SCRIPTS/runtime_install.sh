@@ -39,7 +39,7 @@ BRAIN_PATH="${BRAIN_PATH%/}"
 
 # --- Per-runtime config ------------------------------------------------------
 declare -A TARGET_DIR
-declare -a CLAUDE_MAP OPENCODE_MAP
+declare -a CLAUDE_MAP OPENCODE_MAP AGENTS_MAP
 
 TARGET_DIR[claude]="$HOME/.claude"
 CLAUDE_MAP=(
@@ -55,10 +55,16 @@ OPENCODE_MAP=(
   "oh-my-openagent.json:oh-my-openagent.json"
 )
 
+TARGET_DIR[agents]="$HOME/.agents"
+AGENTS_MAP=(
+  "AGENTS.runtime.agents.md:AGENTS.md"
+)
+
 case "$RUNTIME" in
   claude)   SRC_DIR="$BRAIN_PATH/_AGENTS/CLAUDE";   MAP=("${CLAUDE_MAP[@]}")   ;;
   opencode) SRC_DIR="$BRAIN_PATH/_AGENTS/OPENCODE"; MAP=("${OPENCODE_MAP[@]}") ;;
-  *) echo "ERROR: unknown runtime '$RUNTIME' (supported: claude, opencode)" >&2; exit 2 ;;
+  agents)   SRC_DIR="$BRAIN_PATH/_AGENTS/AGENTS";   MAP=("${AGENTS_MAP[@]}")   ;;
+  *) echo "ERROR: unknown runtime '$RUNTIME' (supported: claude, opencode, agents)" >&2; exit 2 ;;
 esac
 
 TARGET="${TARGET_DIR[$RUNTIME]}"

@@ -47,6 +47,13 @@ RUNTIME_CONFIGS = {
             ("oh-my-openagent.json", "oh-my-openagent.json"),
         ],
     },
+    "agents": {
+        "local_dir": Path("~/.agents"),
+        "agents_subdir": "AGENTS",
+        "mappings": [
+            ("AGENTS.runtime.agents.md", "AGENTS.md"),
+        ],
+    },
 }
 
 RUNTIME_HOMES = [Path("~/.agents"), Path("~/.claude"), Path("~/.codex")]
@@ -412,6 +419,15 @@ def process_runtime(
 
     config = RUNTIME_CONFIGS[rt_name]
     local_dir = config["local_dir"].expanduser()
+
+    if not config.get("mappings"):
+        reporter.write(f"-- runtime: {rt_name} (skill-only) --")
+        if local_dir.is_dir():
+            link_skill(rt_name, brain_root, reporter, dry_run)
+        else:
+            reporter.write("  SKIP (local dir not present)")
+        return
+
     brain_rt_dir = brain_agents_subdir(brain_root, rt_name)
     local_exists = local_dir.is_dir()
     brain_exists = brain_rt_dir.is_dir()
