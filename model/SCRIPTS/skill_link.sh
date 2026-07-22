@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 #
-# skill_link.sh — symlink a skill from the agent-brain repo into runtime skills dirs.
+# skill_link.sh — symlink a skill into runtime skills dirs.
 #
 # For manual installation of non-brain skills (boyscout, etc.). The brain skill
 # is installed automatically by bootstrap-zero.sh during home wiring.
 #
 # Usage:
-#   skill_link.sh <skill_name> [runtime_home] [--apply]
-#   skill_link.sh boyscout                       # link into all detected runtimes
+#   skill_link.sh <skill_name_or_path> [runtime_home] [--apply]
+#   skill_link.sh boyscout                       # agent-brain skill, all detected runtimes
+#   skill_link.sh /path/to/skills/confold        # external skill, all detected runtimes
 #   skill_link.sh boyscout ~/.agents             # link into one runtime only
 #   skill_link.sh boyscout ~/.agents --apply     # execute (default: dry-run)
 #
@@ -22,7 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 APPLY=0
-SKILL=""
+SKILL_SPEC=""
 RUNTIME_HOME=""
 
 while [[ $# -gt 0 ]]; do
@@ -30,8 +31,8 @@ while [[ $# -gt 0 ]]; do
     --apply) APPLY=1; shift ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)
-      if [[ -z "$SKILL" ]]; then
-        SKILL="$1"; shift
+      if [[ -z "$SKILL_SPEC" ]]; then
+        SKILL_SPEC="$1"; shift
       elif [[ -z "$RUNTIME_HOME" ]]; then
         RUNTIME_HOME="$1"; shift
       else
@@ -42,12 +43,32 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$SKILL" ]] || { echo "ERROR: skill name required (e.g. boyscout)" >&2; exit 2; }
+[[ -n "$SKILL_SPEC" ]] || { echo "ERROR: skill name or source path required" >&2; exit 2; }
 
-SOURCE="$REPO_ROOT/skills/$SKILL"
+if [[ "$SKILL_SPEC" == */* || -d "$SKILL_SPEC" ]]; then
+  SOURCE="${SKILL_SPEC/#\~/$HOME}"
+  if [[ ! -d "$SOURCE" ]]; then
+    echo "ERROR: skill source not found: $SOURCE" >&2
+    exit 2
+  fi
+  SOURCE="$(cd "$SOURCE" && pwd -P)"
+  SKILL="$(basename "$SOURCE")"
+else
+  SKILL="$SKILL_SPEC"
+  SOURCE="$REPO_ROOT/skills/$SKILL"
+fi
+
 if [[ ! -d "$SOURCE" ]]; then
   echo "ERROR: skill source not found: $SOURCE" >&2
   echo "  (expected a directory at \$REPO_ROOT/skills/$SKILL)" >&2
+  exit 2
+fi
+if [[ ! "$SKILL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "ERROR: invalid skill directory name: $SKILL" >&2
+  exit 2
+fi
+if [[ ! -f "$SOURCE/SKILL.md" ]]; then
+  echo "ERROR: skill source has no SKILL.md: $SOURCE" >&2
   exit 2
 fi
 

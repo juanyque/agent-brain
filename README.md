@@ -119,6 +119,13 @@ bash ~/.local/share/agent-brain/model/SCRIPTS/skill_link.sh boyscout ~/.agents
 bash ~/.local/share/agent-brain/model/SCRIPTS/skill_link.sh boyscout ~/.agents --apply
 ```
 
+The same installer accepts a repo-owned skill directory and can link it into every detected runtime:
+
+```bash
+bash ~/.local/share/agent-brain/model/SCRIPTS/skill_link.sh /path/to/project/skills/confold
+bash ~/.local/share/agent-brain/model/SCRIPTS/skill_link.sh /path/to/project/skills/confold --apply
+```
+
 ## Repository layout
 
 ```

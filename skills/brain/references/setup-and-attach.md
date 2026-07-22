@@ -58,3 +58,14 @@ bash <agent-brain>/model/SCRIPTS/skill_link.sh brain ~/.agents --apply
 ```
 
 The runtime should contain `~/.agents/skills/brain` as a symlink to `<agent-brain>/skills/brain`. Do not copy skill files when a symlink can be used.
+
+For a skill owned by another repository, pass its source directory instead of an agent-brain skill
+name. The same dry-run-first rule applies, and omitting `runtime_home` targets every detected runtime:
+
+```bash
+bash <agent-brain>/model/SCRIPTS/skill_link.sh /path/to/project/skills/confold
+bash <agent-brain>/model/SCRIPTS/skill_link.sh /path/to/project/skills/confold --apply
+```
+
+The source directory must contain `SKILL.md`; its basename becomes the installed skill name. Runtime
+homes receive symlinks, so updates remain owned and versioned by the source project.

@@ -30,6 +30,7 @@ summary and process exit code.
 | Module | Contract protected |
 |---|---|
 | `test_runtime_health.py` | Runtime detection and symlink/config health checks for Claude, OpenCode, shared agents, and Codex. Includes deliberately broken fixtures to prove failures are detected. |
+| `test_skill_link.py` | Dry-run safety, external repo skill paths, all-runtime linking, idempotence, and invalid-source rejection for `skill_link.sh`. |
 | `test_runtime_manager.py` | Dry-run safety plus Direction A ingestion, Direction B implantation, conflict quarantine, Codex private-file permissions, runtime isolation, and double-apply idempotence. |
 | `test_home_setup.py` | Brain-state detection, preservation of existing wrappers/templates, unambiguous current-vs-desired `_COMMON` conflict reporting, conflict backup/switch, virgin staging, and repeated apply without drift. |
 | `test_bootstrap.py` | Non-interactive explicit-brain execution, deterministic initial snapshot commits, unsigned annotated tags even with signing enabled, and dirty-repository refusal without Git mutation. |

@@ -1,7 +1,9 @@
 # skill_link.sh
 
 ## Purpose
-- Symlink a skill from the agent-brain repo (`skills/<name>/`) into runtime skills directories (`~/.agents/skills/`, `~/.claude/skills/`, etc.).
+- Symlink a skill into runtime skills directories (`~/.agents/skills/`, `~/.claude/skills/`, etc.).
+- Accept either an agent-brain skill name (`skills/<name>/`) or an explicit path to a skill owned by
+  another repository.
 - For manual installation of non-brain skills (boyscout, etc.). The brain skill is installed automatically by `bootstrap-zero.sh`.
 
 ## Safety model
@@ -15,12 +17,18 @@
 # Link into all detected runtimes (dry-run)
 skill_link.sh boyscout
 
+# Link a repo-owned external skill into all detected runtimes (dry-run)
+skill_link.sh /path/to/project/skills/confold
+
 # Link into one runtime only
 skill_link.sh boyscout ~/.agents
 
 # Execute
 skill_link.sh boyscout ~/.agents --apply
 ```
+
+An explicit source directory must contain `SKILL.md`. Its directory basename becomes the installed
+skill name. The source remains owned by its project; runtime homes receive symlinks rather than copies.
 
 ## Legacy
 
