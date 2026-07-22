@@ -199,18 +199,18 @@ old: it was independently confirmed across multiple sessions.
 
 ---
 
-## your-project / card-simulator-claude-plugin
+## your-project / demo-app-agent-config
 
 ### [XS][docs-gap] cs_smoke_full missing from ZSH Wrappers table
 - status: pending
 - detected: 2026-04-16 · session PROJ-200
 - last_seen: 2026-04-23 · session PROJ-255
 - times_seen: 2
-- location: card-platform-team/Card Simulator/claude-plugin/CLAUDE.md
+- location: example-org/Demo App/agent-config/AGENTS.md
 - type: docs-gap
 - effort: XS
 - risk: low
-- context: implementing PROJ-200 (Card Simulator workspace setup)
+- context: implementing PROJ-200 (Demo App workspace setup)
 - how_found: ran cs_help and compared output against CLAUDE.md wrappers table
 - action: Add row `| cs_smoke_full | Like cs_smoke but shows DB diffs per operation |`
 ```

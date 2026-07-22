@@ -65,5 +65,5 @@ and what was ticketed (with URLs).
 
 ## Provenance
 
-This ticket (PROJ-368) and the boyscout hardening work were produced by running this mode by hand
-across several sessions — the procedure above is that flow, made repeatable.
+This procedure was refined through repeated real-world runs and is kept provider-neutral so it can
+be reused without exposing environment-specific tickets or organizational context.

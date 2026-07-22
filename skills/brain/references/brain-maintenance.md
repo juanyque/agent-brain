@@ -49,9 +49,9 @@ The process supports two operational modes, determined by the presence of `_STAG
 ### 3.2. Propose the next batch (REQUIRED `AskUserQuestion` gate)
 
 - **Required:** invoke `AskUserQuestion` describing exactly ONE batch you propose to execute. The question MUST include:
-  - The scope (e.g. "Journal/ daily notes by year", "ISSUES/Card Platform International/", "root SEAR-*.md tickets").
+  - The scope (e.g. "Journal/ daily notes by year", "ISSUES/Example Payments/", "root SEAR-*.md tickets").
   - The kind of moves (purely mechanical date-based / content classification / scaffolding).
-  - The destinations, file counts, and the specific classification decisions implied (e.g. "I propose treating Card Platform International as active → `WIP/`. Alternative: BACKLOG/ if it's not active right now.").
+  - The destinations, file counts, and the specific classification decisions implied (e.g. "I propose treating Example Payments as active → `WIP/`. Alternative: BACKLOG/ if it's not active right now.").
   - A way to opt out: at minimum offer "proceed", "redirect (different scope/destination)", "stop here for this session".
 - **Forbidden:** chaining batches without a separate `AskUserQuestion` per batch. Do not present an N-batch plan and execute it on a single approval; each batch is its own gate.
 - **Forbidden:** treating "mechanical" moves (e.g. daily notes by year) as exempt. The user must approve the SCOPE of even mechanical batches.

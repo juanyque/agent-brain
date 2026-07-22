@@ -44,11 +44,11 @@ only the base skill name (e.g. `boyscout`, not `boyscout_juan.garcia`).
 **Target key convention:** The `target` field is the logical grouping key used to
 batch related findings into a single PR. Format: `<repo> / <component-name>`.
 
-- Use the repo short name (e.g. `your-project`, `all-the-things`)
+- Use the repo short name (e.g. `your-project`, `demo-app`)
 - Use a logical component name that maps to "what PR would fix all of these":
   - `boyscout-skill` → groups SKILL.md + references/*.md for the boyscout skill
-  - `card-simulator-claude-plugin` → groups CLAUDE.md, scripts, zshrc for the Card Simulator plugin
-  - `card-simulator-docs` → groups tooling.md and other docs in all-the-things
+  - `demo-app-agent-config` → groups AGENTS.md, scripts, and shell configuration for the Demo App
+  - `demo-app-docs` → groups tooling.md and other docs in the example organization repository
 - When in doubt, file-level granularity (`CLAUDE.md`) is acceptable — a PR touching one file is still a valid grouping
 - Use the same target key for findings across multiple sessions that belong to the same logical fix
 

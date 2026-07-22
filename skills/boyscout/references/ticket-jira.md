@@ -1,6 +1,6 @@
 # ticket-jira — Jira backend (optional)
 
-Create tickets in the ticket tracker using the Jira MCP tools (`mcp__jira__createJiraIssue`, etc.).
+Create tickets through a Jira provider available in the active runtime.
 
 ## Prerequisites
 
@@ -15,7 +15,8 @@ Create tickets in the ticket tracker using the Jira MCP tools (`mcp__jira__creat
 
 ## Create issue
 
-Call `mcp__jira__createJiraIssue` with type `Task`, using the body format from [ticket-template.md](ticket-template.md). Resolve parent epic via `mcp__jira__getJiraIssue` if a ticket-prefixed branch was detected.
+Use the runtime's Jira create operation and the body format from [ticket-template.md](ticket-template.md).
+Concrete operation names and pre-authorization belong to private environment configuration.
 
 ## After creation
 

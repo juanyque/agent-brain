@@ -79,7 +79,7 @@ Entry format (one block per piece of evidence):
 
 ```
 ### <hook — one line: the "wow", and for whom>
-- Type: trace | screenshot | query (Snowflake/Chronosphere) | snippet | before/after | metric
+- Type: trace | screenshot | query | monitoring snapshot | snippet | before/after | metric
 - Artifact: <formatted block | image link | query + result + dashboard link | file:line>
 - Context: <1–2 lines: why it matters, what it proves in the demo>
 - <date> · <TICKET-ID>
@@ -106,7 +106,7 @@ The doc is structured so a `git diff` between two commits reads as a series of a
 
 The destination path is derived from cwd + tracker, not from session label:
 
-- `<project-area>` — the project umbrella the work belongs to. Map cwd → known area (e.g. `~/workspace/all-the-things/demo-app/` → `Card Platform International`). If unknown, ask the user.
+- `<project-area>` — the project umbrella the work belongs to. Map cwd → known area (e.g. `~/workspace/example-org/demo-app/` → `Example Payments`). If unknown, ask the user.
 - `<repo>` — repo or sub-system the work touches (e.g. `Demo App`, `team-tools`, `org-marketplace`). Match the existing `WIP/<project-area>/<repo>/` convention.
 - `<ticket-folder>` — folder named `<TICKET-ID> - <Short title>/`. Folder default (not flat file) — even if the ticket has no attachments yet, the folder is a stable container for later supporting artefacts.
 - File inside: `<TICKET-ID> - <Short title>.md`.

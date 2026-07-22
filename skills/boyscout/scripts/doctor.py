@@ -37,7 +37,7 @@ def check_dependencies(skill_dir):
     problems = []
     skill_md = os.path.join(skill_dir, "SKILL.md")
     text = read(skill_md)
-    referenced = sorted(set(re.findall(r"references/[A-Za-z0-9_-]+\.common\.md", text)))
+    referenced = sorted(set(re.findall(r"references/[A-Za-z0-9_-]+\.md", text)))
     if not referenced:
         problems.append("SKILL.md references no reference files (unexpected)")
     for rel in referenced:
@@ -62,7 +62,7 @@ def check_type_enum(skill_dir):
     # reverse: every detection-*.md corresponds to a known deep type
     refs = os.path.join(skill_dir, "references")
     for fn in os.listdir(refs):
-        m = re.match(r"detection-(.+)\.common\.md$", fn)
+        m = re.match(r"detection-(.+)\.md$", fn)
         if m and m.group(1) not in DEEP_TYPES:
             problems.append(f"detection-{m.group(1)}.md has no matching entry in DEEP_TYPES")
     return problems

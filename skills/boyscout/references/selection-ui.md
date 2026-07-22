@@ -17,7 +17,7 @@ Example grouped presentation:
 1. [XS][skill-gap] allowed-tools missing gh for PR guard   [NEW · ×1]
 2. [XS][skill-gap] summary report variant missing          [PENDING · Apr 21 · ×2]
 
-━━━ your-project / card-simulator-claude-plugin ━━━━━
+━━━ your-project / demo-app-agent-config ━━━━━━━━━━━━
 3. [XS][docs-gap]  cs_smoke_full missing from ZSH table    [STALE? · Apr 8 · ×1]
 ```
 
@@ -83,7 +83,7 @@ Found N improvement opportunities:
 1. [XS][skill-gap]  user-skill/boyscout/SKILL.md — allowed-tools missing gh   [NEW · ×1]
 2. [XS][skill-gap]  user-skill/boyscout/SKILL.md — summary report variant     [PENDING · Apr 21 · ×2]
 
-━━━ all-the-things / card-simulator-docs ━━━━━━━━━━━━━━━━━━━━━━━━
+━━━ example-org / demo-app-docs ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 3. [S] [docs-gap]   tooling.md — Bruno collection tree stale                  [NEW · ×1]
 4. [S] [missing-test] orders/ — No integration tests for cancellation flow    [STALE? · Apr 8 · ×1]
 

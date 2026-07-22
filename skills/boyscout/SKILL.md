@@ -14,9 +14,7 @@ allowed-tools:
   - Bash(python3 scripts/backlog.py:*)
   - Bash(python3 scripts/doctor.py:*)
   - Bash(gh pr view:*)
-  - Bash(gh issue create:*)
   - Bash(gh issue view:*)
-  - Bash(glab issue create:*)
 ---
 
 # boyscout
@@ -215,7 +213,7 @@ Run `/boyscout` in a repo with known issues and confirm:
 - Multiple findings with the same target produce a single PR
 - Ticketed items appear in the ticket tracker with all context fields populated
 - An attack-now on a `pending` backlog entry that lands successfully removes the entry (consume-on-attack); failed attacks leave the entry intact.
-- Step 4B's fallback ladder routes correctly: a ticket-prefixed branch picks up its project/parent automatically; a non-prefixed branch in a git repo prompts for the project; running outside a git repo (or with `skill-gap` findings) defaults to `PROJ` + the current KTLO epic and asks for confirmation
+- Step 4B derives backend and project only from explicit repository/user context; provider failure preserves the backlog entry and never silently reroutes it
 - Skipped new findings appear in `~/.boyscout/backlog.md` after the run
 - Re-running boyscout after a skip increments `times_seen` for the re-detected finding (no duplicate entry)
 - Running `/boyscout clean` shows the full backlog grouped by target; selecting findings and confirming removes them
