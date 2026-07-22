@@ -207,7 +207,7 @@ The runtime skill exposes deterministic helper tools under its installed `script
   daily registration with the expected runtime/cwd recovery command, and/or verifies
   active WIP notes are registered in `WIP/WIP.md`. Args: `--brain-root`, optional session
   tuple (`--session-id`, `--runtime`, `--cwd`, `--date`), and repeatable `--wip-note`.
-- `session_close.py` — idempotent session-close ceremony. Subcommands: `handoff <session-id>` (→ handoff-only), `consolidate <session-id> [--archive]` (→ consolidated, optional `git mv` to `QUARANTINE/TRASH/`). Archive apply refuses untracked notes or occupied destinations before editing the note and rolls back note content if the move fails. Args: `--brain-root`, `--apply`. Dry-run by default.
+- `session_close.py` — idempotent session-close ceremony. Subcommands: `handoff <session-id>` (→ handoff-only), `consolidate <session-id> [--archive]` (→ consolidated, optional `git mv` to `QUARANTINE/TRASH/`). Archive apply refuses untracked notes or occupied destinations before editing, stages the final consolidated destination, and restores the original path and content if the move or staging step fails. Args: `--brain-root`, `--apply`. Dry-run by default.
 - `session_bootstrap.py` — legacy: inspect daily/session state and print verbose kickoff prompt. Preserved for callers that depend on it; prefer `session_open.py` for new sessions.
 - `maintenance_scheduler.py` — decide which recurring Daily/Weekly/Monthly/Yearly/session maintenance jobs are due.
 - `standardize_assessment.py` — assess an organized brain in maintenance mode and generate/update `WIP/STANDARDIZE_PROCESS.md`.

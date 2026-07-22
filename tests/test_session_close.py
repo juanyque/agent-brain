@@ -130,11 +130,12 @@ class SessionCloseTests(unittest.TestCase):
 
             content = note.read_text(encoding="utf-8")
             archived = brain / "QUARANTINE" / "TRASH" / note.name
+            archived_exists = archived.exists()
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("not tracked by Git", result.stderr)
         self.assertEqual(content, original)
-        self.assertFalse(archived.exists())
+        self.assertFalse(archived_exists)
 
     def test_archive_dry_run_reports_untracked_note(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -176,15 +177,22 @@ class SessionCloseTests(unittest.TestCase):
             first = run(*command)
             archived = brain / "QUARANTINE" / "TRASH" / note.name
             first_content = archived.read_text(encoding="utf-8")
+            archived_rel = archived.relative_to(brain)
+            staged_content = git(brain, "show", f":{archived_rel}")
+            unstaged_diff = git(brain, "diff", "--quiet", "--", str(archived_rel))
             second = run(*command)
             second_content = archived.read_text(encoding="utf-8")
+            note_exists = note.exists()
 
         self.assertEqual(first.returncode, 0, first.stderr)
         self.assertEqual(second.returncode, 0, second.stderr)
-        self.assertFalse(note.exists())
+        self.assertFalse(note_exists)
         self.assertEqual(first_content, second_content)
         self.assertIn("- Status: consolidated", second_content)
         self.assertNotIn("wip", second_content.split("---", 2)[1])
+        self.assertEqual(staged_content.returncode, 0, staged_content.stderr)
+        self.assertEqual(staged_content.stdout, first_content)
+        self.assertEqual(unstaged_diff.returncode, 0, unstaged_diff.stderr)
         self.assertIn("already consolidated and archived", second.stdout)
 
     def test_archive_failure_rolls_back_note_content(self) -> None:
@@ -218,6 +226,47 @@ class SessionCloseTests(unittest.TestCase):
 
         self.assertEqual(result, 1)
         self.assertEqual(content, original)
+
+    def test_archive_staging_failure_rolls_back_path_content_and_index(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            self.assertEqual(git(brain, "init", "-q").returncode, 0)
+            git(brain, "config", "user.email", "tests@example.invalid")
+            git(brain, "config", "user.name", "agent-brain tests")
+            note = create_note(brain, "session-123")
+            git(brain, "add", str(note.relative_to(brain)))
+            self.assertEqual(git(brain, "commit", "-qm", "fixture").returncode, 0)
+            original = note.read_text(encoding="utf-8")
+            archived = brain / "QUARANTINE" / "TRASH" / note.name
+            argv = [
+                str(SCRIPT),
+                "--brain-root",
+                str(brain),
+                "--apply",
+                "consolidate",
+                "session-123",
+                "--archive",
+            ]
+
+            captured_stderr = io.StringIO()
+            with (
+                patch.object(sys, "argv", argv),
+                patch.object(session_close, "git_stage", return_value=False),
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(captured_stderr),
+            ):
+                result = session_close.main()
+            content = note.read_text(encoding="utf-8")
+            note_exists = note.exists()
+            archived_exists = archived.exists()
+            status = git(brain, "status", "--porcelain")
+
+        self.assertEqual(result, 1)
+        self.assertTrue(note_exists, captured_stderr.getvalue())
+        self.assertFalse(archived_exists)
+        self.assertEqual(content, original)
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertEqual(status.stdout, "")
 
 
 if __name__ == "__main__":

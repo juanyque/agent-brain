@@ -10,7 +10,8 @@ Subcommands:
 
 Dry-run by default; pass --apply to write changes. State transitions and archives
 are idempotent. Archival preflights Git tracking and destination safety before
-editing the note, and restores the original content if git mv fails.
+editing the note, stages the final consolidated destination, and restores the
+original path and content if the move or staging step fails.
 """
 
 from __future__ import annotations
@@ -210,6 +211,20 @@ def git_mv(src: Path, dst: Path, brain_root: Path, apply: bool) -> bool:
     return True
 
 
+def git_stage(path: Path, brain_root: Path, apply: bool) -> bool:
+    """Stage path so the index contains its final working-tree content."""
+    path_rel = path.relative_to(brain_root)
+    cmd = ["git", "add", "--", str(path_rel)]
+    if not apply:
+        print(f"  would run: {' '.join(cmd)}")
+        return True
+    result = subprocess.run(cmd, cwd=brain_root, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        print(f"ERROR: git add failed: {result.stderr.strip()}", file=sys.stderr)
+        return False
+    return True
+
+
 def main() -> int:
     args = parse_args()
     brain_root = Path(args.brain_root).expanduser().resolve()
@@ -288,6 +303,25 @@ def main() -> int:
                 if args.apply and note_path.exists():
                     note_path.write_text(original_text, encoding="utf-8")
                     print("  rolled back session-note content after archive failure", file=sys.stderr)
+                return 1
+            staged = git_stage(archive_dst, brain_root, apply=args.apply)
+            if not staged:
+                if args.apply:
+                    moved_back = git_mv(archive_dst, note_path, brain_root, apply=True)
+                    rollback_path = note_path if moved_back else archive_dst
+                    if rollback_path.exists():
+                        rollback_path.write_text(original_text, encoding="utf-8")
+                    if moved_back:
+                        print(
+                            "  rolled back session-note path and content after staging failure",
+                            file=sys.stderr,
+                        )
+                    else:
+                        print(
+                            "  rollback incomplete after staging failure; original content was "
+                            f"restored at {rollback_path.relative_to(brain_root)}",
+                            file=sys.stderr,
+                        )
                 return 1
             action = "moved" if args.apply else "would move"
             print(f"  {action}: {note_rel} → QUARANTINE/TRASH/{note_path.name}")

@@ -34,7 +34,7 @@ summary and process exit code.
 | `test_home_setup.py` | Brain-state detection, preservation of existing wrappers/templates, unambiguous current-vs-desired `_COMMON` conflict reporting, conflict backup/switch, virgin staging, and repeated apply without drift. |
 | `test_bootstrap.py` | Non-interactive explicit-brain execution, deterministic initial snapshot commits, unsigned annotated tags even with signing enabled, and dirty-repository refusal without Git mutation. |
 | `test_session_open.py` | Runtime-specific recovery commands, original cwd persistence, clean daily preparation, local/common template conflict refusal, idempotent session-note and daily registration, duplicate removal, and postcondition failures. |
-| `test_session_close.py` | Dry-run safety, idempotent handoff/consolidation, safe refusal to archive untracked notes, and repeatable tracked archival. |
+| `test_session_close.py` | Dry-run safety, idempotent handoff/consolidation, safe refusal to archive untracked notes, final staged-content integrity, rollback on move/staging failures, and repeatable tracked archival. |
 | `test_brain_check.py` | Read-only verification that active WIP notes are registered in `WIP/WIP.md`, for both Obsidian wikilinks and standard Markdown links. |
 | `test_boyscout_doctor.py` | Boyscout portable reference graph, detector parity, backlog round-trip, and rejection of private-layout migration artifacts. |
 | `test_find_related_notes.py` | CLI behavior across filename/content/both note discovery modes and structured missing-brain errors. |
