@@ -49,7 +49,37 @@ as `runtime_manager.py`. Full doc: `SCRIPT.runtime-health.common.md`.
 ```bash
 python3 SCRIPTS/runtime_health.py --brain /path/to/brain
 python3 SCRIPTS/runtime_health.py --brain /path/to/brain --runtime claude
+python3 SCRIPTS/runtime_health.py --brain /path/to/brain --runtime codex --live-providers codex
 ```
 
 The check is read-only. Inactive runtimes are skipped; broken mappings, skill links, shared-memory
-links, and private-file permissions fail with a non-zero exit code.
+links, private-file permissions, invalid profiles, and unavailable required live providers fail
+with a non-zero exit code. Live MCP discovery is opt-in and sanitizes runtime output.
+
+## `profile_overlays.py`
+
+Project standalone private rules, skills, agents, and themes declared by the selected environment
+profile. Full doc: `SCRIPT.profile-overlays.common.md`.
+
+```bash
+python3 SCRIPTS/profile_overlays.py \
+  --brain /path/to/brain \
+  --runtime codex \
+  --target-root rule=/path/to/runtime/rules
+```
+
+The command is dry-run by default. `--apply` creates brain-sourced symlinks and first moves any
+conflicting runtime target into `INBOX/_PROFILE_OVERLAYS/`; it never overwrites quarantine data.
+
+## `profile_secrets.py`
+
+Check name-only availability for environment, keychain, and runtime-native secret references.
+Full doc: `SCRIPT.profile-secrets.common.md`.
+
+```bash
+python3 SCRIPTS/profile_secrets.py --brain /path/to/brain
+python3 SCRIPTS/profile_secrets.py --brain /path/to/brain --keychain macos
+```
+
+The preflight never returns a secret value. Required unresolved references fail closed; optional
+references remain visible without failing the command.

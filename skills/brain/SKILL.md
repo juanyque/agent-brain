@@ -201,6 +201,7 @@ The runtime skill exposes deterministic helper tools under its installed `script
 - `find_home.py` — resolve candidate brains from a path (notes-agnostic: obsidian, generic, empty).
 - `find_related_notes.py` — find notes related to project keywords.
 - `memory_query.py` — rank a few curated-memory candidates from index metadata without loading note bodies. Use only when prior cross-session guidance may help; open only relevant returned notes.
+- `profile_context.py` — resolve one or more generic capabilities through the active environment profile. It can inspect sanitized Codex MCP registry/auth readiness with `--live`, returns runtime invocation hints without credentials/endpoints, and optionally includes issue-tracking policy. A caller that can enumerate its active tool names safely may pass `--available-tool` plus `--tool-catalog-complete`; an absent exact MCP invocation then fails closed. Claude live discovery is refused because its registry command may rewrite settings. Profile resolution never grants tool permission.
 - `session_open.py` — session-start ceremony: emits a compact digest, optionally prepares a missing daily after rollover review, creates/updates the session note, idempotently upserts daily `# Sessions`, and verifies postconditions. Args: `--brain-root`, `--session-id` (real id from the agent runtime — never a timestamp), `--runtime` (claude|opencode|codex; controls resume-command format), `--session-label` (opt), `--cwd` (opt), `--prepare-daily` (opt), `--apply`. Dry-run by default.
 - `brain_check.py` — read-only postcondition checker. Verifies a session has exactly one
   daily registration with the expected runtime/cwd recovery command, and/or verifies
@@ -226,6 +227,7 @@ Tool documentation lives next to the scripts using Obsidian-safe common names:
 - `TOOL.cleanup-empty-action-categories.md`
 - `TOOL.maintenance-scheduler.md`
 - `TOOL.memory-query.md`
+- `TOOL.profile-context.md`
 - `TOOL.session-bootstrap.md`
 - `TOOL.standardize-assessment.md`
 

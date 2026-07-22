@@ -1,7 +1,7 @@
 # Backlog → Tickets mode
 
-> **Backend:** Select the ticket backend from explicit repository/user context. Concrete provider
-> operation names and write permissions remain outside this public reference.
+> **Backend:** Resolve `issues.*` through the active environment profile before this flow. Provider
+> details and write permissions remain outside this public reference.
 
 Loaded when `/boyscout` is invoked as `/boyscout tickets`. Use it to convert an aged or themed slice of
 the backlog into tracked tickets — typically an epic plus child tickets — when the findings are too
@@ -25,15 +25,17 @@ running `backlog.py dedup-check` so duplicates are merged, not ticketed twice.
 split them. Each group becomes one ticket (or one workstream/acceptance-criteria block within a ticket).
 
 **T3. Accept a template ticket.** Ask the user for an existing ticket URL/key to inherit from. Use the
-selected backend's read operation and inherit only fields the user confirms. If no template is given,
-ask for the project/parent context instead of assuming an organization-specific default.
+profile-resolved `issues.read` capability and the selected `field_inheritance` policy. If no template is
+given, follow the profile's default-project and parent-resolution policy; ask the user whenever those
+values are absent or confirmation is required.
 
-**T4. Create the parent + children.** Use the selected backend's create operation. Body format per
-[ticket-template.md](ticket-template.md), all content in English unless explicit project policy says
-otherwise.
+**T4. Create the parent + children.** Use the profile-resolved `issues.create` capability and inherit
+only fields named by the active policy. Body format per [ticket-template.md](ticket-template.md), using
+the profile's content language.
 
-Provider-specific formatting workarounds belong in private configuration or an optional provider
-adapter, never in this public workflow.
+When `description_write` is `create_then_update_markdown`, create with a minimal description and then
+apply the real body through the profile-resolved `issues.update` capability. Other providers use their
+declared write behavior; never infer a provider-specific workaround in this public workflow.
 
 **T5. Prune consumed findings.** Once a finding is captured in a ticket, remove it from the backlog with
 `backlog.py remove --target … --summary …` (the selected tracker is now the source of truth). Prune as each ticket is
@@ -48,6 +50,7 @@ findings left in the backlog and why.
   one ticket.
 - **Don't lose board placement.** The whole point of the template ticket (T3) is inheriting epic/labels/
   components; a ticket created without them disappears from the team's filters.
-- **Honor provider policy.** Do not copy an environment-specific formatting workaround into this public flow.
+- **Honor provider write policy.** If the profile requires a create-then-update sequence, record the
+  created ticket before the update so interruption cannot cause a duplicate on retry.
 - **One ticket can still need multiple PRs.** If a themed ticket spans files owned by different CODEOWNERS
   teams, note that in the ticket so it ships as sibling PRs (one per ownership boundary), not one mega-PR.

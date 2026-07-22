@@ -1,7 +1,7 @@
 ---
 name: boyscout
 description: "Leave things better than you found them: silently archive improvement opportunities to a backlog during the primary task; the user opts in to attack a finding now (worktree), route it to a ticket, or clean the backlog on demand"
-version: 0.10.0
+version: 0.11.0
 argument-hint: "<optional: 'clean' to manage the backlog, 'deep [days]' for multi-session analysis (default 2 days), 'batch' to work through findings, 'tickets' to convert findings to tickets, 'doctor' for the skill self-test, or comma-separated hints, e.g. 'flaky tests, dead code'>"
 allowed-tools:
   - Agent
@@ -13,6 +13,7 @@ allowed-tools:
   - Bash(fzf:*, mkdir:*, rm -rf /tmp/boyscout)
   - Bash(python3 scripts/backlog.py:*)
   - Bash(python3 scripts/doctor.py:*)
+  - Bash(python3 ~/.agents/skills/brain/scripts/profile_context.py:*)
   - Bash(gh pr view:*)
   - Bash(gh issue view:*)
 ---
@@ -110,15 +111,56 @@ Fix each selected item in an isolated worktree on a branch from the up-to-date b
 
 ### Step 4B — Create ticket
 
-Determine ticket backend and project (default: GitHub Issues via `gh`):
+Resolve the ticket capabilities before choosing a backend. If the current session is already
+connected to a brain containing `_AGENTS/SHARED/environment.json`, run the public resolver for
+the active runtime (the calling agent knows its runtime):
 
-1. **Current branch matches `<PROJECT>-NNN_*` or `<PROJECT>-NNN-*`:** use that project key for labels/ticket reference.
+```bash
+python3 ~/.agents/skills/brain/scripts/profile_context.py \
+  --brain-root "<brain-root>" \
+  --cwd "$PWD" \
+  --runtime <claude|codex|opencode|generic> \
+  --include-policy \
+  --capability issues.create \
+  --capability issues.read \
+  --capability issues.search \
+  --capability issues.update
+```
+
+Add `--live` for Codex registry/auth discovery. Do not add it for Claude: its official MCP list
+command may rewrite runtime settings even when used as a health check. In Claude, resolve without
+`--live` and use the active tool catalog as the readiness gate. When the agent can enumerate the
+complete catalog, append one `--available-tool <exact-name>` argument per exposed tool plus
+`--tool-catalog-complete`; resolution then fails if the selected MCP invocation is absent.
+
+The resolver returns sanitized JSON containing the selected profile, provider, abstract
+operation, readiness, and a runtime invocation hint. It never returns credentials, endpoints,
+or raw runtime configuration.
+
+- Treat `invocation` as an adapter hint. A complete caller-supplied catalog verifies exact active
+  exposure; otherwise `tool_exposure` remains `unverified` and the caller must check it before use.
+  Registry presence alone is insufficient.
+- Public skill frontmatter intentionally does not pre-authorize provider-specific external writes.
+  The resolved invocation must use the runtime's normal consent flow. Future private overlays may
+  grant narrower environment-specific permissions without changing this public skill.
+- Use the provider `service` to choose the matching backend reference below. Do not infer a
+  different backend from branch naming after the profile selected one.
+- Use returned `issue_tracking` policy for project detection, defaults, parent resolution, and
+  content language. Explicit user/project instructions still take precedence.
+- If live discovery or a required capability fails, leave the finding in the backlog and report
+  the missing provider/auth/tool state. Never silently switch ticket trackers.
+- If no brain/profile is active, preserve the portable fallback: GitHub Issues via `gh`, with
+  explicit user selection when project/backend context is ambiguous.
+
+Then determine project context:
+
+1. **Current branch matches a selected profile `branch_patterns` entry:** use the captured issue/project context.
 2. **cwd is a git repo but branch has no ticket prefix:** ask the user *"No ticket context detected. Which project should host this ticket?"*
 3. **cwd is not a git repo, OR finding type is `skill-gap`:** ask the user for the target repo/project.
 
 Then create using the appropriate backend:
 - **GitHub Issues (default):** see [references/ticket-github.md](references/ticket-github.md) — uses `gh issue create`.
-- **Jira:** see [references/ticket-jira.md](references/ticket-jira.md) — requires Jira MCP.
+- **Jira:** see [references/ticket-jira.md](references/ticket-jira.md) — requires a resolved and exposed Jira MCP operation.
 - **GitLab Issues:** see [references/ticket-gitlab.md](references/ticket-gitlab.md) — uses `glab issue create`.
 
 Use the body format in [references/ticket-template.md](references/ticket-template.md) regardless of backend.
@@ -199,7 +241,7 @@ When invoked as `/boyscout tickets`, convert an aged/themed slice of the backlog
 ## Failure modes
 
 - **Backlog file malformed** (e.g. a `- status:` block whose `###` heading was lost — the corruption that motivated the tooling work): do not guess the structure. Run `scripts/backlog.py validate` to locate the broken block, then fix it before any other mutation.
-- **Ticket backend unavailable** (`gh`/`glab` CLI errors or MCP failures): Step 4B cannot create tickets. Leave the finding in the backlog and report the failure — never silently drop a finding meant to be ticketed.
+- **Ticket backend unavailable** (profile resolution, live registry/auth, active tool exposure, `gh`/`glab`, or provider call failure): Step 4B cannot create tickets. Leave the finding in the backlog and report the exact failed boundary — never silently drop or reroute a finding meant to be ticketed.
 - **`fzf` installed but no TTY** (non-interactive shell, piped invocation): the multi-select cannot render. Fall back to `AskUserQuestion` with a numbered list (the Step 2 fallback).
 - **Partial state on ticket creation** (ticket creation succeeds but the Post-action backlog removal fails): the entry is still present, so a naive retry creates a *duplicate* ticket. On resume, remove the already-ticketed entry before re-running Step 4B and confirm in the ticket tracker that no duplicate exists.
 
@@ -213,7 +255,7 @@ Run `/boyscout` in a repo with known issues and confirm:
 - Multiple findings with the same target produce a single PR
 - Ticketed items appear in the ticket tracker with all context fields populated
 - An attack-now on a `pending` backlog entry that lands successfully removes the entry (consume-on-attack); failed attacks leave the entry intact.
-- Step 4B derives backend and project only from explicit repository/user context; provider failure preserves the backlog entry and never silently reroutes it
+- Step 4B resolves profile-backed `issues.*` capabilities before backend/project selection; live provider failure preserves the backlog entry, while the no-profile fallback asks for explicit backend/project context when ambiguous
 - Skipped new findings appear in `~/.boyscout/backlog.md` after the run
 - Re-running boyscout after a skip increments `times_seen` for the re-detected finding (no duplicate entry)
 - Running `/boyscout clean` shows the full backlog grouped by target; selecting findings and confirming removes them

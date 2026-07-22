@@ -36,7 +36,15 @@ summary and process exit code.
 | `test_session_open.py` | Runtime-specific recovery commands, original cwd persistence, clean daily preparation, local/common template conflict refusal, idempotent session-note and daily registration, duplicate removal, and postcondition failures. |
 | `test_session_close.py` | Dry-run safety, idempotent handoff/consolidation, safe refusal to archive untracked notes, and repeatable tracked archival. |
 | `test_brain_check.py` | Read-only verification that active WIP notes are registered in `WIP/WIP.md`, for both Obsidian wikilinks and standard Markdown links. |
+| `test_boyscout_doctor.py` | Boyscout reference-name integrity after the public `.common.md` abstraction. |
 | `test_find_related_notes.py` | CLI behavior across filename/content/both note discovery modes and structured missing-brain errors. |
+| `test_runtime_profiles.py` | Sanitized profile selection, capability-route integrity, and the public/private content boundary. |
+| `test_environment_profiles.py` | Stdlib profile loading, strict validation, deterministic selection, and provider preflight states. |
+| `test_profile_overlays.py` | Runtime-neutral overlay planning, dry-run safety, conflict quarantine, path validation, and double-apply idempotence. |
+| `test_profile_secrets.py` | Value-free environment, metadata-only macOS keychain, and sanitized runtime-catalog secret preflight. |
+| `test_profile_integration.py` | End-to-end profile selection, value-free preflight, conflict quarantine, projection, and double-apply behavior under an isolated temporary `HOME`. |
+| `test_runtime_provider_discovery.py` | Sanitized Codex/Claude MCP registry discovery and readiness normalization. |
+| `test_profile_context.py` | Skill-facing capability resolution, runtime invocation hints, and fail-closed exact matching against complete caller-supplied active tool catalogs. |
 
 ## Test design rules
 
@@ -55,3 +63,7 @@ Before handing changes back for review, also run:
 python3 -m py_compile skills/brain/scripts/*.py
 git diff HEAD --check
 ```
+
+GitHub Actions runs the complete stdlib suite on both `ubuntu-latest` and `macos-latest`. The
+temporary-`HOME` integration test therefore exercises the same end-to-end contract on real Linux
+and macOS runners rather than relying on a patched platform identifier.

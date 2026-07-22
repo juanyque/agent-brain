@@ -61,6 +61,35 @@ When a brain contains `_AGENTS/SHARED/memory/`, Codex receives a stable pointer 
 `~/.agents/brain-memory`; the bundled query tool ranks a small number of indexed notes on
 demand. Codex's own generated `~/.codex/memories/` directory remains local and separate.
 
+### Environment profiles
+
+Environment profiles provide a runtime-neutral contract for selecting issue trackers,
+repositories, project conventions, and optional private resources without embedding those
+values in the public core. Profiles live in the private brain under
+`_AGENTS/SHARED/profiles/`; global runtime symlinks remain stable when profiles change.
+
+See [`docs/runtime-profiles.md`](docs/runtime-profiles.md) for the versioned schema, selection
+algorithm, precedence, safety rules, and sanitized examples. `model/SCRIPTS/runtime_health.py`
+loads and validates these files when they exist in a brain. Use `--profile <id>` for explicit
+selection or `--cwd <path>` to exercise project-rule selection. MCP/API availability is
+delegated to the active runtime adapter; the read-only check never treats a configured
+provider name as proof of live access.
+
+Skills can call `skills/brain/scripts/profile_context.py` to resolve generic capabilities into
+sanitized provider context. `--live` checks the Codex MCP registry/auth boundary, while the caller
+can pass exact `--available-tool` names plus `--tool-catalog-complete` to enforce active exposure.
+An omitted or incomplete catalog remains unverified. Claude live discovery is refused because its
+official registry command may rewrite runtime settings.
+
+Runtime adapters can project standalone private profile resources with
+`model/SCRIPTS/profile_overlays.py`. The adapter supplies explicit roots for each selected resource
+kind; the dry-run-first projector links brain-owned sources, quarantines conflicts, and is safe to
+apply repeatedly without rewriting runtime configuration.
+
+`model/SCRIPTS/profile_secrets.py` checks referenced secret names without returning their values.
+Environment presence, metadata-only macOS keychain lookup, and sanitized runtime-native catalogs
+share the same fail-closed status contract.
+
 Git is used as rollback anchor: a local snapshot commit or annotated tag is created before any
 mutation. Snapshot messages are deterministic and snapshot signing is disabled so unattended
 bootstrap runs never open an editor or a GPG prompt. Nothing is pushed automatically.
@@ -95,6 +124,8 @@ bash ~/.local/share/agent-brain/model/SCRIPTS/skill_link.sh boyscout ~/.agents -
 ```
 agent-brain/
 ├── bootstrap-zero.sh     # curl entry point (clones repo, dispatches to orchestrator)
+├── docs/                 # public architecture and versioned profile schemas
+├── examples/profiles/    # sanitized environment-profile examples
 ├── model/                # the operating model — what _COMMON symlinks to inside a brain
 │   ├── AGENTS.common.md  # shared agent instructions
 │   ├── BRAIN.common.md   # brain structure & conventions
@@ -107,6 +138,8 @@ agent-brain/
 │       ├── home_setup.py        # structure (cleanup, staging, _COMMON, wrappers)
 │       ├── runtime_manager.py   # runtime config (Direction A/B, conflict, skill link)
 │       ├── runtime_health.py    # post-apply checks for all supported runtimes
+│       ├── profile_overlays.py  # optional private-resource projection
+│       ├── profile_secrets.py   # value-free secret-reference preflight
 │       ├── runtime_install.sh   # low-level symlink helper (called by runtime_manager)
 │       └── skill_link.sh        # manual skill installer for non-default skills
 └── skills/
@@ -130,6 +163,9 @@ repositories:
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+CI executes the same suite on macOS and Linux. The profile integration test uses an isolated
+temporary `HOME` and verifies dry-run safety, conflict quarantine, and double-apply idempotence.
 
 See [`tests/README.md`](tests/README.md) for the covered contracts, individual-test
 commands, and fixture rules.

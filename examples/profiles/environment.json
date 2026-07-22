@@ -1,0 +1,11 @@
+{
+  "$schema": "../../docs/schemas/profile-selection-v1.schema.json",
+  "schema_version": 1,
+  "default_profile": "work",
+  "project_rules": [
+    {
+      "path_prefix": "~/workspace/example-org",
+      "profile": "work"
+    }
+  ]
+}

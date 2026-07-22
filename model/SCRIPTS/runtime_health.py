@@ -12,12 +12,19 @@ import stat
 from pathlib import Path
 
 from brain_state import AGENTS_DIR_NAME
+from environment_profiles import (
+    SELECTION_FILE,
+    ProfileError,
+    provider_statuses,
+    resolve_profile,
+)
 from runtime_manager import (
     RUNTIME_CONFIGS,
     brain_agents_subdir,
     local_dir_for,
     resolve_repo_root,
 )
+from runtime_provider_discovery import discover_mcp_servers
 
 
 RUNTIME_LABELS = {
@@ -38,6 +45,9 @@ class HealthCheck:
     def fail(self, label: str, detail: str) -> None:
         print(f"  FAIL {label} ({detail})")
         self.failed = True
+
+    def info(self, label: str, detail: str) -> None:
+        print(f"  INFO {label} ({detail})")
 
     def link(self, label: str, link: Path, target: Path) -> None:
         if not link.is_symlink():
@@ -150,6 +160,51 @@ def check_runtime(
             )
 
 
+def check_environment_profile(
+    brain_root: Path,
+    check: HealthCheck,
+    *,
+    explicit_profile: str | None = None,
+    cwd: Path | None = None,
+    live_runtime: str | None = None,
+) -> None:
+    print("-- environment profile --")
+    if not (brain_root / SELECTION_FILE).is_file():
+        print("  SKIP (no environment profile selection found)")
+        return
+    try:
+        resolved = resolve_profile(
+            brain_root,
+            explicit_profile=explicit_profile,
+            cwd=cwd,
+        )
+    except ProfileError as exc:
+        check.fail("environment profile", str(exc))
+        return
+
+    check.ok(f"profile {resolved.profile_id} selected via {resolved.source}")
+    discovery = discover_mcp_servers(live_runtime) if live_runtime else None
+    if discovery and discovery.state != "ok":
+        check.fail(
+            f"{live_runtime} provider discovery",
+            discovery.detail,
+        )
+        return
+    if discovery:
+        check.ok(f"{live_runtime} MCP registry discovered")
+    for status in provider_statuses(
+        resolved.document,
+        mcp_servers=discovery.servers if discovery else None,
+    ):
+        label = f"provider {status.provider_id}"
+        if status.state in {"missing", "unavailable"} and status.required:
+            check.fail(label, status.detail)
+        elif status.state == "available":
+            check.ok(label)
+        else:
+            requirement = "required" if status.required else "optional"
+            check.info(label, f"{requirement}; {status.detail}")
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Read-only health check for brain-managed runtime wiring"
@@ -159,6 +214,19 @@ def main() -> int:
         "--runtime",
         action="append",
         help="Runtime to verify. Repeat for multiple runtimes; defaults to all supported runtimes.",
+    )
+    parser.add_argument(
+        "--profile",
+        help="Explicit environment profile id (overrides env, project rules, and default)",
+    )
+    parser.add_argument(
+        "--cwd",
+        help="Working directory used for project-rule profile selection (defaults to current directory)",
+    )
+    parser.add_argument(
+        "--live-providers",
+        choices=("claude", "codex", "opencode", "generic"),
+        help="Inspect one runtime's MCP registry without printing its configuration",
     )
     args = parser.parse_args()
 
@@ -170,6 +238,13 @@ def main() -> int:
     runtimes = args.runtime or list(RUNTIME_CONFIGS)
     seen: set[str] = set()
     check = HealthCheck()
+    check_environment_profile(
+        brain_root,
+        check,
+        explicit_profile=args.profile,
+        cwd=Path(args.cwd).expanduser() if args.cwd else None,
+        live_runtime=args.live_providers,
+    )
     for name in runtimes:
         if name in seen:
             continue

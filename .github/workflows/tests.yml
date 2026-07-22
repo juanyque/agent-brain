@@ -1,0 +1,35 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  stdlib-contracts:
+    name: Python stdlib contracts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run contract and integration tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Check Python syntax
+        run: python3 -m compileall -q model/SCRIPTS skills tests
+
+      - name: Check whitespace errors
+        run: git diff --check

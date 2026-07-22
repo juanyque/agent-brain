@@ -1,0 +1,117 @@
+{
+  "$schema": "../../docs/schemas/environment-profile-v1.schema.json",
+  "schema_version": 1,
+  "id": "work",
+  "display_name": "Example work environment",
+  "providers": {
+    "work-tracker": {
+      "kind": "mcp",
+      "service": "issue-tracker",
+      "required": true,
+      "server": "work-tracker",
+      "secret_refs": [
+        {
+          "kind": "environment",
+          "name": "EXAMPLE_TRACKER_TOKEN",
+          "required": false
+        },
+        {
+          "kind": "keychain",
+          "name": "example-work-tracker",
+          "required": false
+        },
+        {
+          "kind": "runtime",
+          "name": "example-work-session",
+          "required": false
+        }
+      ],
+      "operations": {
+        "issues.read": "getIssue",
+        "issues.search": "searchIssues",
+        "issues.create": "createIssue",
+        "issues.update": "updateIssue"
+      }
+    },
+    "source-hosting": {
+      "kind": "cli",
+      "service": "github",
+      "required": false,
+      "command": "gh",
+      "operations": {
+        "repositories.read": "repo view",
+        "pull_requests.read": "pr view",
+        "pull_requests.create": "pr create"
+      }
+    },
+    "manual": {
+      "kind": "manual",
+      "service": "user-confirmed-fallback",
+      "required": false,
+      "operations": {}
+    }
+  },
+  "capability_routes": {
+    "issues.read": ["work-tracker", "manual"],
+    "issues.search": ["work-tracker", "manual"],
+    "issues.create": ["work-tracker"],
+    "issues.update": ["work-tracker"],
+    "repositories.read": ["source-hosting", "manual"],
+    "pull_requests.read": ["source-hosting", "manual"],
+    "pull_requests.create": ["source-hosting"]
+  },
+  "issue_tracking": {
+    "provider": "work-tracker",
+    "project_keys": ["PROJ"],
+    "default_project": "PROJ",
+    "key_patterns": ["\\bPROJ-\\d+\\b"],
+    "branch_patterns": ["^(?P<issue>PROJ-\\d+)[_-].+$"],
+    "default_issue_type": "Task",
+    "content_language": "en",
+    "field_inheritance": ["parent", "labels", "components"],
+    "parent_resolution": {
+      "strategy": "current_then_template_then_query",
+      "query": "project = PROJ AND type = Epic AND status != Done",
+      "confirmation_required": true
+    },
+    "description_write": "single_call"
+  },
+  "projects": [
+    {
+      "id": "payments",
+      "display_name": "Example Payments",
+      "aliases": ["payments-platform"],
+      "relevance_keywords": ["payments", "ledger"],
+      "path_prefixes": ["~/workspace/example-org/payments"],
+      "repositories": [
+        {
+          "id": "demo-app",
+          "display_name": "Demo App",
+          "path": "~/workspace/example-org/payments/demo-app",
+          "remote": "https://github.com/example-org/demo-app"
+        }
+      ],
+      "documentation": [
+        {
+          "kind": "url",
+          "location": "https://docs.example.com/payments"
+        }
+      ]
+    }
+  ],
+  "runtime_overlays": [
+    {
+      "runtime": "*",
+      "kind": "rule",
+      "path": "_AGENTS/SHARED/profiles/work/rules/review-policy.md",
+      "target": "review-policy.md"
+    }
+  ],
+  "operational_rules": [
+    {
+      "id": "ticket-language",
+      "summary": "Write tracker content in English.",
+      "source": "brain:AGENTS.md#Communication"
+    }
+  ]
+}

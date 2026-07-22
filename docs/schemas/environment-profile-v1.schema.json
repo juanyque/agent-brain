@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/juanyque/agent-brain/main/docs/schemas/environment-profile-v1.schema.json",
+  "title": "agent-brain environment profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "display_name",
+    "providers",
+    "capability_routes",
+    "projects"
+  ],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "display_name": {"type": "string", "minLength": 1},
+    "providers": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9-]*$"},
+      "additionalProperties": {"$ref": "#/$defs/provider"}
+    },
+    "capability_routes": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_.-]*$"},
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"}
+      }
+    },
+    "issue_tracking": {"$ref": "#/$defs/issue_tracking"},
+    "projects": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/project"}
+    },
+    "runtime_overlays": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/runtime_overlay"}
+    },
+    "operational_rules": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/operational_rule"}
+    }
+  },
+  "$defs": {
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "service", "required", "operations"],
+      "properties": {
+        "kind": {"enum": ["mcp", "cli", "api", "manual"]},
+        "service": {"type": "string", "minLength": 1},
+        "required": {"type": "boolean"},
+        "server": {"type": "string", "minLength": 1},
+        "command": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+        "operations": {
+          "type": "object",
+          "propertyNames": {"pattern": "^[a-z][a-z0-9_.-]*$"},
+          "additionalProperties": {"type": "string", "minLength": 1}
+        },
+        "secret_refs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/secret_ref"}
+        }
+      }
+    },
+    "secret_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "required"],
+      "properties": {
+        "kind": {"enum": ["environment", "keychain", "runtime"]},
+        "name": {"type": "string", "minLength": 1},
+        "required": {"type": "boolean"}
+      }
+    },
+    "issue_tracking": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "project_keys",
+        "key_patterns",
+        "branch_patterns",
+        "default_issue_type",
+        "content_language"
+      ],
+      "properties": {
+        "provider": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "project_keys": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*$"}
+        },
+        "default_project": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*$"},
+        "key_patterns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "branch_patterns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "default_issue_type": {"type": "string", "minLength": 1},
+        "content_language": {"type": "string", "pattern": "^[a-z]{2}$"},
+        "field_inheritance": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["parent", "labels", "components"]}
+        },
+        "parent_resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": {
+              "enum": [
+                "ask",
+                "current_issue",
+                "template_issue",
+                "current_then_template_then_query"
+              ]
+            },
+            "query": {"type": "string", "minLength": 1},
+            "confirmation_required": {"type": "boolean"}
+          }
+        },
+        "description_write": {
+          "enum": ["single_call", "create_then_update_markdown"]
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "display_name"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "display_name": {"type": "string", "minLength": 1},
+        "aliases": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "relevance_keywords": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "path_prefixes": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "repositories": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/repository"}
+        },
+        "documentation": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/documentation_location"}
+        }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "display_name": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "remote": {"type": "string", "format": "uri"},
+        "aliases": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "documentation_location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "location"],
+      "properties": {
+        "kind": {"enum": ["brain", "repository", "url"]},
+        "location": {"type": "string", "minLength": 1}
+      }
+    },
+    "runtime_overlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime", "kind", "path", "target"],
+      "properties": {
+        "runtime": {"type": "string", "pattern": "^(\\*|[a-z][a-z0-9-]*)$"},
+        "kind": {"enum": ["rule", "skill", "agent", "theme"]},
+        "path": {"type": "string", "minLength": 1},
+        "target": {"type": "string", "minLength": 1}
+      }
+    },
+    "operational_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "summary", "source"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "summary": {"type": "string", "minLength": 1},
+        "source": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

@@ -35,15 +35,16 @@ Acceptance criteria:
 
 ## Create
 
-Use the backend selected from explicit repository/user context:
+Use the provider selected by the active environment profile. When no profile is active, ask for
+the backend if the repository context does not make it unambiguous.
 
 - **GitHub Issues:** see [ticket-github.md](ticket-github.md).
 - **Jira:** see [ticket-jira.md](ticket-jira.md).
 - **GitLab Issues:** see [ticket-gitlab.md](ticket-gitlab.md).
 
-The public skill does not pre-authorize provider writes or embed concrete provider tool names.
-Creating a ticket must pass through the runtime's normal consent flow unless private environment
-configuration grants a narrower permission.
+The public skill does not pre-authorize any provider write. Creating a ticket must pass through
+the runtime's normal consent flow unless a private environment overlay explicitly grants a
+narrower permission.
 
 On failure, report the error and ask the user whether to retry or skip. On success, report:
 > "Created [TICKET-123]: [summary] — [URL]"

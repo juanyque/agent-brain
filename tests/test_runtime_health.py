@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import shutil
 import stat
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "model" / "SCRIPTS"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from runtime_health import HealthCheck, RUNTIME_CONFIGS, check_runtime  # noqa: E402
+from runtime_health import (  # noqa: E402
+    HealthCheck,
+    RUNTIME_CONFIGS,
+    check_environment_profile,
+    check_runtime,
+)
+from runtime_provider_discovery import RuntimeDiscovery  # noqa: E402
 
 
 class RuntimeHealthTests(unittest.TestCase):
@@ -109,6 +117,34 @@ class RuntimeHealthTests(unittest.TestCase):
                 repo_root=root / "repo",
             )
             self.assertFalse(check.failed)
+
+    def test_missing_environment_profile_is_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            check = HealthCheck()
+            check_environment_profile(Path(raw), check)
+            self.assertFalse(check.failed)
+
+    def test_live_profile_check_fails_when_required_mcp_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            shared = brain / "_AGENTS" / "SHARED"
+            profiles = shared / "profiles"
+            profiles.mkdir(parents=True)
+            examples = Path(__file__).resolve().parents[1] / "examples" / "profiles"
+            shutil.copy(examples / "environment.json", shared / "environment.json")
+            shutil.copy(examples / "work.json", profiles / "work.json")
+            shutil.copytree(examples / "work", profiles / "work")
+            check = HealthCheck()
+            discovery = RuntimeDiscovery("codex", "ok", "registry inspected", {})
+            with patch("runtime_health.discover_mcp_servers", return_value=discovery):
+                check_environment_profile(
+                    brain,
+                    check,
+                    cwd=root / "unmatched",
+                    live_runtime="codex",
+                )
+            self.assertTrue(check.failed)
 
 
 if __name__ == "__main__":
