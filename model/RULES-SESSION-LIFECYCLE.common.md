@@ -67,7 +67,7 @@ Use this flow only when the user is continuing the same working session and the 
    - consolidate their work into the last day the work was actually done;
    - do **not** delete the session note if that same session is continuing;
    - reduce the continuing session note to minimal handoff context.
-5. Update daily-note navigation links: previous day → today → next day.
+5. Update the navigation chain between existing daily notes: the nearest previous daily points forward to today, and today points back to it. Keep tomorrow as the provisional forward link until a later daily is created; when a later daily skips dates, replace that provisional link with the new actual neighbor.
 6. Do **not** create a new session note; the same session continues.
 
 Handoff-only previous session notes are allowed only in this same-session rollover flow.
@@ -100,8 +100,10 @@ The day has not been started yet. Start it as part of the session, consolidating
 4. Clean the previous daily note by removing empty action categories, **scoped to that single daily** — but **only if that day has no open session note still pending consolidation** (any session the rollover above left live). The cleanup removes only empty placeholders, never real content; still, if a session that worked that day is still open, **defer this cleanup** so its template sections survive until it consolidates. A deferred day is cleaned later — by a later rollover when those sessions close, or by the Daily maintenance job. A note may only be cleaned once its date is no longer today (see `RULES-DAILY-NOTES.md` → Cleanup timing). Command, when it does run: `_COMMON/SKILLS/obsidian/scripts/cleanup_empty_action_categories.py --brain-root <brain> --glob <prev-date>.md --apply` (e.g. `--glob 2026-06-08.md`).
 5. Run `session_open.py --prepare-daily --apply` with the real session id, runtime,
    and cwd. After the review steps above, this one idempotent operation creates today's
-   daily from the template with navigation links and an empty `# Sessions`, creates or
-   updates the session note, and upserts exactly one daily registration.
+   daily from the template, links it reciprocally with the nearest existing daily notes,
+   leaves `# Sessions` empty for script ownership, creates or updates the session note,
+   and upserts exactly one daily registration. Navigation preparation rolls back all
+   touched daily notes if any write fails.
 6. Confirm the script's postcondition check passes before adding semantic detail to the
    daily or session note.
 

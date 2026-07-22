@@ -25,8 +25,9 @@ Use this rule when creating, rolling over, cleaning, or correcting daily notes i
 
 ## Cleanup timing
 
-- A daily note may only be cleaned up (empty sections removed, previous-day rollover finalized) when the day has ended — i.e. the date of the note is **not** today's date.
-- Re-running the Daily maintenance job on the current day must NOT clean or restructure the current day's note. It may only verify or append.
+- Structural cleanup of a daily note (removing empty sections or categories and finalizing rollover) may only run when the day has ended — i.e. the date of the note is **not** today's date.
+- The current day's content remains live: entries may be added, corrected, completed, consolidated elsewhere, or removed when they no longer carry useful information. Preserve the note's structural placeholders until rollover even when their content becomes empty.
+- Re-running the Daily maintenance job on the current day must NOT remove empty structure or finalize the note. It may still verify the note and make justified semantic content updates.
 - Rollover cleanup of day N may happen starting day N+1.
 - Objectives review (see "Objectives tracking" below) must run **before** the empty-category cleanup, otherwise newly-added evidence would be wiped along with the empty placeholder.
 

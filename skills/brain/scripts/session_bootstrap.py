@@ -41,7 +41,7 @@ def list_daily_notes(journal_root: Path) -> list[Path]:
     for p in journal_root.rglob("*.md"):
         if DATE_RE.match(p.name):
             notes.append(p)
-    return sorted(notes)
+    return sorted(notes, key=lambda path: (path.name, str(path)))
 
 
 def list_session_notes(brain_root: Path) -> list[Path]:

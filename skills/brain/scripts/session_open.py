@@ -26,6 +26,14 @@ from pathlib import Path
 
 
 DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
+DAILY_NAVIGATION_RE = re.compile(
+    r"^(?P<prefix>\s*\[\[)"
+    r"(?P<previous>\d{4}-\d{2}-\d{2})"
+    r"(?P<middle>\]\][^\[\r\n]*\[\[)"
+    r"(?P<next>\d{4}-\d{2}-\d{2})"
+    r"(?P<suffix>\]\][^\[\r\n]*)"
+    r"(?P<newline>\r?\n?)$"
+)
 SESSIONS_HEADER_RE = re.compile(r"^# Sessions\s*$")
 HEADING_RE = re.compile(r"^#{1,3} ")
 TASK_TYPE_ITEM_RE = re.compile(r"^- \[\[")
@@ -164,7 +172,7 @@ def list_daily_notes(journal_root: Path) -> list[Path]:
     for p in journal_root.rglob("*.md"):
         if DATE_RE.match(p.name):
             notes.append(p)
-    return sorted(notes)
+    return sorted(notes, key=lambda path: (path.name, str(path)))
 
 
 def list_session_notes(brain_root: Path) -> list[Path]:
@@ -461,13 +469,98 @@ def upsert_sessions_entry(
     return "unchanged"
 
 
-def instantiate_daily_template(template_path: Path, day: str) -> str:
+def _daily_navigation_match(text: str) -> tuple[list[str], int, re.Match[str]]:
+    lines = text.splitlines(keepends=True)
+    matches = [
+        (index, match)
+        for index, line in enumerate(lines)
+        if (match := DAILY_NAVIGATION_RE.match(line)) is not None
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            "expected exactly one daily navigation line, "
+            f"found {len(matches)}"
+        )
+    index, match = matches[0]
+    return lines, index, match
+
+
+def daily_navigation_targets(text: str) -> tuple[str, str]:
+    """Return the previous and next daily-note targets from one navigation line."""
+    _, _, match = _daily_navigation_match(text)
+    return match.group("previous"), match.group("next")
+
+
+def rewrite_daily_navigation(
+    text: str,
+    *,
+    previous_day: str | None = None,
+    next_day: str | None = None,
+) -> str:
+    """Replace selected navigation targets while preserving the line's formatting."""
+    if previous_day is not None:
+        date.fromisoformat(previous_day)
+    if next_day is not None:
+        date.fromisoformat(next_day)
+
+    lines, index, match = _daily_navigation_match(text)
+    previous = previous_day or match.group("previous")
+    following = next_day or match.group("next")
+    lines[index] = (
+        f"{match.group('prefix')}{previous}{match.group('middle')}"
+        f"{following}{match.group('suffix')}{match.group('newline')}"
+    )
+    return "".join(lines)
+
+
+def find_daily_neighbors(
+    journal_root: Path,
+    daily_path: Path,
+    day: str,
+) -> tuple[Path | None, Path | None]:
+    """Return the nearest existing daily notes before and after day."""
+    current = date.fromisoformat(day)
+    dated_paths: dict[date, Path] = {}
+    for path in list_daily_notes(journal_root):
+        if path == daily_path:
+            continue
+        note_day = date.fromisoformat(path.stem)
+        if note_day == current:
+            raise ValueError(
+                f"multiple daily notes found for {day}: {daily_path} and {path}"
+            )
+        if note_day in dated_paths:
+            raise ValueError(
+                f"multiple daily notes found for {note_day}: "
+                f"{dated_paths[note_day]} and {path}"
+            )
+        dated_paths[note_day] = path
+
+    previous_days = [note_day for note_day in dated_paths if note_day < current]
+    next_days = [note_day for note_day in dated_paths if note_day > current]
+    previous = dated_paths[max(previous_days)] if previous_days else None
+    following = dated_paths[min(next_days)] if next_days else None
+    return previous, following
+
+
+def instantiate_daily_template(
+    template_path: Path,
+    day: str,
+    *,
+    previous_day: str | None = None,
+    next_day: str | None = None,
+) -> str:
     """Instantiate navigation and leave # Sessions empty for script ownership."""
     current = date.fromisoformat(day)
     text = read_text_safe(template_path)
     text = text.replace("<% tp.date.yesterday() %>", str(current - timedelta(days=1)))
     text = text.replace("<% tp.date.tomorrow() %>", str(current + timedelta(days=1)))
     text = text.replace("<% tp.file.cursor() %>\n", "")
+    text = rewrite_daily_navigation(
+        text,
+        previous_day=previous_day,
+        next_day=next_day,
+    )
 
     lines = text.splitlines(keepends=True)
     bounds = _sessions_block_bounds(lines)
@@ -476,6 +569,43 @@ def instantiate_daily_template(template_path: Path, day: str) -> str:
     header_idx, end_idx = bounds
     body = [line for line in lines[header_idx + 1 : end_idx] if not _is_sessions_scaffold(line)]
     return "".join(lines[: header_idx + 1] + body + lines[end_idx:])
+
+
+def _write_text(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8")
+
+
+def _apply_daily_updates(
+    updates: list[tuple[Path, str | None, str]],
+) -> None:
+    """Apply precomputed daily-note updates and restore originals on failure."""
+    written: list[tuple[Path, str | None]] = []
+    try:
+        for path, original, content in updates:
+            current = path.read_text(encoding="utf-8") if path.exists() else None
+            if current != original:
+                raise RuntimeError(f"daily note changed before write: {path}")
+            if current == content:
+                continue
+            path.parent.mkdir(parents=True, exist_ok=True)
+            written.append((path, original))
+            _write_text(path, content)
+    except (OSError, RuntimeError) as exc:
+        rollback_errors: list[str] = []
+        for path, original in reversed(written):
+            try:
+                if original is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    _write_text(path, original)
+            except OSError as rollback_exc:
+                rollback_errors.append(f"{path}: {rollback_exc}")
+        if rollback_errors:
+            raise RuntimeError(
+                "daily navigation update failed and rollback was incomplete: "
+                + "; ".join(rollback_errors)
+            ) from exc
+        raise
 
 
 def prepare_daily_note(
@@ -490,11 +620,99 @@ def prepare_daily_note(
     template = find_daily_template(brain_root)
     if template is None:
         return "missing-template"
-    content = instantiate_daily_template(template, day)
+
+    journal_root = brain_root / load_journal_folder(brain_root)
+    previous_path, next_path = find_daily_neighbors(journal_root, daily_path, day)
+    current = date.fromisoformat(day)
+    previous_day = previous_path.stem if previous_path else str(current - timedelta(days=1))
+    next_day = next_path.stem if next_path else str(current + timedelta(days=1))
+    content = instantiate_daily_template(
+        template,
+        day,
+        previous_day=previous_day,
+        next_day=next_day,
+    )
+
+    updates: list[tuple[Path, str | None, str]] = [(daily_path, None, content)]
+    if previous_path is not None:
+        previous_content = previous_path.read_text(encoding="utf-8")
+        updates.append(
+            (
+                previous_path,
+                previous_content,
+                rewrite_daily_navigation(previous_content, next_day=day),
+            )
+        )
+    if next_path is not None:
+        next_content = next_path.read_text(encoding="utf-8")
+        updates.append(
+            (
+                next_path,
+                next_content,
+                rewrite_daily_navigation(next_content, previous_day=day),
+            )
+        )
+
     if apply:
-        daily_path.parent.mkdir(parents=True, exist_ok=True)
-        daily_path.write_text(content, encoding="utf-8")
+        _apply_daily_updates(updates)
     return "created" if apply else "would-create"
+
+
+def validate_daily_navigation(
+    journal_root: Path,
+    daily_path: Path,
+    day: str,
+) -> list[str]:
+    """Return violations in the daily note's reciprocal navigation chain."""
+    errors: list[str] = []
+    try:
+        previous_path, next_path = find_daily_neighbors(journal_root, daily_path, day)
+        previous_target, next_target = daily_navigation_targets(
+            daily_path.read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError) as exc:
+        return [f"daily navigation could not be validated: {exc}"]
+
+    current = date.fromisoformat(day)
+    expected_previous = (
+        previous_path.stem if previous_path else str(current - timedelta(days=1))
+    )
+    expected_next = next_path.stem if next_path else str(current + timedelta(days=1))
+    if previous_target != expected_previous:
+        errors.append(
+            f"daily previous link is {previous_target}, expected {expected_previous}"
+        )
+    if next_target != expected_next:
+        errors.append(f"daily next link is {next_target}, expected {expected_next}")
+
+    if previous_path is not None:
+        try:
+            _, previous_next = daily_navigation_targets(
+                previous_path.read_text(encoding="utf-8")
+            )
+            if previous_next != day:
+                errors.append(
+                    f"previous daily {previous_path.name} points next to "
+                    f"{previous_next}, expected {day}"
+                )
+        except (OSError, ValueError) as exc:
+            errors.append(
+                f"previous daily navigation could not be validated: {exc}"
+            )
+
+    if next_path is not None:
+        try:
+            next_previous, _ = daily_navigation_targets(
+                next_path.read_text(encoding="utf-8")
+            )
+            if next_previous != day:
+                errors.append(
+                    f"next daily {next_path.name} points previous to "
+                    f"{next_previous}, expected {day}"
+                )
+        except (OSError, ValueError) as exc:
+            errors.append(f"next daily navigation could not be validated: {exc}")
+    return errors
 
 
 def validate_session_postconditions(
@@ -655,7 +873,7 @@ def main() -> int:
                     today,
                     apply=True,
                 )
-            except ValueError as exc:
+            except (OSError, RuntimeError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 1
             if daily_prepare_action == "missing-template":
@@ -663,6 +881,17 @@ def main() -> int:
                 return 1
             print(f"daily_prepare: {daily_prepare_action}: {journal_folder}/{today}.md")
             today_exists = today_path.exists()
+            navigation_errors = validate_daily_navigation(
+                journal_root,
+                today_path,
+                today,
+            )
+            if navigation_errors:
+                print("DAILY NAVIGATION POSTCONDITION FAILED:", file=sys.stderr)
+                for error in navigation_errors:
+                    print(f"  - {error}", file=sys.stderr)
+                return 1
+            print("daily_navigation: OK")
 
         if existing_note:
             recovery_action = upsert_session_recovery(
@@ -760,7 +989,7 @@ def main() -> int:
                         today,
                         apply=False,
                     )
-                except ValueError as exc:
+                except (OSError, RuntimeError, ValueError) as exc:
                     print(f"ERROR: {exc}", file=sys.stderr)
                     return 1
                 if daily_prepare_action == "missing-template":

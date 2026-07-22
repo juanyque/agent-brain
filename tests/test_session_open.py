@@ -4,8 +4,9 @@ import sys
 import subprocess
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "skills" / "brain" / "scripts"
@@ -13,11 +14,15 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 from session_open import (  # noqa: E402
     build_sessions_entry,
+    daily_navigation_targets,
     find_daily_template,
     instantiate_daily_template,
     instantiate_session_template,
+    list_daily_notes,
+    prepare_daily_note,
     resume_command,
     upsert_sessions_entry,
+    validate_daily_navigation,
     validate_session_postconditions,
 )
 
@@ -91,6 +96,204 @@ class SessionRecoveryTests(unittest.TestCase):
         self.assertNotIn("REPLACE WITH REAL", daily)
         self.assertNotIn("Example (Codex)", daily)
         self.assertNotIn("tp.file.cursor", daily)
+
+    def test_daily_notes_are_sorted_by_date_across_archive_folders(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            journal = Path(raw) / "JOURNAL"
+            archive = journal / "2025"
+            archive.mkdir(parents=True)
+            (archive / "2025-12-31.md").write_text("old\n", encoding="utf-8")
+            (journal / "2026-07-22.md").write_text("current\n", encoding="utf-8")
+
+            notes = list_daily_notes(journal)
+
+        self.assertEqual(
+            [path.name for path in notes],
+            ["2025-12-31.md", "2026-07-22.md"],
+        )
+
+    def test_prepare_daily_links_latest_existing_note_across_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            templates = brain / "TEMPLATES"
+            templates.mkdir()
+            (templates / "TEMPLATE.daily-note.common.md").write_text(
+                "---\ntags: [daily]\n---\n"
+                "[[<% tp.date.yesterday() %>]] <- x -> "
+                "[[<% tp.date.tomorrow() %>]]\n\n"
+                "# Sessions\n- REPLACE WITH REAL SESSION_ID: placeholder\n\n"
+                "# Actions\n* [[WORK]]:\n",
+                encoding="utf-8",
+            )
+            journal = brain / "JOURNAL"
+            journal.mkdir()
+            previous = journal / "2026-07-15.md"
+            previous.write_text(
+                "[[2026-07-14]] <- x -> [[2026-07-16]]\n\n# Existing\n",
+                encoding="utf-8",
+            )
+            today = journal / "2026-07-22.md"
+
+            action = prepare_daily_note(brain, today, "2026-07-22", apply=True)
+
+            today_content = today.read_text(encoding="utf-8")
+            previous_content = previous.read_text(encoding="utf-8")
+
+        self.assertEqual(action, "created")
+        self.assertIn("[[2026-07-15]] <- x -> [[2026-07-23]]", today_content)
+        self.assertIn("[[2026-07-14]] <- x -> [[2026-07-22]]", previous_content)
+        self.assertIn("# Existing", previous_content)
+
+    def test_prepare_daily_dry_run_leaves_neighbor_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            templates = brain / "TEMPLATES"
+            templates.mkdir()
+            (templates / "TEMPLATE.daily-note.common.md").write_text(
+                "[[<% tp.date.yesterday() %>]] <- x -> "
+                "[[<% tp.date.tomorrow() %>]]\n\n"
+                "# Sessions\n\n# Actions\n",
+                encoding="utf-8",
+            )
+            journal = brain / "JOURNAL"
+            journal.mkdir()
+            previous = journal / "2026-07-15.md"
+            original = "[[2026-07-14]] <- x -> [[2026-07-16]]\n"
+            previous.write_text(original, encoding="utf-8")
+            today = journal / "2026-07-22.md"
+
+            action = prepare_daily_note(brain, today, "2026-07-22", apply=False)
+            today_exists = today.exists()
+            previous_content = previous.read_text(encoding="utf-8")
+
+        self.assertEqual(action, "would-create")
+        self.assertFalse(today_exists)
+        self.assertEqual(previous_content, original)
+
+    def test_prepare_daily_backfill_updates_both_existing_neighbors(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            templates = brain / "TEMPLATES"
+            templates.mkdir()
+            (templates / "TEMPLATE.daily-note.common.md").write_text(
+                "[[<% tp.date.yesterday() %>]] <- x -> "
+                "[[<% tp.date.tomorrow() %>]]\n\n"
+                "# Sessions\n\n# Actions\n",
+                encoding="utf-8",
+            )
+            journal = brain / "JOURNAL"
+            journal.mkdir()
+            previous = journal / "2026-07-05.md"
+            previous.write_text(
+                "[[2026-07-04]] <- x -> [[2026-07-06]]\n",
+                encoding="utf-8",
+            )
+            following = journal / "2026-07-10.md"
+            following.write_text(
+                "[[2026-07-09]] <- x -> [[2026-07-11]]\n",
+                encoding="utf-8",
+            )
+            inserted = journal / "2026-07-07.md"
+
+            prepare_daily_note(brain, inserted, "2026-07-07", apply=True)
+
+            errors = validate_daily_navigation(journal, inserted, "2026-07-07")
+            inserted_targets = daily_navigation_targets(
+                inserted.read_text(encoding="utf-8")
+            )
+            previous_targets = daily_navigation_targets(
+                previous.read_text(encoding="utf-8")
+            )
+            following_targets = daily_navigation_targets(
+                following.read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(inserted_targets, ("2026-07-05", "2026-07-10"))
+        self.assertEqual(previous_targets[1], "2026-07-07")
+        self.assertEqual(following_targets[0], "2026-07-07")
+        self.assertEqual(errors, [])
+
+    def test_prepare_daily_rolls_back_all_files_when_neighbor_write_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            templates = brain / "TEMPLATES"
+            templates.mkdir()
+            (templates / "TEMPLATE.daily-note.common.md").write_text(
+                "[[<% tp.date.yesterday() %>]] <- x -> "
+                "[[<% tp.date.tomorrow() %>]]\n\n"
+                "# Sessions\n\n# Actions\n",
+                encoding="utf-8",
+            )
+            journal = brain / "JOURNAL"
+            journal.mkdir()
+            previous = journal / "2026-07-15.md"
+            original = "[[2026-07-14]] <- x -> [[2026-07-16]]\n# Existing\n"
+            previous.write_text(original, encoding="utf-8")
+            today = journal / "2026-07-22.md"
+            failed = False
+
+            def flaky_write(path: Path, content: str) -> None:
+                nonlocal failed
+                if path == previous and not failed:
+                    failed = True
+                    path.write_text("partial", encoding="utf-8")
+                    raise OSError("simulated neighbor write failure")
+                path.write_text(content, encoding="utf-8")
+
+            with patch("session_open._write_text", side_effect=flaky_write):
+                with self.assertRaisesRegex(OSError, "simulated neighbor write failure"):
+                    prepare_daily_note(brain, today, "2026-07-22", apply=True)
+            today_exists = today.exists()
+            previous_content = previous.read_text(encoding="utf-8")
+
+        self.assertFalse(today_exists)
+        self.assertEqual(previous_content, original)
+
+    def test_prepare_daily_refuses_malformed_neighbor_before_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            templates = brain / "TEMPLATES"
+            templates.mkdir()
+            (templates / "TEMPLATE.daily-note.common.md").write_text(
+                "[[<% tp.date.yesterday() %>]] <- x -> "
+                "[[<% tp.date.tomorrow() %>]]\n\n"
+                "# Sessions\n\n# Actions\n",
+                encoding="utf-8",
+            )
+            journal = brain / "JOURNAL"
+            journal.mkdir()
+            previous = journal / "2026-07-15.md"
+            original = "# Daily without navigation\n"
+            previous.write_text(original, encoding="utf-8")
+            today = journal / "2026-07-22.md"
+
+            with self.assertRaisesRegex(ValueError, "navigation line"):
+                prepare_daily_note(brain, today, "2026-07-22", apply=True)
+            today_exists = today.exists()
+            previous_content = previous.read_text(encoding="utf-8")
+
+        self.assertFalse(today_exists)
+        self.assertEqual(previous_content, original)
+
+    def test_navigation_validation_detects_nonreciprocal_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            journal = Path(raw) / "JOURNAL"
+            journal.mkdir()
+            previous = journal / "2026-07-15.md"
+            previous.write_text(
+                "[[2026-07-14]] <- x -> [[2026-07-16]]\n",
+                encoding="utf-8",
+            )
+            today = journal / "2026-07-22.md"
+            today.write_text(
+                "[[2026-07-21]] <- x -> [[2026-07-23]]\n",
+                encoding="utf-8",
+            )
+
+            errors = validate_daily_navigation(journal, today, "2026-07-22")
+
+        self.assertTrue(any("expected 2026-07-15" in error for error in errors))
+        self.assertTrue(any("expected 2026-07-22" in error for error in errors))
 
     def test_daily_template_divergence_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -201,6 +404,16 @@ class SessionRecoveryTests(unittest.TestCase):
                 "## Current objective\n-\n",
                 encoding="utf-8",
             )
+            today_date = datetime.now().date()
+            previous_date = today_date - timedelta(days=7)
+            journal = brain / "JOURNAL"
+            journal.mkdir()
+            previous_daily = journal / f"{previous_date}.md"
+            previous_daily.write_text(
+                f"[[{previous_date - timedelta(days=1)}]] <- x -> "
+                f"[[{previous_date + timedelta(days=1)}]]\n",
+                encoding="utf-8",
+            )
             command = [
                 sys.executable,
                 str(SCRIPTS_DIR / "session_open.py"),
@@ -217,12 +430,14 @@ class SessionRecoveryTests(unittest.TestCase):
             ]
             first = subprocess.run(command, text=True, capture_output=True, check=False)
             second = subprocess.run(command, text=True, capture_output=True, check=False)
-            today = datetime.now().strftime("%Y-%m-%d")
+            today = str(today_date)
             daily = (brain / "JOURNAL" / f"{today}.md").read_text(encoding="utf-8")
+            previous_content = previous_daily.read_text(encoding="utf-8")
             session_notes = list((brain / "WIP" / "SESSIONS").glob("*.md"))
 
         self.assertEqual(first.returncode, 0, first.stderr)
         self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("daily_navigation: OK", first.stdout)
         self.assertIn("daily_registration: unchanged", second.stdout)
         self.assertEqual(
             len([line for line in daily.splitlines() if "session-123" in line]),
@@ -230,6 +445,11 @@ class SessionRecoveryTests(unittest.TestCase):
         )
         self.assertEqual(len(session_notes), 1)
         self.assertNotIn("REPLACE WITH REAL", daily)
+        self.assertIn(
+            f"[[{previous_date}]] <- x -> [[{today_date + timedelta(days=1)}]]",
+            daily,
+        )
+        self.assertIn(f"-> [[{today_date}]]", previous_content)
 
     def test_multiple_sessions_preserve_each_others_daily_entries(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
