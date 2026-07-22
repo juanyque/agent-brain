@@ -61,7 +61,7 @@ if [[ -z "$BRAIN_PATH" ]]; then
   echo "== Brain resolution =="
   if [[ -f "$FIND_HOME" ]] && command -v python3 >/dev/null 2>&1; then
     echo "  Detected brain candidates:"
-    python3 "$FIND_HOME" 2>/dev/null | python3 -c '
+    python3 "$FIND_HOME" --candidates 2>/dev/null | python3 -c '
 import json, sys
 try: d = json.load(sys.stdin)
 except Exception: sys.exit(0)

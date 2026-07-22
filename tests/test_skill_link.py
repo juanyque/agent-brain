@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -14,8 +15,10 @@ class SkillLinkTests(unittest.TestCase):
     def run_link(
         self, source: Path, home: Path, *args: str
     ) -> subprocess.CompletedProcess[str]:
+        home.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
         env["HOME"] = str(home)
+        env["SKILL_LINK_LOG_FILE"] = str(home / "skill_link.log")
         return subprocess.run(
             ["bash", str(SCRIPT), str(source), *args],
             check=False,
@@ -66,6 +69,33 @@ class SkillLinkTests(unittest.TestCase):
             result = self.run_link(source, root / "home")
             self.assertEqual(result.returncode, 2)
             self.assertIn("skill source has no SKILL.md", result.stderr)
+
+    def test_apply_writes_latest_log_without_hiding_console_output(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            script = root / "agent-brain" / "model" / "SCRIPTS" / "skill_link.sh"
+            script.parent.mkdir(parents=True)
+            shutil.copy2(SCRIPT, script)
+            source = root / "project" / "skills" / "confold"
+            source.mkdir(parents=True)
+            (source / "SKILL.md").write_text("---\nname: confold\n---\n", encoding="utf-8")
+            home = root / "home"
+            runtime_home = home / ".agents"
+            runtime_home.mkdir(parents=True)
+
+            result = subprocess.run(
+                ["bash", str(script), str(source), str(runtime_home), "--apply"],
+                check=False,
+                capture_output=True,
+                text=True,
+                env={**os.environ, "HOME": str(home)},
+            )
+            log_path = script.with_suffix(".log")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("mode:   apply", result.stdout)
+            self.assertTrue(log_path.is_file())
+            self.assertEqual(log_path.read_text(encoding="utf-8"), result.stdout)
 
     def test_agent_brain_skill_name_remains_supported(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

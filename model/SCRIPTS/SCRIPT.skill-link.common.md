@@ -10,6 +10,8 @@
 - Dry-run by default; pass `--apply` to execute.
 - Idempotent: skips if the target is already the correct symlink.
 - Safe: backs up an existing target to `.backup-<ts>` if it is not our symlink.
+- Every run preserves its console output in the latest sibling `skill_link.log`; the file is a runtime
+  artifact and is ignored by Git.
 
 ## Usage
 

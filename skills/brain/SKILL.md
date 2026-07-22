@@ -25,7 +25,7 @@ Connect the current session to a notes brain, load its operating model, and docu
 
 - No arguments, `session`, `nueva sesión`, `new session`, `inicio sesión`, `connect`, or `start` → run the session-start protocol: resolve the brain, run `session_open.py` (see "After brain resolution"), consume the compact digest, and follow Flow 2 (`new session`) for the detected scenario. Flow 2 creates today's daily note when it is missing — first consolidating the durable work of clearly-finished previous sessions (State-driven rollover), then closing the previous day. Starting the day is part of session start and does **not** require an explicit `nuevo día` instruction.
 - `new-day`, `nuevo día`, `cambio de día`, `cambia de día`, or `we changed day` → run the day-rollover protocol. Resolve the brain, run `session_open.py` (day_rollover_detected will be `yes`), load `RULES-SESSION-LIFECYCLE.md`, and follow Flow 1 (`day change / same session continues`). Do not create a new session note in this flow.
-- `close session`, `cerrar sesión`, `cerramos la sesión`, `wrap up`, `end session`, `consolidate`, or `consolidar` → run the session-close protocol: resolve the brain, load `RULES-SESSION-LIFECYCLE.md` (Closing gate + Consolidation rules), then run `session_close.py` (see "Available skill tools"). For a handoff: `session_close.py handoff <session-id> --apply`. For full consolidation: `session_close.py consolidate <session-id> [--archive] --apply`. Objectives review is required before consolidation (see `RULES-DAILY-NOTES.md`).
+- `close session`, `cerrar sesión`, `cerramos la sesión`, `wrap up`, `end session`, `consolidate`, or `consolidar` → run the session-close protocol: resolve the brain, load `RULES-SESSION-LIFECYCLE.md` (Closing gate + Consolidation rules), then run `session_close.py` (see "Available skill tools"). Use the canonical apply form `session_close.py --brain-root <brain> --apply handoff <session-id>` for a handoff, or `session_close.py --brain-root <brain> --apply consolidate <session-id> [--archive]` for full consolidation. The CLI also accepts a trailing `--apply` so equivalent natural invocations do not fail. Objectives review is required before consolidation (see `RULES-DAILY-NOTES.md`).
 
 Do not run broad brain maintenance, standardization, or semantic reorganization from a no-argument/session-start invocation. Those require explicit arguments such as `maintain`, `clean`, `order`, `standardize`, or `init`. Exception: when today's daily note is missing, Flow 2 finalises the **previous** day (review-first TODO carry-over and Objectives review, then empty-category cleanup scoped to that single previous daily) and creates today's note. That per-day rollover is part of session start; the restriction here is about brain-wide maintenance, not the previous-day rollover.
 
@@ -40,11 +40,16 @@ Do not run broad brain maintenance, standardization, or semantic reorganization 
 
 ## Brain resolution
 
-Run the discovery script first. It handles all deterministic path logic:
+Run strict discovery from the current directory first. It accepts only brains whose
+`_COMMON` symlink resolves to the current agent-brain model:
 
 ```bash
-python3 ~/.agents/skills/brain/scripts/find_home.py [path]
+python3 ~/.agents/skills/brain/scripts/find_home.py "$PWD"
 ```
+
+If that returns no brain, run it without a path to surface all current-model brains under
+the user's home. Never use `--candidates` for session resolution; that mode is reserved for
+bootstrap destination suggestions.
 
 The script returns JSON. Handle each outcome:
 
@@ -59,6 +64,10 @@ If one brain has `has_agents_md: true` and others do not, prefer the one with op
 **No brains found** → tell the user no brain was found and ask them to provide the brain path manually. Then run the script again with that path.
 
 **Error (path does not exist)** → report the error and ask for a valid path.
+
+**Conflicting `_COMMON` found** → report that the directory targets another model or has an
+invalid `_COMMON` entry. Do not connect or pass it to lifecycle scripts; it requires an
+explicit repair or migration first.
 
 ## After brain resolution
 
@@ -108,8 +117,8 @@ python3 ~/.agents/skills/brain/scripts/session_open.py \
 ```
 
 `--apply` is safe to repeat: the script upserts by full session id, preserves a user-edited
-daily summary, removes known `# Sessions` template scaffold, and verifies that the session
-note and daily contain one canonical recovery command.
+daily summary, refreshes the canonical session-note link, removes known `# Sessions` template
+scaffold, and verifies that the session note and daily contain one canonical recovery command.
 
 **Day rollover**: if the digest reports `day_rollover_detected: yes`, load the brain-local `RULES-SESSION-LIFECYCLE.md` when present, otherwise `_COMMON/RULES-SESSION-LIFECYCLE.common.md`, and run the semantic review in Flow 1 / Flow 2 Scenario B first. When that review is complete, run `session_open.py --prepare-daily --apply` once. `--prepare-daily` links the new daily to the nearest existing daily notes, updates those neighbors reciprocally with rollback on failure, and leaves `# Sessions` empty before the same command performs the idempotent registration. It refuses divergent local/common daily templates and ambiguous or malformed navigation instead of choosing silently.
 
@@ -187,7 +196,7 @@ If a single note contains both "what another person needs" and "what I did", spl
 
 Key terms used throughout the maintenance and setup workflows below:
 
-- **`_COMMON`** — brain-local symlink pointing to the `agent-brain/model` directory. Its presence signals the brain is attached to the shared operating model.
+- **`_COMMON`** — brain-local symlink pointing to the `model/` directory of the agent-brain checkout that serves the installed skill. Only that exact resolved target signals a current-model brain; a link to another or legacy model is a conflict.
 - **`_STAGING/`** — temporary directory in the brain root used during initial standardization to hold all original content before it is classified and moved into the target structure (`JOURNAL/`, `WIP/`, `MEMORY/`, etc.). Its presence signals Initial mode; its absence signals Maintenance mode.
 - **`_AGENTS/`** — on-demand home (created by `home_setup.py`) for brain-internal directories that act as the source of truth for an external agent runtime (e.g. `_AGENTS/CLAUDE/`, referenced via symlinks under `~/.claude/`). Sits alongside `_COMMON` and `_STAGING` as an operational top-level directory, never as content.
 - **`QUARANTINE/TRASH/`** — destination for content that looks discardable but must never be deleted automatically. Items remain there until the user explicitly approves permanent deletion.
@@ -198,16 +207,17 @@ Key terms used throughout the maintenance and setup workflows below:
 
 The runtime skill exposes deterministic helper tools under its installed `scripts/` directory (see the Runtime path note above). Prefer these tools over brain-local copies.
 
-- `find_home.py` — resolve candidate brains from a path (notes-agnostic: obsidian, generic, empty).
+- `find_home.py` — resolve only brains implanted with the current agent-brain model. Its explicit `--candidates` mode retains notes-agnostic destination suggestions for bootstrap and must not be used to open sessions.
 - `find_related_notes.py` — find notes related to project keywords.
 - `memory_query.py` — rank a few curated-memory candidates from index metadata without loading note bodies. Use only when prior cross-session guidance may help; open only relevant returned notes.
 - `profile_context.py` — resolve one or more generic capabilities through the active environment profile. It can inspect sanitized Codex MCP registry/auth readiness with `--live`, returns runtime invocation hints without credentials/endpoints, and optionally includes issue-tracking policy. A caller that can enumerate its active tool names safely may pass `--available-tool` plus `--tool-catalog-complete`; an absent exact MCP invocation then fails closed. Claude live discovery is refused because its registry command may rewrite settings. Profile resolution never grants tool permission.
 - `session_open.py` — session-start ceremony: emits a compact digest, optionally prepares a missing daily after rollover review with reciprocal nearest-neighbor navigation and rollback, creates/updates the session note, idempotently upserts daily `# Sessions`, and verifies postconditions. Args: `--brain-root`, `--session-id` (real id from the agent runtime — never a timestamp), `--runtime` (claude|opencode|codex; controls resume-command format), `--session-label` (opt), `--cwd` (opt), `--prepare-daily` (opt), `--apply`. Dry-run by default.
-- `brain_check.py` — read-only postcondition checker. Verifies a session has exactly one
-  daily registration with the expected runtime/cwd recovery command, and/or verifies
+- `brain_check.py` — read-only postcondition checker. Verifies an active or archived
+  session has exactly one daily registration with the expected runtime/cwd recovery command,
+  preferring the active note when both exist, and/or verifies
   active WIP notes are registered in `WIP/WIP.md`. Args: `--brain-root`, optional session
   tuple (`--session-id`, `--runtime`, `--cwd`, `--date`), and repeatable `--wip-note`.
-- `session_close.py` — idempotent session-close ceremony. Subcommands: `handoff <session-id>` (→ handoff-only), `consolidate <session-id> [--archive]` (→ consolidated, optional `git mv` to `QUARANTINE/TRASH/`). Archive apply refuses untracked notes or occupied destinations before editing, stages the final consolidated destination, and restores the original path and content if the move or staging step fails. Args: `--brain-root`, `--apply`. Dry-run by default.
+- `session_close.py` — idempotent session-close ceremony. It refuses roots that are not implanted with this checkout's current model before reading or mutating session state. Subcommands: `handoff <session-id>` (→ handoff-only), `consolidate <session-id> [--archive]` (→ consolidated, optional `git mv` to `QUARANTINE/TRASH/`). Archive apply refuses untracked notes or occupied destinations before editing, stages the final consolidated destination, and restores the original path and content if the move or staging step fails. Args: `--brain-root`, `--apply`; `--apply` is accepted before or after the subcommand. Dry-run by default.
 - `session_bootstrap.py` — legacy: inspect daily/session state and print verbose kickoff prompt. Preserved for callers that depend on it; prefer `session_open.py` for new sessions.
 - `maintenance_scheduler.py` — decide which recurring Daily/Weekly/Monthly/Yearly/session maintenance jobs are due.
 - `standardize_assessment.py` — assess an organized brain in maintenance mode and generate/update `WIP/STANDARDIZE_PROCESS.md`.

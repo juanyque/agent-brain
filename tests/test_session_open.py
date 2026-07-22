@@ -10,11 +10,13 @@ from unittest.mock import patch
 
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "skills" / "brain" / "scripts"
+MODEL_ROOT = Path(__file__).resolve().parents[1] / "model"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from session_open import (  # noqa: E402
     build_sessions_entry,
     daily_navigation_targets,
+    extract_wip_context,
     find_daily_template,
     instantiate_daily_template,
     instantiate_session_template,
@@ -28,6 +30,35 @@ from session_open import (  # noqa: E402
 
 
 class SessionRecoveryTests(unittest.TestCase):
+    @staticmethod
+    def attach_current_model(brain: Path) -> None:
+        (brain / "_COMMON").symlink_to(MODEL_ROOT, target_is_directory=True)
+
+    def test_project_wip_context_surfaces_optional_capability_links(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            wip = Path(raw) / "WIP.md"
+            wip.write_text(
+                "# WIP\n\n"
+                "## another-project - Graphify\n"
+                "- Registry: [[graphify.registry#another-project]]\n"
+                "- Graph: [[graphify.another-project]]\n\n"
+                "## all-the-things - Graphify\n"
+                "- Registry: [[graphify.registry#all-the-things-card-platform]]\n"
+                "- Graph: [[graphify.all-the-things-card-platform]]\n",
+                encoding="utf-8",
+            )
+
+            context = extract_wip_context(
+                wip,
+                "/workspace/all-the-things",
+            )
+
+        rendered = "\n".join(context)
+        self.assertIn("## all-the-things - Graphify", rendered)
+        self.assertIn("[[graphify.registry#all-the-things-card-platform]]", rendered)
+        self.assertIn("[[graphify.all-the-things-card-platform]]", rendered)
+        self.assertNotIn("another-project", rendered)
+
     def test_codex_resume_command_contains_original_cwd(self) -> None:
         self.assertEqual(
             resume_command("codex", "session-123", "/workspace/project"),
@@ -317,7 +348,8 @@ class SessionRecoveryTests(unittest.TestCase):
                 "# Sessions\n"
                 "- REPLACE WITH REAL SESSION_ID: placeholder\n"
                 "- Example (Codex): `codex resume uuid`\n"
-                "- `codex resume session-123` — user-edited summary\n"
+                "- `codex resume session-123` — user-edited summary. "
+                "Session note: [[old-session-note]].\n"
                 "- `codex resume session-123` — duplicate\n\n"
                 "# Actions\n",
                 encoding="utf-8",
@@ -347,8 +379,16 @@ class SessionRecoveryTests(unittest.TestCase):
         self.assertEqual(first, "updated")
         self.assertEqual(second, "unchanged")
         self.assertEqual(first_content, second_content)
-        self.assertEqual(first_content.count("session-123"), 1)
+        self.assertEqual(
+            len([line for line in first_content.splitlines() if "session-123" in line]),
+            1,
+        )
         self.assertIn("user-edited summary", first_content)
+        self.assertIn(
+            "[[2026-07-21-session-session-123-agent-brain]]",
+            first_content,
+        )
+        self.assertNotIn("[[old-session-note]]", first_content)
         self.assertIn(
             "cd /workspace/agent-brain && codex resume session-123",
             first_content,
@@ -380,9 +420,98 @@ class SessionRecoveryTests(unittest.TestCase):
             )
         self.assertTrue(any("expected one daily registration" in error for error in errors))
 
+    def test_postconditions_detect_stale_daily_session_link(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            daily = root / "daily.md"
+            note = root / "2026-07-22-session-session-123-project.md"
+            command = "cd /workspace/project && codex resume session-123"
+            daily.write_text(
+                f"# Sessions\n- `{command}` — project. "
+                "Session note: [[old-session-note]].\n\n# Actions\n",
+                encoding="utf-8",
+            )
+            note.write_text(
+                f"## Resume command\n- `{command}`\n"
+                "- Working directory: `/workspace/project`\n",
+                encoding="utf-8",
+            )
+            errors = validate_session_postconditions(
+                daily,
+                note,
+                "session-123",
+                "codex",
+                "/workspace/project",
+            )
+
+        self.assertIn("daily registration does not link the selected session note", errors)
+
+    def test_reopening_archived_session_refreshes_daily_note_link(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            self.attach_current_model(brain)
+            templates = brain / "TEMPLATES"
+            templates.mkdir()
+            (templates / "TEMPLATE.wip-session.common.md").write_text(
+                "---\ntags: [session, wip]\n---\n"
+                "# Session <date> / <topic> / <id>\n\n"
+                "## State\n- Status: open\n\n"
+                "## Resume command\n- placeholder\n\n"
+                "## Current objective\n-\n",
+                encoding="utf-8",
+            )
+            session_id = "session-123"
+            command = f"cd /workspace/project && codex resume {session_id}"
+            archive = brain / "QUARANTINE" / "TRASH"
+            archive.mkdir(parents=True)
+            archived_stem = f"2026-07-21-session-{session_id}-project"
+            (archive / f"{archived_stem}.md").write_text(
+                f"## Resume command\n- `{command}`\n",
+                encoding="utf-8",
+            )
+            today = datetime.now().strftime("%Y-%m-%d")
+            daily = brain / "JOURNAL" / f"{today}.md"
+            daily.parent.mkdir()
+            daily.write_text(
+                "# Sessions\n"
+                f"- `{command}` — carefully edited summary. "
+                f"Session note: [[{archived_stem}]].\n\n"
+                "# Actions\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS_DIR / "session_open.py"),
+                    "--brain-root",
+                    str(brain),
+                    "--session-id",
+                    session_id,
+                    "--runtime",
+                    "codex",
+                    "--cwd",
+                    "/workspace/project",
+                    "--apply",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            active_notes = list((brain / "WIP" / "SESSIONS").glob("*.md"))
+            daily_content = daily.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(active_notes), 1)
+        self.assertIn("daily_registration: updated", result.stdout)
+        self.assertIn("carefully edited summary", daily_content)
+        self.assertIn(f"[[{active_notes[0].stem}]]", daily_content)
+        self.assertNotIn(f"[[{archived_stem}]]", daily_content)
+
     def test_full_apply_can_be_repeated_without_duplicate_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)
+            self.attach_current_model(brain)
             templates = brain / "TEMPLATES"
             templates.mkdir()
             (templates / "TEMPLATE.daily-note.common.md").write_text(
@@ -454,6 +583,7 @@ class SessionRecoveryTests(unittest.TestCase):
     def test_multiple_sessions_preserve_each_others_daily_entries(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)
+            self.attach_current_model(brain)
             templates = brain / "TEMPLATES"
             templates.mkdir()
             (templates / "TEMPLATE.wip-session.common.md").write_text(
@@ -501,6 +631,116 @@ class SessionRecoveryTests(unittest.TestCase):
         self.assertEqual(sum("session-a" in line for line in session_lines), 1)
         self.assertEqual(sum("session-b" in line for line in session_lines), 1)
         self.assertEqual(len(session_notes), 2)
+
+    def test_cli_refuses_unimplanted_project_before_dry_run_or_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            project = Path(raw)
+            templates = project / "TEMPLATES"
+            templates.mkdir()
+            (templates / "TEMPLATE.wip-session.common.md").write_text(
+                "# Session <date> / <topic> / <id>\n",
+                encoding="utf-8",
+            )
+            today = datetime.now().strftime("%Y-%m-%d")
+            journal = project / "JOURNAL"
+            journal.mkdir()
+            daily = journal / f"{today}.md"
+            daily.write_text("# Sessions\n\n# Actions\n", encoding="utf-8")
+            command = [
+                sys.executable,
+                str(SCRIPTS_DIR / "session_open.py"),
+                "--brain-root",
+                str(project),
+                "--session-id",
+                "session-unsafe",
+                "--runtime",
+                "codex",
+                "--cwd",
+                "/workspace/project",
+            ]
+
+            dry_run = subprocess.run(
+                command,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            apply = subprocess.run(
+                command + ["--apply"],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            sessions_dir_exists = (project / "WIP" / "SESSIONS").exists()
+            daily_content = daily.read_text(encoding="utf-8")
+
+        self.assertNotEqual(dry_run.returncode, 0)
+        self.assertNotEqual(apply.returncode, 0)
+        self.assertIn("not attached to the current agent-brain model", dry_run.stderr)
+        self.assertIn("not attached to the current agent-brain model", apply.stderr)
+        self.assertFalse(sessions_dir_exists)
+        self.assertEqual(daily_content, "# Sessions\n\n# Actions\n")
+
+    def test_cli_refuses_common_link_to_another_model(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            project = root / "project"
+            old_model = root / "obsidian-vault-common"
+            project.mkdir()
+            old_model.mkdir()
+            (project / "_COMMON").symlink_to(old_model, target_is_directory=True)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS_DIR / "session_open.py"),
+                    "--brain-root",
+                    str(project),
+                    "--session-id",
+                    "session-unsafe",
+                    "--runtime",
+                    "codex",
+                    "--cwd",
+                    "/workspace/project",
+                    "--apply",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            sessions_dir_exists = (project / "WIP" / "SESSIONS").exists()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("conflict-wrong-target", result.stderr)
+        self.assertFalse(sessions_dir_exists)
+
+    def test_cli_refuses_looping_common_link_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            project = Path(raw)
+            (project / "_COMMON").symlink_to("_COMMON", target_is_directory=True)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS_DIR / "session_open.py"),
+                    "--brain-root",
+                    str(project),
+                    "--session-id",
+                    "session-unsafe",
+                    "--runtime",
+                    "codex",
+                    "--apply",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            sessions_dir_exists = (project / "WIP" / "SESSIONS").exists()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("conflict-invalid-target", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(sessions_dir_exists)
 
 
 if __name__ == "__main__":

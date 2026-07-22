@@ -80,6 +80,13 @@
 - `WIP/` should stay limited to work that is actually active now or clearly blocked but still live.
 - Moving a note into `WIP/` is not enough by itself; `WIP/WIP.md` should also be updated so future sessions can understand why that note is active without opening it first.
 
+### Optional capabilities
+- Optional tools and integrations are disabled by default. A vault or project opts in by linking a capability registry or descriptor directly from its project-specific entry in `WIP/WIP.md`.
+- The dashboard link is the activation and discovery contract. A directory or note that exists without an active dashboard link is dormant.
+- Capability registries stay compact and point to project descriptors. Generated or heavy assets live outside the brain and project checkout; descriptors record their external location and freshness.
+- Graphify uses `WIP/GRAPHIFY/graphify.registry.md` plus one Obsidian-safe `graphify.<project-or-graph>.md` descriptor per generated graph. The detailed contract is in `RULES-OPTIONAL-CAPABILITIES.common.md`.
+- Installing a capability does not register a project. Enrollment, asset generation, and project-native hooks always require explicit user intent.
+
 ### Minimal generic WIP note
 - Start with one generic WIP shape that works for projects, trips, admin issues, or other active contexts.
 - The note should stay lightweight and answer these questions quickly:

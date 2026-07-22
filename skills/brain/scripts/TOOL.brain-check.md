@@ -15,13 +15,16 @@ python3 ~/.agents/skills/brain/scripts/brain_check.py \
 
 The check fails unless:
 
-- one session note exists for the full session id;
+- one session note exists for the full session id, either actively under
+  `WIP/SESSIONS/` or archived under `QUARANTINE/TRASH/`;
 - its recovery command contains the expected runtime command and original cwd;
 - today's daily has exactly one matching entry under `# Sessions`;
 - that entry contains the same recovery command;
+- that entry links the selected active or archived session note;
 - the section contains no known template scaffold.
 
 Use `--date YYYY-MM-DD` when verifying a registration from another day.
+When both active and archived notes match the id, the active note is authoritative.
 
 ## Active WIP registration
 

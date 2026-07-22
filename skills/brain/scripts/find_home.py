@@ -1,27 +1,38 @@
 #!/usr/bin/env python3
-"""Find agent-brain candidates (notes-agnostic).
+"""Find brains implanted with the current agent-brain model.
 
-A brain is a folder the operating model can attach to. Each candidate is classified by
-notes_mode: 'obsidian' (has .obsidian/), 'generic' (looks like a notes folder), or
-'empty'. This is the single discovery script (absorbed find_vaults.py).
+Default discovery accepts only roots whose _COMMON symlink resolves to the model
+directory belonging to this checkout. Broad notes-folder heuristics remain available
+only through --candidates for bootstrap destination suggestions.
 
 Usage:
-    python3 find_home.py                  # search from home directory
-    python3 find_home.py /path/to/search  # search under a root
-    python3 find_home.py /path/to/check   # classify a single path (any mode, incl. empty)
+    python3 find_home.py                    # search for implanted brains under HOME
+    python3 find_home.py /path/inside/brain # resolve the nearest implanted ancestor
+    python3 find_home.py --candidates       # bootstrap destination suggestions
+    python3 find_home.py --candidates PATH  # classify one bootstrap destination
 
 Exit codes:
-    0 - candidate(s) found (search mode), or path classified (single-path mode)
-    1 - no candidates found, or path does not exist
+    0 - implanted brain(s) or bootstrap candidate(s) found
+    1 - no matching result, or path does not exist
 
-Output: JSON {search_root, provided_path, homes:[{path,name,notes_mode,has_agents_md,has_common}], count}.
+Output is JSON. In default mode, homes contains only current-model brains and
+conflicts describes encountered _COMMON entries that are not valid implants.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+MODEL_SCRIPTS = REPO_ROOT / "model" / "SCRIPTS"
+if str(MODEL_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(MODEL_SCRIPTS))
+
+from brain_state import current_brain_status, current_model_root  # noqa: E402
 
 SKIP_DIRS = {
     ".git", "node_modules", ".Trash", ".cache", ".Trash-0",
@@ -29,6 +40,7 @@ SKIP_DIRS = {
     ".pytest_cache", ".next", ".nuxt", "dist", "build", ".gradle",
     "Library", "Applications", ".local", ".npm", ".nvm", ".cargo",
     ".rustup", ".docker", ".kube",
+    "_COMMON", "_STAGING", "_AGENTS",
 }
 
 
@@ -77,18 +89,55 @@ def classify(path: Path) -> str:
     return "empty"
 
 
-def home_info(path: Path) -> dict:
+def candidate_info(path: Path) -> dict:
     return {
-        "path": str(path),
+        "path": str(path.resolve()),
         "name": path.name,
         "notes_mode": classify(path),
         "has_agents_md": (path / "AGENTS.md").is_file(),
-        "has_common": (path / "_COMMON").exists(),
+        "has_common": (path / "_COMMON").exists() or (path / "_COMMON").is_symlink(),
     }
 
 
-def find_homes_under(root: Path, max_depth: int = 4) -> list[dict]:
+def brain_info(path: Path) -> dict:
+    resolved = path.resolve()
+    return {
+        "path": str(resolved),
+        "name": resolved.name,
+        "model_status": "ok",
+        "has_agents_md": (resolved / "AGENTS.md").is_file(),
+        "has_brain_md": (resolved / "BRAIN.md").is_file(),
+        "is_nested": False,
+        "parent_brain": None,
+    }
+
+
+def conflict_info(path: Path, status: str) -> dict:
+    resolved = path.resolve()
+    return {
+        "path": str(resolved),
+        "name": resolved.name,
+        "model_status": status,
+    }
+
+
+def _mark_nested(homes: list[dict]) -> None:
+    paths = {Path(home["path"]) for home in homes}
+    for home in homes:
+        path = Path(home["path"])
+        ancestors = [candidate for candidate in paths if candidate != path and candidate in path.parents]
+        if ancestors:
+            parent = max(ancestors, key=lambda candidate: len(candidate.parts))
+            home["is_nested"] = True
+            home["parent_brain"] = str(parent)
+
+
+def find_implanted_under(
+    root: Path,
+    max_depth: int = 4,
+) -> tuple[list[dict], list[dict]]:
     result: list[dict] = []
+    conflicts: list[dict] = []
     visited: set[Path] = set()
 
     def _walk(current: Path, depth: int) -> None:
@@ -96,14 +145,21 @@ def find_homes_under(root: Path, max_depth: int = 4) -> list[dict]:
             entries = list(current.iterdir())
         except (PermissionError, OSError):
             return
-        if classify(current) in ("obsidian", "generic"):
-            result.append(home_info(current))
+        status = current_brain_status(current)
+        if status == "ok":
+            result.append(brain_info(current))
+        elif status != "missing":
+            conflicts.append(conflict_info(current, status))
         if depth >= max_depth:
             return
         for entry in entries:
-            if not entry.is_dir():
+            if entry.is_symlink() or not entry.is_dir():
                 continue
-            if entry.name in SKIP_DIRS or entry.name.startswith("."):
+            if (
+                entry.name in SKIP_DIRS
+                or entry.name.startswith(".")
+                or entry.name.startswith("_COMMON.backup-")
+            ):
                 continue
             real = entry.resolve()
             if real in visited:
@@ -113,36 +169,119 @@ def find_homes_under(root: Path, max_depth: int = 4) -> list[dict]:
 
     visited.add(root.resolve())
     _walk(root, 0)
-    return sorted(result, key=lambda h: h["path"])
+    result = sorted({home["path"]: home for home in result}.values(), key=lambda h: h["path"])
+    conflicts = sorted(
+        {item["path"]: item for item in conflicts}.values(),
+        key=lambda item: item["path"],
+    )
+    _mark_nested(result)
+    return result, conflicts
+
+
+def find_candidates_under(root: Path, max_depth: int = 4) -> list[dict]:
+    result: list[dict] = []
+    visited: set[Path] = {root.resolve()}
+
+    def _walk(current: Path, depth: int) -> None:
+        try:
+            entries = list(current.iterdir())
+        except (PermissionError, OSError):
+            return
+        if classify(current) in ("obsidian", "generic"):
+            result.append(candidate_info(current))
+        if depth >= max_depth:
+            return
+        for entry in entries:
+            if entry.is_symlink() or not entry.is_dir():
+                continue
+            if (
+                entry.name in SKIP_DIRS
+                or entry.name.startswith(".")
+                or entry.name.startswith("_COMMON.backup-")
+            ):
+                continue
+            real = entry.resolve()
+            if real in visited:
+                continue
+            visited.add(real)
+            _walk(entry, depth + 1)
+
+    _walk(root, 0)
+    return sorted(
+        {candidate["path"]: candidate for candidate in result}.values(),
+        key=lambda candidate: candidate["path"],
+    )
+
+
+def nearest_implanted_ancestor(target: Path) -> tuple[list[dict], list[dict]]:
+    for current in (target, *target.parents):
+        status = current_brain_status(current)
+        if status == "ok":
+            return [brain_info(current)], []
+        if status != "missing":
+            return [], [conflict_info(current, status)]
+    return [], []
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Find current-model brains, or bootstrap candidates with --candidates."
+    )
+    parser.add_argument(
+        "--candidates",
+        action="store_true",
+        help="Use broad notes-folder heuristics for bootstrap destination suggestions.",
+    )
+    parser.add_argument("path", nargs="?", help="Path to validate or resolve from.")
+    return parser.parse_args()
 
 
 def main() -> int:
-    provided = len(sys.argv) > 1
+    args = parse_args()
+    provided = args.path is not None
     if provided:
-        target = Path(sys.argv[1].strip()).expanduser().resolve()
+        target = Path(args.path.strip()).expanduser().resolve()
         if not target.exists():
             print(json.dumps({
                 "search_root": str(target),
                 "provided_path": True,
+                "mode": "candidates" if args.candidates else "implanted",
+                "expected_model_root": str(current_model_root()),
                 "homes": [],
+                "conflicts": [],
                 "count": 0,
                 "error": f"Path does not exist: {target}",
             }))
             return 1
-        info = home_info(target)
+        if args.candidates:
+            homes = [candidate_info(target)]
+            conflicts: list[dict] = []
+        else:
+            homes, conflicts = nearest_implanted_ancestor(target)
         print(json.dumps({
             "search_root": str(target),
             "provided_path": True,
-            "homes": [info],
-            "count": 1,
+            "mode": "candidates" if args.candidates else "implanted",
+            "expected_model_root": str(current_model_root()),
+            "homes": homes,
+            "conflicts": conflicts,
+            "count": len(homes),
         }))
-        return 0
+        return 0 if homes else 1
 
-    homes = find_homes_under(Path.home())
+    root = Path.home().resolve()
+    if args.candidates:
+        homes = find_candidates_under(root)
+        conflicts = []
+    else:
+        homes, conflicts = find_implanted_under(root)
     print(json.dumps({
-        "search_root": str(Path.home()),
+        "search_root": str(root),
         "provided_path": False,
+        "mode": "candidates" if args.candidates else "implanted",
+        "expected_model_root": str(current_model_root()),
         "homes": homes,
+        "conflicts": conflicts,
         "count": len(homes),
     }))
     return 0 if homes else 1

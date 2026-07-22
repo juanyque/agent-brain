@@ -30,13 +30,14 @@ summary and process exit code.
 | Module | Contract protected |
 |---|---|
 | `test_runtime_health.py` | Runtime detection and symlink/config health checks for Claude, OpenCode, shared agents, and Codex. Includes deliberately broken fixtures to prove failures are detected. |
-| `test_skill_link.py` | Dry-run safety, external repo skill paths, all-runtime linking, idempotence, and invalid-source rejection for `skill_link.sh`. |
+| `test_skill_link.py` | Dry-run safety, external repo skill paths, all-runtime linking, idempotence, latest-run audit logging, and invalid-source rejection for `skill_link.sh`. |
 | `test_runtime_manager.py` | Dry-run safety plus Direction A ingestion, Direction B implantation, conflict quarantine, Codex private-file permissions, runtime isolation, and double-apply idempotence. |
 | `test_home_setup.py` | Brain-state detection, preservation of existing wrappers/templates, unambiguous current-vs-desired `_COMMON` conflict reporting, conflict backup/switch, virgin staging, and repeated apply without drift. |
-| `test_bootstrap.py` | Non-interactive explicit-brain execution, deterministic initial snapshot commits, unsigned annotated tags even with signing enabled, and dirty-repository refusal without Git mutation. |
-| `test_session_open.py` | Runtime-specific recovery commands, original cwd persistence, chronological daily discovery across archive folders, reciprocal nearest-neighbor navigation across date gaps and backfills, dry-run and rollback safety, local/common template conflict refusal, idempotent session-note and daily registration, duplicate removal, and postcondition failures. |
-| `test_session_close.py` | Dry-run safety, idempotent handoff/consolidation, safe refusal to archive untracked notes, final staged-content integrity, rollback on move/staging failures, and repeatable tracked archival. |
-| `test_brain_check.py` | Read-only verification that active WIP notes are registered in `WIP/WIP.md`, for both Obsidian wikilinks and standard Markdown links. |
+| `test_bootstrap.py` | Bootstrap-candidate discovery, non-interactive explicit-brain execution, deterministic initial snapshot commits, unsigned annotated tags even with signing enabled, and dirty-repository refusal without Git mutation. |
+| `test_find_home.py` | Strict current-model brain identity, separation from bootstrap candidates, wrong/broken `_COMMON` rejection, ancestor resolution, nested-brain metadata, and symlink traversal safety. |
+| `test_session_open.py` | Current-model identity guard, runtime-specific recovery commands, original cwd persistence, project-filtered WIP discovery including optional-capability links, chronological daily discovery across archive folders, reciprocal nearest-neighbor navigation across date gaps and backfills, dry-run and rollback safety, local/common template conflict refusal, idempotent session-note and daily registration with canonical link refresh, duplicate removal, and postcondition failures. |
+| `test_session_close.py` | Current-model brain identity enforcement, dry-run safety, idempotent handoff/consolidation, `--apply` placement before or after subcommands, safe refusal to archive untracked notes, final staged-content integrity, rollback on move/staging failures, and repeatable tracked archival. |
+| `test_brain_check.py` | Read-only session verification across active and archived notes with active-note precedence, plus active-WIP registration through Obsidian wikilinks and standard Markdown links. |
 | `test_boyscout_doctor.py` | Boyscout portable reference graph, detector parity, backlog round-trip, and rejection of private-layout migration artifacts. |
 | `test_find_related_notes.py` | CLI behavior across filename/content/both note discovery modes and structured missing-brain errors. |
 | `test_runtime_profiles.py` | Sanitized profile selection, capability-route integrity, and the public/private content boundary. |

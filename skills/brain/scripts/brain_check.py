@@ -56,6 +56,22 @@ def dashboard_links(text: str) -> set[str]:
     return links
 
 
+def find_session_note_for_check(brain_root: Path, session_id: str) -> Path | None:
+    """Find the active session note, falling back to its archived copy."""
+    active_note = find_existing_session_note(brain_root, session_id)
+    if active_note is not None:
+        return active_note
+
+    trash_dir = brain_root / "QUARANTINE" / "TRASH"
+    if not trash_dir.is_dir():
+        return None
+    matches = sorted(
+        (path for path in trash_dir.glob("*.md") if session_id in path.name),
+        reverse=True,
+    )
+    return matches[0] if matches else None
+
+
 def validate_wip_registration(brain_root: Path, note_arg: str) -> list[str]:
     errors: list[str] = []
     brain_root = brain_root.expanduser().resolve()
@@ -112,7 +128,7 @@ def main() -> int:
     if args.session_id:
         journal_folder = load_journal_folder(brain_root)
         daily_path = brain_root / journal_folder / f"{args.date}.md"
-        note_path = find_existing_session_note(brain_root, args.session_id)
+        note_path = find_session_note_for_check(brain_root, args.session_id)
         if note_path is None:
             errors.append(f"session note not found for {args.session_id}")
         else:

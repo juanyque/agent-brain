@@ -22,6 +22,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+MODEL_SCRIPTS = REPO_ROOT / "model" / "SCRIPTS"
+if str(MODEL_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(MODEL_SCRIPTS))
+
+from brain_state import current_brain_status, current_model_root  # noqa: E402
+
+
 VALID_TRANSITIONS: dict[str, list[str]] = {
     "handoff": ["open"],
     "consolidate": ["open", "handoff-only"],
@@ -29,6 +38,18 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
 
 STATUS_LINE_RE = re.compile(r"^(-\s+Status:)\s*(.+)$")
 WIP_TAG_RE = re.compile(r"\bwip\b")
+
+
+def normalize_apply_flag(argv: list[str]) -> list[str]:
+    """Accept --apply before or after the subcommand.
+
+    argparse only recognizes options owned by the main parser before a subcommand.
+    Keep one canonical global option while accepting the natural trailing form used
+    by callers and documentation.
+    """
+    if "--apply" not in argv:
+        return argv
+    return ["--apply", *(argument for argument in argv if argument != "--apply")]
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,7 +79,7 @@ def parse_args() -> argparse.Namespace:
         help="Move the consolidated note to QUARANTINE/TRASH/ via git mv.",
     )
 
-    return parser.parse_args()
+    return parser.parse_args(normalize_apply_flag(sys.argv[1:]))
 
 
 def find_session_note(brain_root: Path, session_id: str) -> Path | None:
@@ -231,6 +252,14 @@ def main() -> int:
     if not brain_root.is_dir():
         print(f"ERROR: vault root not found: {brain_root}", file=sys.stderr)
         return 1
+    model_status = current_brain_status(brain_root)
+    if model_status != "ok":
+        print(
+            "ERROR: brain root is not attached to the current agent-brain model "
+            f"(status: {model_status}; expected: {current_model_root()}): {brain_root}",
+            file=sys.stderr,
+        )
+        return 2
 
     mode = "apply" if args.apply else "dry-run"
     subcommand: str = args.subcommand

@@ -25,6 +25,14 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+MODEL_SCRIPTS = REPO_ROOT / "model" / "SCRIPTS"
+if str(MODEL_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(MODEL_SCRIPTS))
+
+from brain_state import current_brain_status, current_model_root  # noqa: E402
+
+
 DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
 DAILY_NAVIGATION_RE = re.compile(
     r"^(?P<prefix>\s*\[\[)"
@@ -44,6 +52,7 @@ SESSION_SCAFFOLD_PREFIXES = (
     "- Example (Claude Code):",
     "- Example (Codex):",
 )
+SESSION_NOTE_REFERENCE_RE = re.compile(r"Session note:\s*\[\[[^\]]+\]\]\.?")
 
 TEMPLATE_CANDIDATES = [
     Path("TEMPLATES/TEMPLATE.wip-session.common.md"),
@@ -264,11 +273,15 @@ def extract_wip_context(wip_path: Path, cwd: str, max_headings: int = 5) -> list
     if not wip_path.exists():
         return []
     lines = read_lines_safe(wip_path)
+    cwd_basename = ""
     keywords: set[str] = set()
     if cwd:
-        basename = Path(cwd).name.lower()
-        keywords.add(basename)
-        keywords.update(part for part in re.split(r"[-_/]", basename) if len(part) > 2)
+        cwd_basename = Path(cwd).name.lower()
+        keywords.update(
+            part
+            for part in re.split(r"[^a-z0-9]+", cwd_basename)
+            if len(part) > 2 and part not in {"all", "and", "for", "the", "with"}
+        )
 
     result: list[str] = []
     seen = 0
@@ -277,7 +290,13 @@ def extract_wip_context(wip_path: Path, cwd: str, max_headings: int = 5) -> list
     while i < n and seen < max_headings:
         line = lines[i]
         if HEADING_RE.match(line):
-            relevant = (not keywords) or any(kw in line.lower() for kw in keywords)
+            heading_lower = line.lower()
+            heading_tokens = set(re.split(r"[^a-z0-9]+", heading_lower))
+            relevant = (
+                not keywords
+                or cwd_basename in heading_lower
+                or bool(keywords & heading_tokens)
+            )
             if relevant:
                 result.append(line)
                 seen += 1
@@ -403,14 +422,26 @@ def _is_sessions_scaffold(line: str) -> bool:
 
 
 def _entry_with_preserved_summary(existing: str, desired: str) -> str:
-    """Replace only the recovery command, preserving a user-edited summary."""
+    """Refresh recovery metadata while preserving a user-edited summary."""
     desired_parts = desired.split("`", 2)
     start = existing.find("`")
     end = existing.find("`", start + 1) if start >= 0 else -1
     if len(desired_parts) == 3 and start >= 0 and end > start:
         newline = "\n" if existing.endswith("\n") else ""
         current = existing.rstrip("\r\n")
-        return current[: start + 1] + desired_parts[1] + current[end:] + newline
+        current = current[: start + 1] + desired_parts[1] + current[end:]
+        desired_reference = SESSION_NOTE_REFERENCE_RE.search(desired)
+        existing_reference = SESSION_NOTE_REFERENCE_RE.search(current)
+        if desired_reference and existing_reference:
+            current = (
+                current[: existing_reference.start()]
+                + desired_reference.group(0)
+                + current[existing_reference.end() :]
+            )
+        elif desired_reference:
+            separator = " " if current.endswith((".", "!", "?")) else ". "
+            current += separator + desired_reference.group(0)
+        return current + newline
     return desired + ("\n" if existing.endswith("\n") else "")
 
 
@@ -747,6 +778,8 @@ def validate_session_postconditions(
         errors.append(f"expected one daily registration for {session_id}, found {len(registrations)}")
     elif expected_command not in registrations[0]:
         errors.append("daily registration does not contain the expected recovery command")
+    elif f"[[{session_note_path.stem}]]" not in registrations[0]:
+        errors.append("daily registration does not link the selected session note")
     if any(_is_sessions_scaffold(line) for line in body):
         errors.append("daily # Sessions still contains template scaffold")
     return errors
@@ -759,6 +792,14 @@ def main() -> int:
     if not brain_root.is_dir():
         print(f"ERROR: vault root not found: {brain_root}", file=sys.stderr)
         return 1
+    model_status = current_brain_status(brain_root)
+    if model_status != "ok":
+        print(
+            "ERROR: brain root is not attached to the current agent-brain model "
+            f"(status: {model_status}; expected: {current_model_root()}): {brain_root}",
+            file=sys.stderr,
+        )
+        return 2
 
     mode = "apply" if args.apply else "dry-run"
     today = datetime.now().strftime("%Y-%m-%d")

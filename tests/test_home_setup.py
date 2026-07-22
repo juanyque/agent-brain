@@ -102,7 +102,12 @@ class HomeSetupTests(unittest.TestCase):
                 ),
                 "broken-symlink": (
                     lambda entry: entry.symlink_to(root / "missing-model"),
-                    ["current: symlink ->", "target missing", str(root / "missing-model")],
+                    [
+                        "status: conflict-invalid-target",
+                        "current: symlink ->",
+                        "target missing",
+                        str(root / "missing-model"),
+                    ],
                 ),
                 "regular-file": (
                     lambda entry: entry.write_text("not a link\n", encoding="utf-8"),
@@ -131,7 +136,7 @@ class HomeSetupTests(unittest.TestCase):
                     self.assertIn("desired: symlink ->", output)
                     self.assertIn(str(common.resolve()), output)
 
-    def test_conflict_apply_error_uses_the_same_current_and_desired_details(self) -> None:
+    def test_invalid_target_apply_error_uses_the_same_current_and_desired_details(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             brain = root / "brain"
@@ -145,7 +150,7 @@ class HomeSetupTests(unittest.TestCase):
                 apply(brain, common, True, False, reporter)
 
             message = str(raised.exception)
-            self.assertIn("status: conflict-wrong-target", message)
+            self.assertIn("status: conflict-invalid-target", message)
             self.assertIn(f"current: symlink -> {missing}", message)
             self.assertIn("target missing", message)
             self.assertIn("desired: symlink ->", message)

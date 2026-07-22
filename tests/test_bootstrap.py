@@ -73,6 +73,31 @@ def run_bootstrap(
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_interactive_resolution_surfaces_bootstrap_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home = Path(raw) / "home"
+            candidate = home / "workspace" / "project"
+            (candidate / "WIP").mkdir(parents=True)
+            (candidate / "AGENTS.md").write_text("# Project\n", encoding="utf-8")
+            env = os.environ.copy()
+            env["HOME"] = str(home)
+
+            result = subprocess.run(
+                ["bash", str(SCRIPT), "--runtime", "codex"],
+                cwd=REPO_ROOT,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=20,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Detected brain candidates", result.stdout)
+        self.assertIn(str(candidate.resolve()), result.stdout)
+        self.assertIn("interactive input requires a terminal", result.stderr)
+
     def test_explicit_brain_never_needs_interactive_stdin(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

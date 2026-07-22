@@ -26,6 +26,11 @@ OPERATIONAL_TOP_LEVEL_DIRS = {COMMON_LINK_NAME, STAGING_DIR_NAME, AGENTS_DIR_NAM
 MARKERS = ["AGENTS.md", "BRAIN.md", "JOBS.md"]
 
 
+def current_model_root() -> Path:
+    """Return the model directory belonging to this agent-brain checkout."""
+    return Path(__file__).resolve().parents[1]
+
+
 def relative_symlink_target(source: Path, link_path: Path) -> str:
     return os.path.relpath(source.resolve(), start=link_path.parent.resolve())
 
@@ -33,7 +38,8 @@ def relative_symlink_target(source: Path, link_path: Path) -> str:
 def link_status(brain_root: Path, common_target: Path) -> tuple[str, str]:
     """Return (status, desired_relative_target) for the _COMMON symlink.
 
-    status is one of: missing, conflict-not-symlink, ok, conflict-wrong-target
+    status is one of: missing, conflict-not-symlink, conflict-invalid-target,
+    ok, conflict-wrong-target
     """
     link_path = brain_root / COMMON_LINK_NAME
     desired = relative_symlink_target(common_target, link_path)
@@ -42,9 +48,23 @@ def link_status(brain_root: Path, common_target: Path) -> tuple[str, str]:
         return "missing", desired
     if not link_path.is_symlink():
         return "conflict-not-symlink", desired
-    if link_path.resolve() == common_target.resolve():
+    try:
+        resolved_target = link_path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return "conflict-invalid-target", desired
+    if resolved_target == common_target.resolve():
         return "ok", desired
     return "conflict-wrong-target", desired
+
+
+def current_brain_status(
+    brain_root: Path,
+    common_target: Path | None = None,
+) -> str:
+    """Return the _COMMON status against the model serving the current skill."""
+    target = common_target or current_model_root()
+    status, _desired = link_status(brain_root, target)
+    return status
 
 
 def staging_status(brain_root: Path) -> tuple[str, int]:

@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "skills" / "brain" / "scripts" / "session_close.py"
+MODEL_ROOT = REPO_ROOT / "model"
 sys.path.insert(0, str(SCRIPT.parent))
 
 import session_close  # noqa: E402
@@ -37,6 +38,10 @@ def git(brain: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 def create_note(brain: Path, session_id: str, status: str = "open") -> Path:
+    brain.mkdir(parents=True, exist_ok=True)
+    common_link = brain / "_COMMON"
+    if not common_link.exists() and not common_link.is_symlink():
+        common_link.symlink_to(MODEL_ROOT, target_is_directory=True)
     note = brain / "WIP" / "SESSIONS" / f"2026-07-21-session-{session_id}-test.md"
     note.parent.mkdir(parents=True)
     note.write_text(
@@ -51,6 +56,50 @@ def create_note(brain: Path, session_id: str, status: str = "open") -> Path:
 
 
 class SessionCloseTests(unittest.TestCase):
+    def test_refuses_unimplanted_brain_before_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            note = create_note(brain, "session-unsafe")
+            (brain / "_COMMON").unlink()
+            original = note.read_text(encoding="utf-8")
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "--apply",
+                "handoff",
+                "session-unsafe",
+            )
+            content = note.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("not attached to the current agent-brain model", result.stderr)
+        self.assertEqual(content, original)
+
+    def test_refuses_brain_attached_to_another_model_before_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            old_model = root / "obsidian-vault-common"
+            old_model.mkdir()
+            note = create_note(brain, "session-unsafe")
+            (brain / "_COMMON").unlink()
+            (brain / "_COMMON").symlink_to(old_model, target_is_directory=True)
+            original = note.read_text(encoding="utf-8")
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "--apply",
+                "consolidate",
+                "session-unsafe",
+            )
+            content = note.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("conflict-wrong-target", result.stderr)
+        self.assertEqual(content, original)
+
     def test_dry_run_does_not_mutate_note(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)
@@ -111,6 +160,23 @@ class SessionCloseTests(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertIn("- Status: handoff-only", content)
         self.assertIn("Status already handoff-only", second.stdout)
+
+    def test_handoff_accepts_trailing_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            note = create_note(brain, "session-123")
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "handoff",
+                "session-123",
+                "--apply",
+            )
+            content = note.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("- Status: handoff-only", content)
 
     def test_archive_refuses_untracked_note_without_mutating_it(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -195,6 +261,31 @@ class SessionCloseTests(unittest.TestCase):
         self.assertEqual(unstaged_diff.returncode, 0, unstaged_diff.stderr)
         self.assertIn("already consolidated and archived", second.stdout)
 
+    def test_tracked_archive_accepts_apply_after_archive_option(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            self.assertEqual(git(brain, "init", "-q").returncode, 0)
+            git(brain, "config", "user.email", "tests@example.invalid")
+            git(brain, "config", "user.name", "agent-brain tests")
+            note = create_note(brain, "session-123")
+            git(brain, "add", str(note.relative_to(brain)))
+            self.assertEqual(git(brain, "commit", "-qm", "fixture").returncode, 0)
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "session-123",
+                "--archive",
+                "--apply",
+            )
+            archived = brain / "QUARANTINE" / "TRASH" / note.name
+            archived_content = archived.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("- Status: consolidated", archived_content)
+        self.assertNotIn("wip", archived_content.split("---", 2)[1])
+
     def test_archive_failure_rolls_back_note_content(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)
@@ -259,7 +350,7 @@ class SessionCloseTests(unittest.TestCase):
             content = note.read_text(encoding="utf-8")
             note_exists = note.exists()
             archived_exists = archived.exists()
-            status = git(brain, "status", "--porcelain")
+            status = git(brain, "status", "--porcelain", "--untracked-files=no")
 
         self.assertEqual(result, 1)
         self.assertTrue(note_exists, captured_stderr.getvalue())

@@ -110,6 +110,7 @@ When editing this repo, the granular rule files are the source of truth for thei
 | Adding or correcting internal Obsidian links | `RULES-LINKS.common.md` |
 | Changing daily-note structure or cleanup logic | `RULES-DAILY-NOTES.common.md` |
 | Changing session start/rollover/consolidation logic | `RULES-SESSION-LIFECYCLE.common.md` |
+| Project WIP context references an optional capability registry or descriptor, such as Graphify | `RULES-OPTIONAL-CAPABILITIES.common.md` |
 | Creating, updating, or archiving review evidence (evidence store, brag/feedback/complaint reports) | `RULES-REVIEW-EVIDENCE.common.md` |
 | Starting implementation work on a tracker ticket (Jira / GitHub issue / equivalent) — intent-based, not surface-based (slash command, NL phrase, session resume all count) | `RULES-ISSUE-DOCS.common.md` |
 | User describes a task that may match a known task-type (basename collision cleanup, dead-code detection, a project migration, a Monte Carlo monitor, etc.) | `TASK_TYPES/TASK_TYPES.md` in the brain — scan one-liner index for matches, deep-read the specific note if a match is found |
