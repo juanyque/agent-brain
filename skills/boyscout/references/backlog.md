@@ -117,7 +117,7 @@ is one finding. Separate findings within the same target with `---`.
 | A later session independently detects the same finding | Update `last_seen` + increment `times_seen` (no duplicate) |
 | User opts into attack-now on a backlog entry → PR landed | **Consume** — remove from backlog (see "Consume on attack" below) |
 | User opts into attack-now on a `new` finding (never written) → PR landed | No removal needed — nothing to consume |
-| User selects a finding → Ticketed (Jira) | Remove from backlog (ticket tracker is source of truth) |
+| User selects a finding → Ticketed | Remove from backlog (ticket tracker is source of truth) |
 | User explicitly leaves a `pending` finding in the backlog | No change — leave as-is |
 
 **Deep-mode coexistence.** Findings produced by `/boyscout deep` live in the same
@@ -138,7 +138,7 @@ Never auto-fix a legacy entry without confirming the missing dimensions with the
 
 ## Consume on attack
 
-The "consume on attack" pattern lets the backlog stay clean as findings are resolved. When a user opts into attack-now on a backlog entry and the fix lands successfully (PR opened, or commit pushed to an existing PR), the entry is **deleted** from the backlog — not updated, not marked done in-place. The Jira / Git history (PR title referencing the target, commit messages) carry the provenance from that point on.
+The "consume on attack" pattern lets the backlog stay clean as findings are resolved. When a user opts into attack-now on a backlog entry and the fix lands successfully (PR opened, or commit pushed to an existing PR), the entry is **deleted** from the backlog — not updated, not marked done in-place. The issue tracker or Git history carries the provenance from that point on.
 
 **Trigger condition (all must be true):**
 
@@ -186,8 +186,8 @@ old: it was independently confirmed across multiple sessions.
 
 ### [XS][skill-gap] allowed-tools missing gh for PR guard
 - status: pending
-- detected: 2026-04-23 · session PROJ-255
-- last_seen: 2026-04-30 · session PROJ-260
+- detected: 2026-04-23 · session EXAMPLE-101
+- last_seen: 2026-04-30 · session EXAMPLE-102
 - times_seen: 2
 - location: user-skill/boyscout/SKILL.md
 - type: skill-gap
@@ -201,16 +201,16 @@ old: it was independently confirmed across multiple sessions.
 
 ## your-project / demo-app-agent-config
 
-### [XS][docs-gap] cs_smoke_full missing from ZSH Wrappers table
+### [XS][docs-gap] demo_check_full missing from shell command table
 - status: pending
-- detected: 2026-04-16 · session PROJ-200
-- last_seen: 2026-04-23 · session PROJ-255
+- detected: 2026-04-16 · session EXAMPLE-100
+- last_seen: 2026-04-23 · session EXAMPLE-101
 - times_seen: 2
 - location: example-org/Demo App/agent-config/AGENTS.md
 - type: docs-gap
 - effort: XS
 - risk: low
-- context: implementing PROJ-200 (Demo App workspace setup)
-- how_found: ran cs_help and compared output against CLAUDE.md wrappers table
-- action: Add row `| cs_smoke_full | Like cs_smoke but shows DB diffs per operation |`
+- context: implementing EXAMPLE-100 (Demo App workspace setup)
+- how_found: ran the project helper and compared its output with the AGENTS.md command table
+- action: Add row `| demo_check_full | Runs the full demo-app verification suite |`
 ```

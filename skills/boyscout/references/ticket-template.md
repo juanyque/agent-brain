@@ -2,7 +2,7 @@
 
 ## Determine project / parent
 
-1. Check current git branch name for a ticket code (e.g. `PROJ-174_...`).
+1. Check current git branch name for a ticket code (e.g. `EXAMPLE-123_...`).
 2. If found, use that project key for the ticket.
 3. If not found, ask:
    > "What ticket or project should I file this under?"

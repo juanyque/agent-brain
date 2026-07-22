@@ -178,7 +178,7 @@ When two ticket folders share the same name across different parent projects (e.
    ```
 2. Re-run the detector to confirm.
 
-The script does not auto-disambiguate to keep the algorithm simple; the case is rare (one occurrence per ~800 files in practice).
+The script does not auto-disambiguate because the grandparent choice requires human context and the case is rare by construction.
 
 ## Documentation convention: prefer real-but-unique basenames in examples
 

@@ -6,6 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_ROOTS = (ROOT / "skills", ROOT / "model", ROOT / "docs", ROOT / "examples")
+PUBLIC_FILES = (ROOT / "README.md",)
+PUBLIC_SUFFIXES = {".md", ".json", ".toml", ".sh", ".py", ".yaml", ".yml"}
 
 
 class PublicBoundaryTests(unittest.TestCase):
@@ -24,18 +26,27 @@ class PublicBoundaryTests(unittest.TestCase):
             "memory-" + "bank",
             "kt" + "lo",
             "proj-" + "368",
+            "juan" + ".garcia",
+            "obsidian-" + "vault-common",
+            "card-" + "engineer",
+            "refund" + "handler",
+            "processor" + "eventid",
+            "unfreeze" + "card",
+            "evolve " + "merchant",
+            "cs_" + "smoke",
         )
         violations: list[str] = []
+        paths = list(PUBLIC_FILES)
         for root in PUBLIC_ROOTS:
-            if not root.exists():
+            if root.exists():
+                paths.extend(root.rglob("*"))
+        for path in paths:
+            if not path.is_file() or path.suffix not in PUBLIC_SUFFIXES:
                 continue
-            for path in root.rglob("*"):
-                if not path.is_file() or path.suffix not in {".md", ".json", ".toml", ".sh"}:
-                    continue
-                text = path.read_text(encoding="utf-8", errors="ignore").lower()
-                for marker in private_markers:
-                    if marker in text:
-                        violations.append(f"{path.relative_to(ROOT)}: {marker}")
+            text = path.read_text(encoding="utf-8", errors="ignore").lower()
+            for marker in private_markers:
+                if marker in text:
+                    violations.append(f"{path.relative_to(ROOT)}: {marker}")
         self.assertEqual(violations, [])
 
     def test_public_markdown_has_no_concrete_mcp_tool_namespaces(self) -> None:

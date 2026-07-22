@@ -18,7 +18,7 @@ Example grouped presentation:
 2. [XS][skill-gap] summary report variant missing          [PENDING · Apr 21 · ×2]
 
 ━━━ your-project / demo-app-agent-config ━━━━━━━━━━━━
-3. [XS][docs-gap]  cs_smoke_full missing from ZSH table    [STALE? · Apr 8 · ×1]
+3. [XS][docs-gap]  demo_check_full missing from command table [STALE? · Apr 8 · ×1]
 ```
 
 When the user selects multiple findings from the same target, note: "Items X and Y

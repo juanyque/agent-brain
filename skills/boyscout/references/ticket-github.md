@@ -22,7 +22,7 @@ The body file is prepared from [ticket-template.md](ticket-template.md).
 ## Project key detection
 
 GitHub Issues does not use project keys the way Jira does. Instead:
-1. If the branch name contains a ticket pattern (e.g. `PROJ-123_*`), add it as a label.
+1. If the branch name contains a ticket pattern (e.g. `EXAMPLE-123_*`), add it as a label.
 2. Otherwise, create the issue without a project label — the repo itself is the namespace.
 
 ## After creation

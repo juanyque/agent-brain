@@ -36,7 +36,7 @@ curl -fsSL https://raw.githubusercontent.com/juanyque/agent-brain/main/bootstrap
 
 ### If `_COMMON` already exists
 
-If your brain already has a `_COMMON` symlink pointing to a different model (e.g. a previous setup), the dry-run reports the change. On `--apply`, the installer preserves the existing entry as `_COMMON.backup-<ts>` and repoints `_COMMON` to agent-brain automatically. The Git snapshot created before installation provides an additional rollback anchor.
+If your brain already has a `_COMMON` symlink pointing to a different model (e.g. a previous setup), the dry-run reports the current entry and desired symlink separately, including the raw target of a broken link. On `--apply`, the installer preserves the existing entry as `_COMMON.backup-<ts>` and repoints `_COMMON` to agent-brain automatically. The Git snapshot created before installation provides an additional rollback anchor.
 
 ### Flags
 
@@ -169,10 +169,6 @@ temporary `HOME` and verifies dry-run safety, conflict quarantine, and double-ap
 
 See [`tests/README.md`](tests/README.md) for the covered contracts, individual-test
 commands, and fixture rules.
-
-## Origin
-
-Evolved from `obsidian-vault-common` (private). This is the clean, notes-agnostic, multi-runtime rewrite.
 
 ## License
 

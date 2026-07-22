@@ -59,11 +59,11 @@ TICKET_ID - SHORT_DESCRIPTION.md
 ```
 
 **Examples:**
-- ✅ `PROJ-301 - Expose UnfreezeCard RPC.md`
-- ✅ `SEAR-1205 - Re-index Evolve Merchant.md`
+- ✅ `EXAMPLE-301 - Expose profile status API.md`
+- ✅ `SEARCH-1205 - Re-index product catalog.md`
 - ✅ `GH-1234 - Fix login timeout on mobile.md`
-- ❌ `PROJ-301.md` (no description — bad for Obsidian search)
-- ❌ `Expose UnfreezeCard RPC.md` (no ID — hard to cross-reference with the tracker)
+- ❌ `EXAMPLE-301.md` (no description — bad for Obsidian search)
+- ❌ `Expose profile status API.md` (no ID — hard to cross-reference with the tracker)
 
 The ID prefix keeps tickets grouped by tracker; the dash separator clarifies the boundary between ID and free-text description; the description makes Obsidian search useful when you don't remember the ID.
 
@@ -86,10 +86,10 @@ Obsidian resolves `[[wikilinks]]` by basename, not by path. Two files with the s
 Any auxiliary file inside a ticket folder, project folder, or other context-bearing parent that is at risk of name collision must include a discriminator, **prefixed before the stem**. Use the parent folder's slug:
 
 - `<parent-folder-name>` lowercased, with non-alphanumeric characters replaced by `-`, collapsed.
-- Example: parent `PROJ-305` → discriminator `proj-305` → file `proj-305.plan.md`.
-- Example: parent `PROJ-80 Amplify Remove six` → discriminator `proj-80-amplify-remove-six` → file `proj-80-amplify-remove-six.analysis.md`.
+- Example: parent `EXAMPLE-305` → discriminator `example-305` → file `example-305.plan.md`.
+- Example: parent `EXAMPLE-80 Improve cache cleanup` → discriminator `example-80-improve-cache-cleanup` → file `example-80-improve-cache-cleanup.analysis.md`.
 
-Discriminator-first reads as `<context>.<what>.md` ("the plan of PROJ-305") and groups a folder's auxiliary files together by ticket when listed across mixed locations.
+Discriminator-first reads as `<context>.<what>.md` ("the plan of EXAMPLE-305") and groups a folder's auxiliary files together by ticket when listed across mixed locations.
 
 **Applies to**: any file whose basename matches a known shared name (`README.md`, `plan.md`, `analysis.md`, `analisis.md`, `estado.md`, `decisiones.md`, `notes.md`, `MEMORY.md`, etc.) when multiple instances exist in different folders across the brain.
 

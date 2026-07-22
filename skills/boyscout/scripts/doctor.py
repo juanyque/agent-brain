@@ -12,8 +12,10 @@ Checks:
      promotable-flow) declared in the Type enum of finding-schema.md each have a
      matching detection-<type>.md brief, and vice-versa.
   3. The backlog file (if present) parses cleanly via backlog.py validate.
-  4. Subagent-brief consistency: references/deep-mode.md (the D4 fan-out) links
+  4. Detector-brief consistency: references/deep-mode.md (the D4 fan-out) links
      every detection-*.md brief that exists.
+  5. Every local Markdown link stays inside the portable skill and resolves.
+  6. Public docs contain no legacy private-layout or incomplete-adapter markers.
 """
 
 from __future__ import annotations
@@ -25,6 +27,13 @@ import sys
 
 SKILL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DEEP_TYPES = ["repeated-instruction", "automation-opportunity", "promotable-flow"]
+LEGACY_TEXT_MARKERS = {
+    "SKILL.boyscout.md": "legacy skill filename",
+    ".common.md": "private-model filename suffix",
+    "transcript files (see runtimes.md for paths)": "broken transcript-path placeholder",
+    "TBD": "unfinished runtime adapter placeholder",
+}
+MACHINE_SKILL_RE = re.compile(r"boyscout_[A-Za-z0-9][A-Za-z0-9_.-]*")
 
 
 def read(path):
@@ -127,7 +136,7 @@ def check_backlog_roundtrip(skill_dir):
     return problems
 
 
-def check_subagent_briefs(skill_dir):
+def check_detector_briefs(skill_dir):
     """deep-mode.md (the D4 fan-out) links every detection-*.md that exists."""
     problems = []
     deep = read(os.path.join(skill_dir, "references", "deep-mode.md"))
@@ -135,6 +144,62 @@ def check_subagent_briefs(skill_dir):
         brief = f"detection-{t}.md"
         if os.path.exists(os.path.join(skill_dir, "references", brief)) and brief not in deep:
             problems.append(f"deep-mode.md D4 does not link {brief}")
+    return problems
+
+
+def markdown_files(skill_dir):
+    """Yield portable Markdown files in deterministic order."""
+    paths = []
+    for root, _dirs, files in os.walk(skill_dir):
+        for filename in files:
+            if filename.endswith(".md"):
+                paths.append(os.path.join(root, filename))
+    return sorted(paths)
+
+
+def check_local_markdown_links(skill_dir):
+    """Every relative Markdown link stays inside the skill and resolves."""
+    problems = []
+    skill_root = os.path.realpath(skill_dir)
+    link_re = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+    for source in markdown_files(skill_dir):
+        text = read(source)
+        for match in link_re.finditer(text):
+            raw_target = match.group(1).strip()
+            target = raw_target.split("#", 1)[0]
+            if not target or "://" in target or target.startswith("mailto:"):
+                continue
+            if not target.endswith(".md"):
+                continue
+            candidate = os.path.realpath(os.path.join(os.path.dirname(source), target))
+            line = text.count("\n", 0, match.start()) + 1
+            rel_source = os.path.relpath(source, skill_dir)
+            try:
+                inside = os.path.commonpath([skill_root, candidate]) == skill_root
+            except ValueError:
+                inside = False
+            if not inside:
+                problems.append(f"{rel_source}:{line}: link escapes skill: {raw_target}")
+            elif not os.path.isfile(candidate):
+                problems.append(f"{rel_source}:{line}: missing link target: {raw_target}")
+    return problems
+
+
+def check_migration_artifacts(skill_dir):
+    """Reject names and placeholders inherited from the private source layout."""
+    problems = []
+    for path in markdown_files(skill_dir):
+        text = read(path)
+        rel = os.path.relpath(path, skill_dir)
+        for marker, description in LEGACY_TEXT_MARKERS.items():
+            for match in re.finditer(re.escape(marker), text):
+                line = text.count("\n", 0, match.start()) + 1
+                problems.append(f"{rel}:{line}: {description}: {marker}")
+        for match in MACHINE_SKILL_RE.finditer(text):
+            line = text.count("\n", 0, match.start()) + 1
+            problems.append(
+                f"{rel}:{line}: machine-specific skill directory: {match.group(0)}"
+            )
     return problems
 
 
@@ -162,7 +227,12 @@ def main(argv=None):
     report("type-enum / detection-brief parity", check_type_enum(args.skill_dir))
     bl_problems, bl_note = check_backlog(args.skill_dir, args.backlog)
     report("backlog structure", bl_problems, bl_note)
-    report("subagent-brief consistency (deep-mode.md D4)", check_subagent_briefs(args.skill_dir))
+    report(
+        "detector-brief consistency (deep-mode.md D4)",
+        check_detector_briefs(args.skill_dir),
+    )
+    report("local Markdown links", check_local_markdown_links(args.skill_dir))
+    report("public migration artifacts", check_migration_artifacts(args.skill_dir))
     report("backlog.py round-trip (parser smoke test)", check_backlog_roundtrip(args.skill_dir))
 
     print()

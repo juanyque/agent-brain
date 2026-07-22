@@ -25,6 +25,18 @@ When `_COMMON` exists but points to a different model (or is not a symlink):
 - **Without `--switch-model`**: refuses and prints the current vs expected target.
 - **With `--switch-model`**: backs up the existing `_COMMON` to `_COMMON.backup-<ts>` and creates the new symlink.
 
+Conflict output names the entry type and keeps both sides distinct:
+
+```text
+_COMMON:
+  status: conflict-wrong-target
+  current: symlink -> ../old-model (resolves to /path/to/old-model)
+  desired: symlink -> ../agent-brain/model (resolves to /path/to/agent-brain/model)
+```
+
+Broken symlinks retain their raw and resolved target with `target missing`; regular files and
+directories are identified as non-symlink entries instead of being described as pointers.
+
 ## Usage
 
 ```bash

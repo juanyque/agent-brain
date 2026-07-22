@@ -56,7 +56,7 @@ class Finding:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Assess a vault against the obsidian-vault-common structure.")
+    parser = argparse.ArgumentParser(description="Assess a brain against the agent-brain structure.")
     parser.add_argument("--brain-root", default=".", help="Vault root path")
     parser.add_argument("--output", default="WIP/STANDARDIZE_PROCESS.md", help="Report path relative to vault root")
     parser.add_argument("--apply", action="store_true", help="Write the assessment report instead of printing only")

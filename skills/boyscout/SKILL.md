@@ -37,7 +37,7 @@ Invoke `/boyscout` when you notice opportunities while working on a primary task
 - Leftover TODOs or FIXMEs with a clear path forward
 - Side tasks uncovered during investigation (e.g. a related bug, a needed migration)
 - Outdated or wrong documentation: READMEs, setup guides, inline comments that lie about the code
-- Skill gaps: a Claude Code skill that failed to handle a case, didn't contemplate a scenario, or produced a confusing interaction
+- Skill gaps: an agent-runtime skill that failed to handle a case, did not cover a scenario, or produced a confusing interaction
 
 Invoke `/boyscout deep` (see [Deep mode](#deep-mode-boyscout-deep-days) below) to analyse the interaction context across recent sessions — repeated instructions, automation opportunities, and promotable flows — not just the codebase.
 
@@ -59,7 +59,7 @@ For each finding, collect the fields in [references/finding-schema.md](reference
 
 **1e. Resolved sweep.** If `pending_findings` is empty, skip this step. Otherwise, before presenting the selection form, show the pending backlog entries numbered locally (1, 2, 3… — Step 2 assigns fresh global numbers after any removals), then ask the user: *"Any backlog entries you know are already resolved? Enter numbers to remove before we continue."* Remove the selected entries from `all_findings` and delete their blocks with `python3 scripts/backlog.py remove --target "<target>" --summary "<summary>"`. This zero-effort prompt prevents stale entries from accumulating across sessions.
 
-**Verification before dropping `flaky-test` / `test-isolation` findings.** Source-only inspection is insufficient for these types — before removing one as resolved (here or in clean mode), the relevant module check must actually pass (e.g. `./gradlew :<module>:check`). A finding that still reproduces stays in the backlog. (Concrete miss: PROJ-296 finding #12 was dropped on source-only review, then reproduced deterministically during `:grpc:check`.)
+**Verification before dropping `flaky-test` / `test-isolation` findings.** Source-only inspection is insufficient for these types. Before removing one as resolved (here or in clean mode), reproduce the original verification boundary and require it to pass (for example, the relevant module check). A finding that still reproduces stays in the backlog.
 
 ### Step 2 — Present the selection form
 
@@ -199,7 +199,7 @@ The normal fix/ticket workflow is not invoked in clean mode — selected finding
 
 ## Deep mode (`/boyscout deep [days]`)
 
-When invoked as `/boyscout deep`, skip the normal codebase scan and analyse the **interaction context** of recent sessions instead — repeated instructions, deterministic ceremonies the agent ran by hand, and ad-hoc flows worth promoting to a skill. It replaces Step 1b with a parallel 3-subagent multi-source scan (one per finding type), then rejoins the main workflow at Step 1c (dedup). Default window 2 days; `/boyscout deep 7` widens it. Mutually exclusive with `clean`.
+When invoked as `/boyscout deep`, skip the normal codebase scan and analyse the **interaction context** of recent sessions instead — repeated instructions, deterministic ceremonies the agent ran by hand, and ad-hoc flows worth promoting to a skill. It replaces Step 1b with three isolated detector passes (parallel when the runtime and active instructions permit it), then rejoins the main workflow at Step 1c (dedup). Default window 2 days; `/boyscout deep 7` widens it. Mutually exclusive with `clean`.
 
 The full workflow (D1–D6), the closed source list, the PII / untrusted-transcript guardrail, target namespaces, and deep-mode verification live in [references/deep-mode.md](references/deep-mode.md) — loaded only on `/boyscout deep`.
 
@@ -281,7 +281,7 @@ If any file cannot be read, stop immediately and tell the user:
 | `references/batch-implement-playbook.md` | Batch-implement mode | conditional — only on `/boyscout batch` |
 | `references/backlog-to-tickets.md` | Backlog → Tickets mode | conditional — only on `/boyscout tickets` |
 
-`references/deep-mode.md` in turn loads `deep-sources.md` and the three `detection-*.md` subagent briefs — only on `/boyscout deep`.
+`references/deep-mode.md` in turn loads `deep-sources.md`, `runtimes.md`, and the three `detection-*.md` detector briefs — only on `/boyscout deep`.
 
 Deterministic helpers live in `scripts/` (`backlog.py`, `doctor.py`) — invoked by the steps above, not "loaded".
 

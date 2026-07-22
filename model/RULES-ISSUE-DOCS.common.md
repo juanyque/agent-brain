@@ -4,7 +4,7 @@ Use this rule whenever an agent begins implementation work on a tracker ticket (
 
 ## Why this exists
 
-Conversation transcripts and Claude Code windows are ephemeral: scroll-back is finite, sessions die, and re-reads of long planning threads are expensive. A persistent working doc gives the user:
+Conversation transcripts and agent-runtime windows are ephemeral: scroll-back is finite, sessions end, and re-reading long planning threads is expensive. A persistent working doc gives the user:
 
 - A **supervision artefact** — they can `git diff` the file to inspect what was planned, what was decided, and what changed, without re-reading the conversation.
 - A **recovery anchor** — if a session crashes or the window scrolls past, the working doc captures the current state of agent thinking on this ticket.
@@ -25,8 +25,8 @@ Fire the rule the moment the agent identifies that **implementation work on a sp
 
 Examples of signals that fire the rule:
 
-- An explicit slash command for implementation (`/card-engineer:implement-ticket PROJ-313`, `/implement TICKET-123`, equivalents).
-- A natural-language request that names a ticket (`"implementa PROJ-313"`, `"vamos a por ABC-456"`, `"abordemos #789"`, `"empezamos con MONEY-42"`).
+- An explicit command for implementation (`/implement EXAMPLE-123` or an equivalent runtime command).
+- A natural-language request that names a ticket (`"implement EXAMPLE-123"`, `"start work on ABC-456"`, or `"address #789"`).
 - Resumption of an in-progress ticket session whose working doc does not yet exist (the prior session ran without this rule).
 - Any other unambiguous signal mapping to "now we're starting to ship this ticket".
 
@@ -106,7 +106,7 @@ The doc is structured so a `git diff` between two commits reads as a series of a
 
 The destination path is derived from cwd + tracker, not from session label:
 
-- `<project-area>` — the project umbrella the work belongs to. Map cwd → known area (e.g. `~/workspace/example-org/demo-app/` → `Example Payments`). If unknown, ask the user.
+- `<project-area>` — the project umbrella the work belongs to. Map cwd → known area (e.g. `~/workspace/example-org/demo-app/` → `Example Platform`). If unknown, ask the user.
 - `<repo>` — repo or sub-system the work touches (e.g. `Demo App`, `team-tools`, `org-marketplace`). Match the existing `WIP/<project-area>/<repo>/` convention.
 - `<ticket-folder>` — folder named `<TICKET-ID> - <Short title>/`. Folder default (not flat file) — even if the ticket has no attachments yet, the folder is a stable container for later supporting artefacts.
 - File inside: `<TICKET-ID> - <Short title>.md`.
@@ -121,15 +121,15 @@ WIP/<project-area>/<repo>/<TICKET-ID> - <Short title>/<TICKET-ID> - <Short title
 
 Derive `<Short title>` deterministically from the tracker summary:
 
-1. Drop tracker-internal prefixes like `[CS]`, `[Platform]`, etc.
+1. Drop tracker-internal prefixes like `[Platform]`, `[Team]`, etc.
 2. Drop trailing noise words (`error`, `issue`, `bug` if redundant).
 3. Keep natural English capitalization. No kebab-case (this is for humans, not URLs).
 4. Cap at ~60 chars for path sanity.
 
 Examples:
 
-- Jira: `[CS] Align RefundHandler missing-processorEventId error to DataIntegrity` → `Align RefundHandler missing-processorEventId to DataIntegrity`
-- Jira: `[CS] gRPC layer + handler module consistency cleanup sweep` → `gRPC layer + handler module consistency cleanup sweep`
+- Tracker: `[Platform] Align request validation error handling` → `Align request validation error handling`
+- Tracker: `[Team] API layer and handler consistency cleanup` → `API layer and handler consistency cleanup`
 
 If the derived title would collide with another folder under the same `<repo>`, append `(v2)` or similar disambiguator.
 

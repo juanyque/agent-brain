@@ -188,7 +188,7 @@ def git_mv_to_staging(
                 dest = staging / item.name
                 dest.mkdir()
                 item.rmdir()
-                reporter.write(f"      (empty dir, moved directly)")
+                reporter.write("      (empty dir, moved directly)")
             else:
                 result = subprocess.run(
                     ["git", "mv", item.name, f"{STAGING_DIR_NAME}/{item.name}"],
@@ -200,7 +200,7 @@ def git_mv_to_staging(
                 if result.returncode != 0:
                     reporter.write(f"    WARNING: git mv failed: {result.stderr.strip()}")
     if dry_run:
-        reporter.write(f"  (dry-run: no files moved)")
+        reporter.write("  (dry-run: no files moved)")
 
 
 def via_common_symlink_target(common_rel: str, link_path: Path, brain_root: Path) -> str:
@@ -208,6 +208,44 @@ def via_common_symlink_target(common_rel: str, link_path: Path, brain_root: Path
     depth = len(rel.parts) - 1
     prefix = ("../" * depth) if depth > 0 else ""
     return f"{prefix}{COMMON_LINK_NAME}/{common_rel}"
+
+
+def describe_common_entry(link_path: Path) -> str:
+    """Describe the current _COMMON entry without losing broken-link context."""
+    if link_path.is_symlink():
+        raw_target = link_path.readlink()
+        resolved_target = link_path.resolve(strict=False)
+        missing = "; target missing" if not resolved_target.exists() else ""
+        return f"symlink -> {raw_target} (resolves to {resolved_target}{missing})"
+    if link_path.is_dir():
+        return f"directory at {link_path.resolve(strict=False)}"
+    if link_path.is_file():
+        return f"regular file at {link_path.resolve(strict=False)}"
+    if link_path.exists():
+        return f"non-symlink entry at {link_path.resolve(strict=False)}"
+    return "missing"
+
+
+def describe_desired_common(common: Path, desired: str) -> str:
+    return f"symlink -> {desired} (resolves to {common.resolve(strict=False)})"
+
+
+def report_common_status(
+    brain_root: Path,
+    common: Path,
+    status: str,
+    desired: str,
+    reporter: Reporter,
+) -> None:
+    if status.startswith("conflict"):
+        reporter.write(f"{COMMON_LINK_NAME}:")
+        reporter.write(f"  status: {status}")
+        reporter.write(
+            f"  current: {describe_common_entry(brain_root / COMMON_LINK_NAME)}"
+        )
+        reporter.write(f"  desired: {describe_desired_common(common, desired)}")
+        return
+    reporter.write(f"{COMMON_LINK_NAME}: {status} -> {desired}")
 
 
 def print_plan(
@@ -225,7 +263,7 @@ def print_plan(
     reporter.write(f"command: {command_string}")
     reporter.write(f"brain: {brain_root}")
     reporter.write(f"common: {common}")
-    reporter.write(f"{COMMON_LINK_NAME}: {link_st} -> {desired}")
+    report_common_status(brain_root, common, link_st, desired, reporter)
 
     if link_st == "missing" and not skip_full_reorder:
         stg_status, stg_count = staging_status(brain_root)
@@ -292,18 +330,24 @@ def apply(
     elif status == "ok":
         pass
     elif status.startswith("conflict") and switch_model:
+        previous = describe_common_entry(link_path)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         backup = link_path.with_name(f"{COMMON_LINK_NAME}.backup-{ts}")
         if link_path.is_symlink() or link_path.exists():
             link_path.rename(backup)
         link_path.symlink_to(desired, target_is_directory=True)
-        reporter.write(f"  SWITCHED _COMMON (backup: {backup.name})")
+        reporter.write(f"  SWITCHED {COMMON_LINK_NAME}")
+        reporter.write(f"    previous: {previous}")
+        reporter.write(f"    desired: {describe_desired_common(common, desired)}")
+        reporter.write(f"    backup: {backup}")
     elif status.startswith("conflict"):
-        current = link_path.resolve() if link_path.exists() else "(broken)"
         raise SystemExit(
-            f"_COMMON conflict: currently points to {current}\n"
-            f"  Expected: {common.resolve()}\n"
-            f"  Pass --switch-model to repoint (a .backup-<ts> will be created)."
+            f"{COMMON_LINK_NAME} conflict\n"
+            f"  status: {status}\n"
+            f"  current: {describe_common_entry(link_path)}\n"
+            f"  desired: {describe_desired_common(common, desired)}\n"
+            "  action: pass --switch-model to preserve the current entry as "
+            f"{COMMON_LINK_NAME}.backup-<ts> and install the desired symlink."
         )
     else:
         raise SystemExit(f"Unexpected _COMMON status: {status}")
@@ -376,11 +420,16 @@ def main() -> int:
             link_st, _ = link_status(brain_root, common)
             if link_st.startswith("conflict"):
                 reporter.write("")
-                reporter.write(f"  CONFLICT: _COMMON is {link_st}")
+                reporter.write(f"  CONFLICT: {COMMON_LINK_NAME} will remain unchanged")
                 if args.switch_model:
-                    reporter.write("  would backup existing _COMMON + repoint on apply")
+                    reporter.write(
+                        f"  apply action: backup current {COMMON_LINK_NAME} entry, then install desired symlink"
+                    )
                 else:
-                    reporter.write("  Pass --switch-model to repoint (backup created)")
+                    reporter.write(
+                        "  action required: review current vs desired, then pass "
+                        "--switch-model to preserve and replace the current entry"
+                    )
             elif link_st != "ok" and not args.skip_full_reorder:
                 reporter.write("")
                 git_mv_to_staging(brain_root, reporter, dry_run=True)

@@ -33,7 +33,7 @@ share context). Four outcomes:
 | **Implement** | Fix it now in this session's branch (see B4). |
 | **Skip** | Leave in backlog unchanged. |
 | **Defer** | Leave in backlog; note it was reviewed (bump `last_seen` via `backlog.py touch` so it doesn't read as stale). |
-| **Convert to ticket** | Route to Jira (Step 4B / [ticket-template.md](ticket-template.md)); then `backlog.py remove`. |
+| **Convert to ticket** | Route through the selected issue provider (Step 4B / [ticket-template.md](ticket-template.md)); then `backlog.py remove`. |
 
 **B4. Group into logical batches.** Findings sharing a `target` (or that naturally belong in one
 reviewable change) form one commit. Implement a batch in an isolated worktree on a single branch from
