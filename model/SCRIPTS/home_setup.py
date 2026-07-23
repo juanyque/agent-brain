@@ -11,203 +11,36 @@ Dry-run by default. Pass --apply to execute.
 from __future__ import annotations
 
 import argparse
-import subprocess
-import sys
 from pathlib import Path
 
 from brain_state import (  # noqa: E402  (lives next to this script)
     COMMON_LINK_NAME,
-    OPERATIONAL_TOP_LEVEL_DIRS,
     STAGING_DIR_NAME,
     link_status,
     staging_status,
 )
 from _common import Reporter, build_command_string  # noqa: E402  (lives next to this script)
-
-WRAPPERS = {
-    "AGENTS.md": "AGENTS.common.md",
-    "BRAIN.md": "BRAIN.common.md",
-    "JOBS.md": "JOBS.common.md",
-    "RULES-FILE-NAMING.md": "RULES-FILE-NAMING.common.md",
-    "RULES-LINKS.md": "RULES-LINKS.common.md",
-    "RULES-DAILY-NOTES.md": "RULES-DAILY-NOTES.common.md",
-    "RULES-SESSION-LIFECYCLE.md": "RULES-SESSION-LIFECYCLE.common.md",
-}
-
-TEMPLATE_SYMLINKS = {
-    "TEMPLATES/WIP Template.md": "TEMPLATES/TEMPLATE.wip.common.md",
-    "TEMPLATES/WIP Session Template.md": "TEMPLATES/TEMPLATE.wip-session.common.md",
-    "TEMPLATES/Daily Note Template.md": "TEMPLATES/TEMPLATE.daily-note.common.md",
-    "TEMPLATES/Issue Template.md": "TEMPLATES/TEMPLATE.issue.common.md",
-}
+from home_setup_content import (  # noqa: E402  (lives next to this script)
+    TEMPLATE_SYMLINKS,
+    WRAPPERS,
+    apply_managed_content,
+    discover_task_type_wrappers,
+    is_current_template_symlink,
+    managed_content_errors,
+    via_common_symlink_target,
+)
+from home_setup_filesystem import (  # noqa: E402  (lives next to this script)
+    cleanup_empty_dirs_recursively,
+    collect_movable_items,
+    git_mv_to_staging,
+    run_cleanup_ds_store,
+)
 
 
 def resolve_common_root(raw: str | None) -> Path:
     if raw:
         return Path(raw).expanduser().resolve()
     return Path(__file__).resolve().parents[1]
-
-
-def wrapper_text(local_name: str, common_name: str) -> str:
-    title = Path(local_name).stem
-    return (
-        f"# {title}\n\n"
-        f"This brain follows the shared model in `_COMMON/{common_name}`.\n"
-    )
-
-
-def discover_task_type_wrappers(common: Path) -> dict[str, str]:
-    result: dict[str, str] = {}
-    task_dir = common / "TASK_TYPES"
-    if not task_dir.is_dir():
-        return result
-    for source in sorted(task_dir.glob("*.common.md")):
-        common_rel = f"TASK_TYPES/{source.name}"
-        local_basename = source.stem
-        if local_basename.endswith(".common"):
-            local_basename = local_basename[: -len(".common")]
-        local_rel = f"TASK_TYPES/{local_basename}.md"
-        result[local_rel] = common_rel
-    return result
-
-
-def cleanup_ds_store_command(common: Path, brain_root: Path, applied: bool) -> list[str]:
-    repo_root = common.parent
-    command = [
-        sys.executable,
-        str(repo_root / "skills" / "brain" / "scripts" / "cleanup_ds_store.py"),
-        "--brain-root",
-        str(brain_root),
-    ]
-    if applied:
-        command.append("--apply")
-    return command
-
-
-def run_cleanup_ds_store(
-    common: Path, brain_root: Path, applied: bool, reporter: Reporter
-) -> None:
-    command = cleanup_ds_store_command(common, brain_root, applied)
-    result = subprocess.run(command, text=True, capture_output=True, check=False)
-    if result.stdout:
-        for line in result.stdout.rstrip().splitlines():
-            reporter.write(line)
-    if result.stderr:
-        for line in result.stderr.rstrip().splitlines():
-            reporter.write(f"STDERR: {line}")
-    if result.returncode != 0:
-        reporter.write(f"  WARNING: cleanup_ds_store exited with code {result.returncode}")
-    reporter.write("")
-
-
-def cleanup_empty_dirs_recursively(
-    brain_root: Path,
-    reporter: Reporter,
-    dry_run: bool,
-) -> None:
-    candidates: list[Path] = []
-    try:
-        top_entries = list(brain_root.iterdir())
-    except OSError:
-        return
-    for top in top_entries:
-        try:
-            if top.is_symlink() or not top.is_dir() or top.name.startswith("."):
-                continue
-        except OSError:
-            continue
-        candidates.append(top)
-        for path in top.rglob("*"):
-            try:
-                if not path.is_symlink() and path.is_dir():
-                    candidates.append(path)
-            except OSError:
-                continue
-    candidates.sort(key=lambda p: len(p.parts), reverse=True)
-    removed: list[Path] = []
-    removed_set: set[Path] = set()
-    for path in candidates:
-        try:
-            children = list(path.iterdir())
-        except OSError:
-            continue
-        if any(child not in removed_set for child in children):
-            continue
-        if not dry_run:
-            try:
-                path.rmdir()
-            except OSError:
-                continue
-        removed.append(path.relative_to(brain_root))
-        removed_set.add(path)
-    if not removed:
-        return
-    reporter.write("# Cleanup of empty directories")
-    for rel in removed:
-        reporter.write(f"  removing empty: {rel}/")
-    if dry_run:
-        reporter.write("  (dry-run: no dirs removed)")
-    reporter.write("")
-
-
-def collect_movable_items(brain_root: Path) -> list[Path]:
-    return sorted(
-        p for p in brain_root.iterdir()
-        if not p.name.startswith(".") and p.name not in OPERATIONAL_TOP_LEVEL_DIRS
-    )
-
-
-def git_mv_to_staging(
-    brain_root: Path,
-    reporter: Reporter,
-    dry_run: bool,
-) -> None:
-    staging = brain_root / STAGING_DIR_NAME
-    status, _count = staging_status(brain_root)
-
-    if status == "has-content":
-        reporter.write(f"  {STAGING_DIR_NAME}: already exists with content, skipping")
-        return
-
-    items = collect_movable_items(brain_root)
-    if not items:
-        reporter.write(f"  {STAGING_DIR_NAME}: brain root is empty, nothing to move")
-        return
-
-    if status == "missing":
-        if dry_run:
-            reporter.write(f"  will create: {STAGING_DIR_NAME}/")
-        else:
-            staging.mkdir()
-
-    reporter.write(f"  items to move into {STAGING_DIR_NAME}/:")
-    for item in items:
-        reporter.write(f"    {item.name}")
-        if not dry_run:
-            if item.is_dir() and not any(item.iterdir()):
-                dest = staging / item.name
-                dest.mkdir()
-                item.rmdir()
-                reporter.write("      (empty dir, moved directly)")
-            else:
-                result = subprocess.run(
-                    ["git", "mv", item.name, f"{STAGING_DIR_NAME}/{item.name}"],
-                    cwd=brain_root,
-                    text=True,
-                    capture_output=True,
-                    check=False,
-                )
-                if result.returncode != 0:
-                    reporter.write(f"    WARNING: git mv failed: {result.stderr.strip()}")
-    if dry_run:
-        reporter.write("  (dry-run: no files moved)")
-
-
-def via_common_symlink_target(common_rel: str, link_path: Path, brain_root: Path) -> str:
-    rel = link_path.relative_to(brain_root)
-    depth = len(rel.parts) - 1
-    prefix = ("../" * depth) if depth > 0 else ""
-    return f"{prefix}{COMMON_LINK_NAME}/{common_rel}"
 
 
 def describe_common_entry(link_path: Path) -> str:
@@ -295,14 +128,24 @@ def print_plan(
     for local_rel, common_rel in TEMPLATE_SYMLINKS.items():
         local_path = brain_root / local_rel
         common_path = common / common_rel
-        if local_path.is_symlink():
-            tmpl_status = "exists (symlink)"
+        desired_target = via_common_symlink_target(
+            common_rel,
+            local_path,
+            brain_root,
+        )
+        if not common_path.exists():
+            tmpl_status = f"missing common source: {common_rel}"
+        elif is_current_template_symlink(local_path, common_path):
+            tmpl_status = "current"
+        elif local_path.is_symlink():
+            tmpl_status = (
+                f"wrong target: {local_path.readlink()}; "
+                f"will relink to {desired_target}"
+            )
         elif local_path.exists():
             tmpl_status = "exists (file), will not overwrite"
-        elif not common_path.exists():
-            tmpl_status = f"missing common source: {common_rel}"
         else:
-            tmpl_status = "can create symlink"
+            tmpl_status = f"can create symlink -> {desired_target}"
         reporter.write(f"  {local_rel}: {tmpl_status}")
     reporter.write("next steps:")
     reporter.write("  Runtime wiring is handled by runtime_manager.py.")
@@ -352,35 +195,15 @@ def apply(
     else:
         raise SystemExit(f"Unexpected _COMMON status: {status}")
 
-    task_type_wrappers = discover_task_type_wrappers(common)
-    combined_wrappers = list(WRAPPERS.items()) + list(task_type_wrappers.items())
-    for local_name, common_name in combined_wrappers:
-        local_path = brain_root / local_name
-        common_path = common / common_name
-        if local_path.exists():
-            continue
-        if not common_path.exists():
-            continue
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        local_path.write_text(wrapper_text(local_name, common_name), encoding="utf-8")
-
-    for local_rel, common_rel in TEMPLATE_SYMLINKS.items():
-        local_path = brain_root / local_rel
-        common_path = common / common_rel
-        if local_path.exists() or local_path.is_symlink():
-            continue
-        if not common_path.exists():
-            continue
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        target = via_common_symlink_target(common_rel, local_path, brain_root)
-        local_path.symlink_to(target)
+    apply_managed_content(brain_root, common, reporter)
 
 
 def validate(brain_root: Path, common: Path) -> list[str]:
-    errors = []
+    errors: list[str] = []
     status, _desired = link_status(brain_root, common)
     if status != "ok":
         errors.append(f"{COMMON_LINK_NAME} status is {status}")
+    errors.extend(managed_content_errors(brain_root, common))
     return errors
 
 

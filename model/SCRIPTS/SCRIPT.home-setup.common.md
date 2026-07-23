@@ -10,7 +10,7 @@ Attach a brain to the agent-brain model — **structure only** (D21). Creates th
 2. **Staging** (virgin brains only) — moves all non-hidden content into `_STAGING/` for later standardization.
 3. **`_COMMON` attachment** — creates the `_COMMON` symlink pointing to the model root. Handles conflicts per D25 (see below).
 4. **Wrappers** — creates missing local wrapper files (`AGENTS.md`, `BRAIN.md`, `JOBS.md`, `RULES-*.md`) that point to their `.common.md` sources in `_COMMON/`. Existing files are never overwritten.
-5. **Template symlinks** — creates missing `TEMPLATES/` symlinks to daily-note, WIP, and issue templates.
+5. **Template symlinks** — creates missing `TEMPLATES/` symlinks to daily-note, WIP, and issue templates. Existing managed symlinks are validated against the selected model and stale or broken targets are relinked through `_COMMON`; regular local template files are preserved.
 
 ## What it does NOT do
 

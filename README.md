@@ -36,7 +36,7 @@ curl -fsSL https://raw.githubusercontent.com/juanyque/agent-brain/main/bootstrap
 
 ### If `_COMMON` already exists
 
-If your brain already has a `_COMMON` symlink pointing to a different model (e.g. a previous setup), the dry-run reports the current entry and desired symlink separately, including the raw target of a broken link. On `--apply`, the installer preserves the existing entry as `_COMMON.backup-<ts>` and repoints `_COMMON` to agent-brain automatically. The Git snapshot created before installation provides an additional rollback anchor.
+If your brain already has a `_COMMON` symlink pointing to a different model (e.g. a previous setup), the dry-run reports the current entry and desired symlink separately, including the raw target of a broken link. It also checks every template symlink managed by `home_setup` and reports stale targets. On `--apply`, the installer preserves the existing `_COMMON` entry as `_COMMON.backup-<ts>`, repoints `_COMMON` to agent-brain, and relinks stale managed templates through the new `_COMMON`. Regular template files remain untouched. The Git snapshot created before installation provides an additional rollback anchor.
 
 ### Flags
 
