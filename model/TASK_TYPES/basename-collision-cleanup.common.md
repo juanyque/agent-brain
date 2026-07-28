@@ -1,21 +1,22 @@
 # Basename collision cleanup — task-type guide
+<!-- content-boundary: {"kind":"task-type","task_id":"basename-collision-cleanup","rules":["model/RULES-FILE-NAMING.common.md"],"templates":[]} -->
 
 Resolve `*.md` basename collisions in the brain. Obsidian resolves `[[wikilinks]]` by basename, not by path, so duplicates make wikilinks non-deterministic. This task uses the deterministic detector + auto-rename script to clean them up, with surgical edits for the references that can't be auto-handled.
 
-> Tooling: `_COMMON/SKILLS/obsidian/scripts/check_basename_collisions.py` + `TOOL.check-basename-collisions.common.md`. The script is the single source of truth for ref-detection regex; never hand-write ad-hoc grep for the same purpose.
+> Tooling: `~/.agents/skills/brain/scripts/check_basename_collisions.py` + `TOOL.check-basename-collisions.md`. The script is the single source of truth for ref-detection regex; never hand-write ad-hoc grep for the same purpose.
 
 ## When this applies
 
-- User invokes `/obsidian` and the detector surfaces collision groups.
+- User invokes `brain` and the detector surfaces collision groups.
 - User explicitly asks to clean up basename collisions, deduplicate filenames, or unblock `[[wikilink]]` resolution.
 - Periodic brain hygiene pass (Weekly job).
 
 ## Before starting
 
-- [ ] Brain is a git repo. Renames must use `git mv` to preserve history; revert via `git checkout -- .` is the safety net.
+- [ ] Brain is a git repo. Renames must use `git mv` only with explicit user authorization for the Git operation; rollback commands such as `git checkout -- .` also require explicit user authorization.
 - [ ] Branch / working tree state is clean OR the user accepts mixing this work with in-progress changes.
 - [ ] Identify any runtime-governed subtrees that need exclusion (`_AGENTS/CLAUDE/memory/` is the canonical case — agent runtime hardcodes the paths).
-- [ ] Read `_COMMON/RULES-FILE-NAMING.common.md` → "Avoiding Obsidian basename collisions" to confirm the target naming convention (`<stem>.<parent-folder-slug>.md`).
+- [ ] Read `_COMMON/RULES-FILE-NAMING.common.md` → "Avoiding Obsidian basename collisions" to confirm the target naming convention.
 
 ## Process
 
@@ -23,7 +24,7 @@ Resolve `*.md` basename collisions in the brain. Obsidian resolves `[[wikilinks]
 
 1. Run the detector in dry-run mode:
    ```bash
-   python3 ~/.claude/skills/obsidian/scripts/check_basename_collisions.py \
+   python3 ~/.agents/skills/brain/scripts/check_basename_collisions.py \
      --brain-root /path/to/brain \
      --exclude-path _AGENTS/CLAUDE/memory
    ```
@@ -36,7 +37,7 @@ Resolve `*.md` basename collisions in the brain. Obsidian resolves `[[wikilinks]
 
 4. Re-run with `--apply`:
    ```bash
-   python3 ~/.claude/skills/obsidian/scripts/check_basename_collisions.py \
+   python3 ~/.agents/skills/brain/scripts/check_basename_collisions.py \
      --brain-root /path/to/brain \
      --exclude-path _AGENTS/CLAUDE/memory \
      --apply
@@ -53,7 +54,7 @@ For each group still surfaced after `--apply`:
 
 7. Get the deterministic reference list:
    ```bash
-   python3 ~/.claude/skills/obsidian/scripts/check_basename_collisions.py \
+   python3 ~/.agents/skills/brain/scripts/check_basename_collisions.py \
      --brain-root /path/to/brain \
      --exclude-path _AGENTS/CLAUDE/memory \
      --show-refs <basename-without-md>
@@ -63,9 +64,9 @@ For each group still surfaced after `--apply`:
    - Read the file at the printed line (use the line content as your locator; the surrounding 1-3 lines as context).
    - Decide which file in the group the ref intended. Most of the time it's obvious from the path-qualified target or the containing folder for bare md-links.
    - Plan a rewrite: link target + (optionally) link label updated to match the new filename.
-9. Default rename preference: **Option A — full rename consistency**. Every duplicate (including the canonical) gets `<stem>.<discriminator>.md`. Update incoming refs to the new name. End-state: no generic basename remains in the brain.
+9. Default rename preference: **Option A — full rename consistency**. Every duplicate (including the canonical) follows `_COMMON/RULES-FILE-NAMING.common.md` → "Avoiding Obsidian basename collisions". Update incoming refs to the new name. End-state: no generic basename remains in the brain.
 10. Confirm the batch with the user via `AskUserQuestion` if there's any non-trivial decision (label updates, ambiguous intent, etc.).
-11. Apply: `Edit` each referencing file → `git mv` each group file.
+11. Apply only after the user confirms the batch: `Edit` each referencing file, then move each group file with `git mv` only with explicit user authorization for the Git operation.
 12. Re-run `--show-refs <stem>` to confirm `total references: 0`.
 
 ### Phase 4 — Verify and close
@@ -92,7 +93,7 @@ Note the asymmetry: Obsidian wikilinks omit `.md`; markdown links can include or
 - **URL-encoded markdown links**: Obsidian writes `[text](Three%20laws%20of%20motion.md)` for filenames with spaces. The script's `--show-refs` decodes these when categorizing.
 - **`..` in wikilink paths**: `[[../X/stem|label]]` is valid and supported. Resolution is relative to the containing file's folder.
 - **Per-file safety vs bare-ref anchoring**: in interactive groups with unresolved bare refs, the script preserves one auto-safe file as the canonical anchor. If you rename it during interactive review, the bare refs become unresolved — proceed only if you've also accounted for those refs (Option A).
-- **`parent_slug` collision across projects** (rare): two ticket folders with the same name in different parent projects (e.g. `team-tools/PROJ-275/` + `Demo App/PROJ-275/`) auto-rename to the same `<stem>.proj-275.md` and create a new collision. Detector spots it on re-run; fix manually with `git mv` using a grandparent-included discriminator (`<stem>.team-tools-proj-275.md` and `<stem>.demo-app-proj-275.md`). See TOOL doc § "Edge case: `parent_slug` collision across projects".
+- **`parent_slug` collision across projects** (rare): two ticket folders with the same name in different parent projects (e.g. `team-tools/PROJ-275/` + `Demo App/PROJ-275/`) auto-rename to the same `<stem>.proj-275.md` and create a new collision. Detector spots it on re-run; fix manually with `git mv` only with explicit user authorization for the Git operation, using a grandparent-included discriminator (`<stem>.team-tools-proj-275.md` and `<stem>.demo-app-proj-275.md`). See TOOL doc § "Edge case: `parent_slug` collision across projects".
 
 ## Documentation convention
 
@@ -100,12 +101,12 @@ When writing this guide, the detector's TOOL doc, or any doc that mentions Obsid
 
 ## Known false positives
 
-Add new entries to `_COMMON/SKILLS/obsidian/scripts/TOOL.check-basename-collisions.common.md` → "Known false positives" when you find them. The canonical case today:
+Add new entries to `~/.agents/skills/brain/scripts/TOOL.check-basename-collisions.md` → "Known false positives" when you find them. The canonical case today:
 
 - `_AGENTS/CLAUDE/memory/projects/<X>/MEMORY.md` — Claude Code memory system reads these by hardcoded paths. Always pass `--exclude-path _AGENTS/CLAUDE/memory`.
 
 ## References
 
-- `_COMMON/SKILLS/obsidian/scripts/check_basename_collisions.py` — the detector
-- `_COMMON/SKILLS/obsidian/scripts/TOOL.check-basename-collisions.common.md` — tool documentation
+- `~/.agents/skills/brain/scripts/check_basename_collisions.py` — the detector
+- `~/.agents/skills/brain/scripts/TOOL.check-basename-collisions.md` — tool documentation
 - `_COMMON/RULES-FILE-NAMING.common.md` → "Avoiding Obsidian basename collisions" — the naming convention this task enforces

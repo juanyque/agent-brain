@@ -2,7 +2,7 @@
 
 Generate a feedback report from the evidence store for a given person and/or review cycle, then curate it into structured, concrete feedback. The report keeps feedback specific (situation, behavior, impact) rather than generic, and links back to the person's note in `MEMORY/People/`.
 
-> Template: `TEMPLATES/TEMPLATE.feedback-report.common.md`. Conventions: `RULES-REVIEW-EVIDENCE.common.md`. Store guide: `TASK_TYPES/evidence-management.common.md`.
+> Template: `TEMPLATES/TEMPLATE.feedback-report.common.md`. Lifecycle owner: `RULES-REVIEW-EVIDENCE.common.md`. Store guide: `TASK_TYPES/evidence-management.common.md`.
 
 ## When this applies
 
@@ -13,7 +13,7 @@ Generate a feedback report from the evidence store for a given person and/or rev
 ## Before starting
 
 - [ ] Confirm the person has a note in `MEMORY/People/`. If not, create one (at minimum the basename and a one-line role/context).
-- [ ] Read `RULES-REVIEW-EVIDENCE.common.md` for naming and sensitivity conventions.
+- [ ] Read `RULES-REVIEW-EVIDENCE.common.md` for the owned naming, sensitivity, archive, and status contract.
 - [ ] Identify the cycle label the brain uses (H1/H2, Q1..Q4, or a local label). Keep it consistent across feedback reports.
 
 ## Process
@@ -37,12 +37,12 @@ Generate a feedback report from the evidence store for a given person and/or rev
 
 ### Phase 4: Deliver or file
 
-9. For feedback you are giving: deliver it through the cycle's normal channel. Update `status: draft` -> `status: delivered`.
-10. For feedback received: no delivery step. Update `status: draft` -> `status: filed` once you have reflected and captured any follow-up.
+9. For feedback you are giving: deliver it through the cycle's normal channel. Update `status` to the shared value that matches the outcome.
+10. For feedback received: no delivery step. Update `status` once you have reflected and captured any follow-up. Allowed statuses are owned by `RULES-REVIEW-EVIDENCE.common.md`.
 
 ### Phase 5: Archive
 
-11. After the cycle closes, a maintenance job proposes moving the report to `ARCHIVED/Reviews/report-feedback-<date>-<slug>.md` via `git mv`.
+11. After the cycle closes, follow the report archive contract in `RULES-REVIEW-EVIDENCE.common.md`.
 
 ## Note shape
 

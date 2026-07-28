@@ -1,4 +1,5 @@
 # File naming conventions
+<!-- content-boundary: {"kind":"policy-owner","policy_id":"policy.file-naming","owner":"model/RULES-FILE-NAMING.common.md"} -->
 
 Apply across all projects and contexts. Choose the convention based on whether the file's date has intrinsic value.
 
@@ -93,6 +94,6 @@ Discriminator-first reads as `<context>.<what>.md` ("the plan of EXAMPLE-305") a
 
 **Applies to**: any file whose basename matches a known shared name (`README.md`, `plan.md`, `analysis.md`, `analisis.md`, `estado.md`, `decisiones.md`, `notes.md`, `MEMORY.md`, etc.) when multiple instances exist in different folders across the brain.
 
-**Detection / cleanup**: see `_COMMON/SKILLS/obsidian/scripts/TOOL.check-basename-collisions.common.md` for the detector + auto-rename workflow.
+**Detection / cleanup**: see `~/.agents/skills/brain/scripts/TOOL.check-basename-collisions.md` for the detector + auto-rename workflow.
 
 **Exception**: runtime-governed subtrees (e.g. `_AGENTS/CLAUDE/memory/projects/<X>/MEMORY.md` — paths hardcoded in agent runtime). Document the exception in the TOOL doc's "Known false positives" section.

@@ -43,6 +43,10 @@ prompt_from_tty() {
   local prompt="$1"
   local target_var="$2"
   local answer
+  if [[ ! -t 0 ]]; then
+    echo "ERROR: interactive input requires a terminal; pass --brain <path>." >&2
+    exit 2
+  fi
   if ! { exec 9</dev/tty; } 2>/dev/null; then
     echo "ERROR: interactive input requires a terminal; pass --brain <path>." >&2
     exit 2
@@ -118,6 +122,13 @@ if [[ ! -d "$REPO_ROOT/.git" ]]; then
 fi
 if [[ $UPDATE -eq 1 ]]; then echo "  updating (git pull --ff-only)..."; run git -C "$REPO_ROOT" pull --ff-only; fi
 echo "  repo: $REPO_ROOT"
+echo
+
+if [[ -z "${AGENT_BRAIN_LOG_DIR:-}" ]]; then
+  AGENT_BRAIN_LOG_DIR="${HOME:-/tmp}/.agent-brain/bootstrap-logs"
+  export AGENT_BRAIN_LOG_DIR
+fi
+echo "  logs: $AGENT_BRAIN_LOG_DIR"
 echo
 
 # --- Step 3: home_setup (structure: _COMMON, wrappers, templates, staging) -----

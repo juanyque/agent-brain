@@ -1,0 +1,21 @@
+{
+  "schema_version": "task18-brain-compatibility-fixture/v1",
+  "extra_common_files": {
+    "RULES-TASK18-NEW.common.md": "# Task 18 New Rule\n\n## New policy\n"
+  },
+  "brain_file_overrides": {
+    "AGENTS.md": "# AGENTS\n\nThis local model wrapper follows `_COMMON/AGENTS.common.md`.\n\nLegacy tooling also wrote /tmp/old-agent-brain/model/AGENTS.common.md here.\n",
+    "BRAIN.md": "# Brain\n\nThis local model wrapper follows `_COMMON/VAULT.md`.\n",
+    "JOBS.md": "# Jobs\n\nThis local model wrapper follows `_COMMON/JOBS.common.md`.\n\n## Adds to \"Schedule\"\n\n- local job note\n",
+    "RULES-LINKS.md": "# Links\n\nThis local rule wrapper follows `_COMMON/RULES-LINKS.common.md`.\n\n## Adds to \"Link policy\"\n\n- local link note\n"
+  },
+  "remove_paths": [
+    "RULES-TASK18-NEW.md"
+  ],
+  "wrong_model_templates": [
+    "TEMPLATES/WIP Template.md",
+    "TEMPLATES/WIP Session Template.md",
+    "TEMPLATES/Daily Note Template.md"
+  ],
+  "broken_template": "TEMPLATES/Issue Template.md"
+}

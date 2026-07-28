@@ -26,7 +26,7 @@ from brain_state import (  # noqa: E402
     OPERATIONAL_TOP_LEVEL_DIRS,
     link_status,
 )
-from _common import Reporter, build_command_string  # noqa: E402
+from _common import Reporter, build_command_string, script_log_path  # noqa: E402
 
 RUNTIME_CONFIGS = {
     "claude": {
@@ -576,7 +576,7 @@ def main() -> int:
     parser.add_argument("--runtime", action="append", help="Restrict to a specific runtime (claude, opencode, agents, codex). Can be passed more than once.")
     parser.add_argument("--runtime-home", action="append", help="Additional runtime home to scan for symlinks. Can be passed more than once.")
     args = parser.parse_args()
-    reporter = Reporter(Path(__file__).with_suffix(".log"))
+    reporter = Reporter(script_log_path(Path(__file__)))
     command_string = build_command_string()
 
     try:

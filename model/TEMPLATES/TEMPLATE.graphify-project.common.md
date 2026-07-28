@@ -1,6 +1,8 @@
 ---
 tags: [wip, graphify]
 ---
+<!-- content-boundary: {"kind":"optional-capability","capability":"graphify","startup":"excluded"} -->
+<!-- content-boundary: {"kind":"template","template_id":"graphify-project","rules":["model/RULES-OPTIONAL-CAPABILITIES.common.md"],"lifecycle_policy":false} -->
 # Graphify: <project-or-graph>
 
 ## Summary

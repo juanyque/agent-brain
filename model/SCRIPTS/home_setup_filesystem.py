@@ -103,7 +103,7 @@ def collect_movable_items(brain_root: Path) -> list[Path]:
     )
 
 
-def git_mv_to_staging(
+def move_to_staging(
     brain_root: Path,
     reporter: Reporter,
     dry_run: bool,
@@ -130,22 +130,9 @@ def git_mv_to_staging(
     for item in items:
         reporter.write(f"    {item.name}")
         if not dry_run:
-            if item.is_dir() and not any(item.iterdir()):
-                dest = staging / item.name
-                dest.mkdir()
-                item.rmdir()
-                reporter.write("      (empty dir, moved directly)")
-            else:
-                result = subprocess.run(
-                    ["git", "mv", item.name, f"{STAGING_DIR_NAME}/{item.name}"],
-                    cwd=brain_root,
-                    text=True,
-                    capture_output=True,
-                    check=False,
-                )
-                if result.returncode != 0:
-                    reporter.write(
-                        f"    WARNING: git mv failed: {result.stderr.strip()}"
-                    )
+            try:
+                item.rename(staging / item.name)
+            except OSError as exc:
+                reporter.write(f"    WARNING: filesystem move failed: {exc}")
     if dry_run:
         reporter.write("  (dry-run: no files moved)")

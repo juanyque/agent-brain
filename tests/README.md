@@ -21,6 +21,20 @@ python3 -m unittest \
   -v
 ```
 
+The complete governed local gate is declared in
+`tests/fixtures/operating-model-qa-commands.json` as alias `complete-local-gate`. Run it through
+the run-todo wrapper so the invocation, manifest command, plan SHA, implementation SHA, stdout,
+stderr, and status are captured as receipt-verifiable evidence:
+
+```bash
+python3 tests/support/evidence_cli.py run-todo \
+  --todo 19 \
+  --step 1 \
+  --cwd . \
+  --evidence-root /path/to/evidence-root \
+  --shell '<canonical command from the QA manifest>'
+```
+
 Some negative-path tests intentionally print `FAIL` or `SKIP` diagnostics produced by
 the code under test. The authoritative result is unittest's final `OK` / `FAILED`
 summary and process exit code.
@@ -48,6 +62,8 @@ summary and process exit code.
 | `test_profile_integration.py` | End-to-end profile selection, value-free preflight, conflict quarantine, projection, and double-apply behavior under an isolated temporary `HOME`. |
 | `test_runtime_provider_discovery.py` | Sanitized Codex/Claude MCP registry discovery and readiness normalization. |
 | `test_profile_context.py` | Skill-facing capability resolution, runtime invocation hints, and fail-closed exact matching against complete caller-supplied active tool catalogs. |
+| `test_model_check.py::StrictGateTests` | Negative probes for orphan model artifacts, startup budget overflow, untracked out-of-scope files, and untracked whitespace. |
+| `test_model_check.py::WorkflowContractTests` | Static workflow contract for full-history checkout, `MODEL_BASE` object verification, PR/push/root fallback selection, and macOS/Linux committed/worktree gates. |
 
 ## Test design rules
 
@@ -63,10 +79,11 @@ summary and process exit code.
 Before handing changes back for review, also run:
 
 ```bash
-python3 -m py_compile skills/brain/scripts/*.py
+python3 tests/support/compile_sources.py model/SCRIPTS skills tests
 git diff HEAD --check
 ```
 
-GitHub Actions runs the complete stdlib suite on both `ubuntu-latest` and `macos-latest`. The
-temporary-`HOME` integration test therefore exercises the same end-to-end contract on real Linux
-and macOS runners rather than relying on a patched platform identifier.
+GitHub Actions runs the complete stdlib suite and strict operating-model gates on both
+`ubuntu-latest` and `macos-latest`. The workflow uses full checkout history, proves the selected
+comparison base object, runs committed-range whitespace/scope checks, then runs worktree
+scope/whitespace checks after compile and shell syntax validation.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from _common import Reporter
@@ -9,10 +10,6 @@ WRAPPERS = {
     "AGENTS.md": "AGENTS.common.md",
     "BRAIN.md": "BRAIN.common.md",
     "JOBS.md": "JOBS.common.md",
-    "RULES-FILE-NAMING.md": "RULES-FILE-NAMING.common.md",
-    "RULES-LINKS.md": "RULES-LINKS.common.md",
-    "RULES-DAILY-NOTES.md": "RULES-DAILY-NOTES.common.md",
-    "RULES-SESSION-LIFECYCLE.md": "RULES-SESSION-LIFECYCLE.common.md",
 }
 
 TEMPLATE_SYMLINKS = {
@@ -25,10 +22,30 @@ TEMPLATE_SYMLINKS = {
 
 def wrapper_text(local_name: str, common_name: str) -> str:
     title = Path(local_name).stem
+    wrapper_kind = wrapper_kind_for(local_name)
     return (
         f"# {title}\n\n"
-        f"This brain follows the shared model in `_COMMON/{common_name}`.\n"
+        f"This local {wrapper_kind} wrapper follows `_COMMON/{common_name}`.\n\n"
+        "Read the common target first, then apply any local additions, "
+        "overrides, replacements, or new sections here.\n"
     )
+
+
+def wrapper_kind_for(local_name: str) -> str:
+    path = Path(local_name)
+    if path.parts and path.parts[0] == "TASK_TYPES":
+        return "task-type"
+    if path.name.startswith("RULES-"):
+        return "rule"
+    return "model"
+
+
+def discover_rule_wrappers(common: Path) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for source in sorted(common.glob("RULES-*.common.md")):
+        local_name = source.name.removesuffix(".common.md") + ".md"
+        result[local_name] = source.name
+    return result
 
 
 def discover_task_type_wrappers(common: Path) -> dict[str, str]:
@@ -44,6 +61,14 @@ def discover_task_type_wrappers(common: Path) -> dict[str, str]:
         local_rel = f"TASK_TYPES/{local_basename}.md"
         result[local_rel] = common_rel
     return result
+
+
+def discover_wrappers(common: Path) -> dict[str, str]:
+    return {
+        **WRAPPERS,
+        **discover_rule_wrappers(common),
+        **discover_task_type_wrappers(common),
+    }
 
 
 def via_common_symlink_target(
@@ -64,18 +89,75 @@ def is_current_template_symlink(local_path: Path, common_path: Path) -> bool:
     )
 
 
+def entry_exists_no_follow(path: Path) -> bool:
+    try:
+        os.lstat(path)
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def reject_symlinked_parent(brain_root: Path, path: Path) -> None:
+    try:
+        relative_parent = path.parent.relative_to(brain_root)
+    except ValueError as exc:
+        raise SystemExit(f"managed path escapes brain: {path}") from exc
+    current = brain_root
+    for part in relative_parent.parts:
+        current = current / part
+        try:
+            os.lstat(current)
+        except FileNotFoundError:
+            return
+        if current.is_symlink():
+            raise SystemExit(f"managed parent is a symlink: {current}")
+
+
+def preflight_managed_paths(
+    brain_root: Path,
+    common: Path,
+    wrappers: dict[str, str],
+) -> None:
+    for local_name, common_name in wrappers.items():
+        common_path = common / common_name
+        if common_path.exists():
+            reject_symlinked_parent(brain_root, brain_root / local_name)
+    for local_rel, common_rel in TEMPLATE_SYMLINKS.items():
+        common_path = common / common_rel
+        if common_path.exists():
+            reject_symlinked_parent(brain_root, brain_root / local_rel)
+
+
+def preflight_managed_content(brain_root: Path, common: Path) -> None:
+    preflight_managed_paths(brain_root, common, discover_wrappers(common))
+
+
+def atomic_symlink_replace(link_path: Path, target: str) -> None:
+    temp_path = link_path.with_name(f".{link_path.name}.tmp-{os.getpid()}")
+    if entry_exists_no_follow(temp_path):
+        raise SystemExit(f"temporary symlink already exists: {temp_path}")
+    temp_path.symlink_to(target)
+    try:
+        os.replace(temp_path, link_path)
+    except OSError:
+        if entry_exists_no_follow(temp_path):
+            temp_path.unlink()
+        raise
+
+
 def apply_managed_content(
     brain_root: Path,
     common: Path,
     reporter: Reporter,
 ) -> None:
-    task_type_wrappers = discover_task_type_wrappers(common)
-    combined_wrappers = list(WRAPPERS.items()) + list(task_type_wrappers.items())
-    for local_name, common_name in combined_wrappers:
+    wrappers = discover_wrappers(common)
+    preflight_managed_paths(brain_root, common, wrappers)
+    for local_name, common_name in wrappers.items():
         local_path = brain_root / local_name
         common_path = common / common_name
-        if local_path.exists() or not common_path.exists():
+        if entry_exists_no_follow(local_path) or not common_path.exists():
             continue
+        reject_symlinked_parent(brain_root, local_path)
         local_path.parent.mkdir(parents=True, exist_ok=True)
         local_path.write_text(wrapper_text(local_name, common_name), encoding="utf-8")
 
@@ -88,9 +170,13 @@ def apply_managed_content(
             continue
         if local_path.is_symlink():
             reporter.write(f"  RELINK {local_rel}: {local_path.readlink()}")
-            local_path.unlink()
+            target = via_common_symlink_target(common_rel, local_path, brain_root)
+            reject_symlinked_parent(brain_root, local_path)
+            atomic_symlink_replace(local_path, target)
+            continue
         elif local_path.exists():
             continue
+        reject_symlinked_parent(brain_root, local_path)
         local_path.parent.mkdir(parents=True, exist_ok=True)
         target = via_common_symlink_target(common_rel, local_path, brain_root)
         local_path.symlink_to(target)

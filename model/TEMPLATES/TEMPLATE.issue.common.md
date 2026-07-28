@@ -8,6 +8,7 @@ created_at:
 merged_at:
 deployed_at:
 ---
+<!-- content-boundary: {"kind":"template","template_id":"issue","rules":["model/RULES-ISSUE-DOCS.common.md"],"lifecycle_policy":false} -->
 # <TICKET_ID> — <Short description>
 
 > <one-line summary from the tracker>
@@ -38,12 +39,4 @@ deployed_at:
 ## References
 - Related notes, PRs, threads, docs
 
-<!--
-If this ticket grows heavy supporting artefacts (diagrams, large dumps,
-local attachments), promote the file to a folder with the same name,
-and keep this note inside it:
-
-  TICKET_ID - SHORT_DESCRIPTION/
-  ├── TICKET_ID - SHORT_DESCRIPTION.md   (this note)
-  └── <attachments and supporting docs>
--->
+<!-- Supporting artefacts and terminal moves are governed by RULES-ISSUE-DOCS.common.md. -->

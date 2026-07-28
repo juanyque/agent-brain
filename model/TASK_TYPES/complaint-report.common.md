@@ -2,7 +2,7 @@
 
 Generate a complaint report from the evidence store for a given topic, then curate it into a factual, dated, evidence-backed record ready if HR, skip-level management, or legal channels request it. Separates facts (what happened) from interpretations (what it means). Carries the `sensitive` tag so maintenance jobs do not touch it without confirmation.
 
-> Template: `TEMPLATES/TEMPLATE.complaint-report.common.md`. Conventions: `RULES-REVIEW-EVIDENCE.common.md` (especially the Sensitivity section). Store guide: `TASK_TYPES/evidence-management.common.md`.
+> Template: `TEMPLATES/TEMPLATE.complaint-report.common.md`. Lifecycle and sensitivity owner: `RULES-REVIEW-EVIDENCE.common.md`. Store guide: `TASK_TYPES/evidence-management.common.md`.
 
 ## When this applies
 
@@ -13,7 +13,7 @@ Generate a complaint report from the evidence store for a given topic, then cura
 
 ## Before starting
 
-- [ ] Read `RULES-REVIEW-EVIDENCE.common.md` -> Sensitivity in full. Understand the `sensitive` tag implications and the git retention note.
+- [ ] Read `RULES-REVIEW-EVIDENCE.common.md` -> Sensitivity and the machine-readable ownership contract in full. Understand the `sensitive` tag implications and the git retention note.
 - [ ] Confirm the person(s) involved have notes in `MEMORY/People/`. If not, create stubs with at minimum the basename and role.
 - [ ] Decide whether this material belongs in the brain at all. The brain is git-versioned; if discovery or data-residency concerns make that unsuitable, the report stays offline and only a pointer lives in the brain. The user decides.
 
@@ -42,14 +42,14 @@ Generate a complaint report from the evidence store for a given topic, then cura
 
 9. When ready to escalate, follow your organization's process. The complaint report is your supporting material.
 10. Update frontmatter `filed:` to the date of formal filing.
-11. Update `status: draft` -> `status: escalated` or `status: under investigation` as appropriate.
+11. Update `status` to the shared value that matches the escalation state. Allowed statuses are owned by `RULES-REVIEW-EVIDENCE.common.md`.
 12. If new incidents occur after filing, add new evidence notes to the store and regenerate or append to the report.
 
 ### Phase 5: Close
 
 13. When the complaint resolves, fill in **Outcome**: resolution, date closed, any follow-up conditions.
-14. Update `status` to `resolved` or `closed`.
-15. Do not move to `ARCHIVED/` automatically. Sensitive complaint reports should stay in `WIP/` (or be moved to `ARCHIVED/Reviews/` only on explicit user decision), because retention and destruction may be governed by HR policy.
+14. Update `status` to the shared value that matches the outcome.
+15. Follow the sensitive-report archive exception in `RULES-REVIEW-EVIDENCE.common.md`; do not restate or override it here.
 
 ## Note shape
 
@@ -70,7 +70,7 @@ The template (`TEMPLATES/TEMPLATE.complaint-report.common.md`) defines the shape
 
 ## Sensitivity and safety
 
-- The `sensitive` tag is mandatory. Maintenance jobs treat tagged notes as hands-off without explicit confirmation.
+- The `sensitive` tag is mandatory by the shared ownership contract. Maintenance jobs treat tagged notes as hands-off without explicit confirmation.
 - If you are in immediate danger, contact appropriate emergency services or your organization's security team first. This report is for documentation, not for emergency response.
 - Git preserves history indefinitely. If HR policy requires destruction of drafts after formalization, that is an explicit `git filter-repo` operation the user must run. The operating model never destroys content automatically.
 

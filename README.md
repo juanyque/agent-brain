@@ -177,6 +177,21 @@ temporary `HOME` and verifies dry-run safety, conflict quarantine, and double-ap
 See [`tests/README.md`](tests/README.md) for the covered contracts, individual-test
 commands, and fixture rules.
 
+### Local and CI gates
+
+The canonical local gate is the todo19 QA-manifest alias `complete-local-gate`, executed only
+through `tests/support/evidence_cli.py run-todo`. It runs the current unittest suite, the
+immutable-baseline test replay, Python compilation, shell syntax checks, committed diff
+whitespace checks, worktree scope/whitespace checks, the strict operating-model checker, and a
+zero-`__pycache__` assertion.
+
+GitHub Actions mirrors the strict local gate on `ubuntu-latest` and `macos-latest`. The workflow
+checks out full history (`fetch-depth: 0`), resolves `MODEL_BASE` from a valid pull-request base,
+push base, pinned immutable baseline, or root-commit fallback, proves the selected commit object,
+then runs committed-range gates before the suite and worktree gates after compile/shell checks.
+The workflow is a contract map only; private-brain migration remains explicit user work and is not
+automatic.
+
 ## License
 
 TBD.

@@ -10,6 +10,16 @@ This file is the canonical procedure for session lifecycle decisions.
 - `BRAIN.md` defines the conceptual model and folder ownership.
 - `JOBS.md` follows the common job structure; execution state is recorded in `JOBS_LOGS.md`. Neither should duplicate this procedure.
 
+## Ownership metadata
+
+| Policy area | Owner | Authority |
+|---|---|---|
+| state-transitions | RULES-SESSION-LIFECYCLE.common.md | canonical |
+| multi-session-coordination | RULES-SESSION-LIFECYCLE.common.md | canonical |
+| canonical-open-authority | session_open.py | unique |
+| compatibility-fallback | session_bootstrap.py | compatibility-only |
+| git-operations | user | explicit-authorization-required |
+
 ## Session notes
 
 - Session notes are temporary operational memory stored in `WIP/SESSIONS/`.
@@ -62,7 +72,7 @@ Use this flow only when the user is continuing the same working session and the 
 
 1. Create today's daily note if it does not exist.
 2. **Migrate the previous day's unfinished `* [[TODO]]:` items.** Before cleaning the previous note, review its TODO list with the user (do not move silently — same review-first pattern as the Objectives review in `RULES-DAILY-NOTES.md`): carry unfinished items into today's `* [[TODO]]:`, promote real tasks to `WIP/`/`BACKLOG/` where they belong, and drop done/obsolete ones. This empties the previous TODO so the cleanup in the next step can remove it if it ends up empty.
-3. Clean the previous existing daily note by removing empty action categories. **Scope the script to the previous daily** so the current day's fresh note (and other days) are never cleaned — a note may only be cleaned once its date is no longer today (see `RULES-DAILY-NOTES.md` → Cleanup timing): `_COMMON/SKILLS/obsidian/scripts/cleanup_empty_action_categories.py --brain-root <brain> --glob <prev-date>.md --apply` (e.g. `--glob 2026-05-29.md`). It skips legacy-shape dailies without a `# Actions` section, preserves real content, and removes placeholder-only categories per `TOOL.cleanup-empty-action-categories.common.md`. **Defer this cleanup if the previous day still has open session notes pending consolidation** (same rule as Flow 2 Scenario B step 3) — empty placeholders are harmless and those sessions' template sections must survive until they consolidate.
+3. Clean the previous existing daily note by removing empty action categories. **Scope the script to the previous daily** so the current day's fresh note (and other days) are never cleaned — a note may only be cleaned once its date is no longer today (see `RULES-DAILY-NOTES.md` → Cleanup timing): `~/.agents/skills/brain/scripts/cleanup_empty_action_categories.py --brain-root <brain> --glob <prev-date>.md --apply` (e.g. `--glob 2026-05-29.md`). It skips legacy-shape dailies without a `# Actions` section, preserves real content, and removes placeholder-only categories per `TOOL.cleanup-empty-action-categories.md`. **Defer this cleanup if the previous day still has open session notes pending consolidation** (same rule as Flow 2 Scenario B step 3) — empty placeholders are harmless and those sessions' template sections must survive until they consolidate.
 4. If there are open session notes from previous days:
    - consolidate their work into the last day the work was actually done;
    - do **not** delete the session note if that same session is continuing;
@@ -97,7 +107,7 @@ The day has not been started yet. Start it as part of the session, consolidating
 3. **Review-first close of the previous day** (never silent):
    - **Migrate the previous day's unfinished `* [[TODO]]:` items** — review the list with the user, carry unfinished items into today's `* [[TODO]]:`, promote real tasks to `WIP/`/`BACKLOG/`, drop done/obsolete ones (per `RULES-DAILY-NOTES.md` → TODO carryover).
    - Run the **Objectives review** pass for the previous day (`RULES-DAILY-NOTES.md` → Objectives review) before any cleanup.
-4. Clean the previous daily note by removing empty action categories, **scoped to that single daily** — but **only if that day has no open session note still pending consolidation** (any session the rollover above left live). The cleanup removes only empty placeholders, never real content; still, if a session that worked that day is still open, **defer this cleanup** so its template sections survive until it consolidates. A deferred day is cleaned later — by a later rollover when those sessions close, or by the Daily maintenance job. A note may only be cleaned once its date is no longer today (see `RULES-DAILY-NOTES.md` → Cleanup timing). Command, when it does run: `_COMMON/SKILLS/obsidian/scripts/cleanup_empty_action_categories.py --brain-root <brain> --glob <prev-date>.md --apply` (e.g. `--glob 2026-06-08.md`).
+4. Clean the previous daily note by removing empty action categories, **scoped to that single daily** — but **only if that day has no open session note still pending consolidation** (any session the rollover above left live). The cleanup removes only empty placeholders, never real content; still, if a session that worked that day is still open, **defer this cleanup** so its template sections survive until it consolidates. A deferred day is cleaned later — by a later rollover when those sessions close, or by the Daily maintenance job. A note may only be cleaned once its date is no longer today (see `RULES-DAILY-NOTES.md` → Cleanup timing). Command, when it does run: `~/.agents/skills/brain/scripts/cleanup_empty_action_categories.py --brain-root <brain> --glob <prev-date>.md --apply` (e.g. `--glob 2026-06-08.md`).
 5. Run `session_open.py --prepare-daily --apply` with the real session id, runtime,
    and cwd. After the review steps above, this one idempotent operation creates today's
    daily from the template, links it reciprocally with the nearest existing daily notes,
@@ -113,7 +123,7 @@ The current session trace is mandatory even when daily-note state is incomplete.
 
 Shared by Flow 1 and Flow 2. The goal is to **not lose durable work** held in previous session notes, while **never touching a session that may still be active**. It is **State-driven**: decide per note from its `## State` and `## Immediate next step`. Never consolidate or close the session currently being resumed or continued.
 
-For each open session note in `WIP/SESSIONS/` that is **not** the current session (the `open_session_notes` list from `session_bootstrap.py` is the canonical source):
+For each open session note in `WIP/SESSIONS/` that is **not** the current session (the `open_sessions` list from `session_open.py` is the canonical source; `session_bootstrap.py` is only a compatibility fallback):
 
 1. Read its `## State` and `## Immediate next step`.
 2. **If it is clearly finished** — `State` is `consolidated`, `handoff-only`, or `stale-follow-up`, or the immediate next step is "none" / "session closed" — consolidate its durable content into the right place, by **the day the work actually happened** (not today):
@@ -121,7 +131,7 @@ For each open session note in `WIP/SESSIONS/` that is **not** the current sessio
    - `WIP/WIP.md` or project-specific WIP notes for active operational state;
    - `BACKLOG/` for real but deferred tasks;
    - `MEMORY/` for stable reusable knowledge.
-   If the session implemented a tracker ticket, finalise its issue working doc and `git mv` it to `MEMORY/Projects/...` per the "Consolidation rules" below. Then, once the **Closing gate** above passes, move the session note to `QUARANTINE/TRASH/` (permanent deletion still requires explicit user approval).
+   If the session implemented a tracker ticket, finalise its issue working doc and, only with explicit user authorization for the Git operation, move it to `MEMORY/Projects/...` via `git mv` per the "Consolidation rules" below. Then, once the **Closing gate** above passes, move the session note to `QUARANTINE/TRASH/` (permanent deletion still requires explicit user approval).
 3. **If it is live or ambiguous** — `State` is `open` with a real pending next step, or you cannot tell whether it is done — **leave it untouched** in `WIP/SESSIONS/` (do not consolidate, edit, or move it — respect scope ownership per "Multi-session coordination"), record a stale-session follow-up only if it needs later maintenance, and report it. When unsure, ask the user rather than guessing.
 4. Report what was consolidated and closed, and what was left open and why.
 
@@ -139,7 +149,13 @@ The current session trace is mandatory even when previous sessions are intention
 - Prefer moving fully consolidated session notes to `QUARANTINE/TRASH/` for reversible cleanup rather than keeping them active. Permanent deletion requires explicit user approval.
 - Before moving a fully consolidated session note out of `WIP/SESSIONS/`, remove the `wip` tag from its frontmatter so closed notes do not appear in active WIP views.
 - If preserving a prior session note is necessary, it must be reported as a stale-session follow-up so `WIP/SESSIONS/` does not silently accumulate dead operational notes.
-- If the session was implementing a tracker ticket (Jira / GitHub issue / equivalent), its **issue working doc** has been kept current throughout the session per `RULES-ISSUE-DOCS.common.md`. At consolidation time, finalise that doc (update `## Status`, frontmatter `status`, `merged_at` if applicable) and move the folder from `WIP/<project-area>/<repo>/` to `MEMORY/Projects/<project-area>/<repo>/` via `git mv`. The session note's "durable state preserved outside" closing-gate item is satisfied primarily by the issue working doc, not by the daily note alone.
+- If the session was implementing a tracker ticket (Jira / GitHub issue / equivalent), its **issue working doc** has been kept current throughout the session per `RULES-ISSUE-DOCS.common.md`. At consolidation time, finalise that doc (update `## Status`, frontmatter `status`, `merged_at` if applicable) and, only with explicit user authorization for the Git operation, move the folder from `WIP/<project-area>/<repo>/` to `MEMORY/Projects/<project-area>/<repo>/` via `git mv`. The session note's "durable state preserved outside" closing-gate item is satisfied primarily by the issue working doc, not by the daily note alone.
+
+## Recurring session and WIP review
+
+- Recurring maintenance reviews inspect orphaned or stale session notes that were not fully consolidated. Apply the Closing gate and Previous sessions rollover rules above: consolidate durable work into the day it happened, active WIP, BACKLOG, or MEMORY; leave live or ambiguous sessions untouched and report the reason.
+- Recurring maintenance reviews inspect blocked or stale WIP items and decide whether they should remain in active WIP, move to BACKLOG, consolidate to MEMORY, or archive as historically important inactive content under the established information-architecture rules.
+- These reviews identify candidates and decisions only. They do not authorize Git operations, peer-scope edits, or permanent deletion without the explicit user authorization required by the relevant rule.
 
 ## Multi-session coordination
 
@@ -150,7 +166,7 @@ Multiple agent sessions may operate against the same brain in parallel (e.g. one
   - append entries under a unique, project-specific heading (per the project-uniqueness rule of daily notes — see `RULES-DAILY-NOTES.common.md`);
   - never rewrite or restructure sections owned by other sessions;
   - never replace an entire shared file in one edit when only a section is theirs.
-- **Detect parallel sessions at session start**. After loading brain context, scan today's daily note `# Sessions` block. Any session id present and not equal to the current session is a parallel session whose scope must be respected. If `session_bootstrap.py` is available, its `open_session_notes` list is the canonical source — read each peer note's `## Current objective` to learn its scope.
+- **Detect parallel sessions at session start**. Use `session_open.py`'s compact digest. Any session id present and not equal to the current session is a parallel session whose scope must be respected. If only the compatibility fallback is available, `session_bootstrap.py`'s `open_session_notes` list can be used to read each peer note's `## Current objective` and learn its scope.
 - **When in doubt, ask the user** which session owns an ambiguous scope. Do not infer from filenames or cwd alone.
 
-This section is referenced by `SKILL.obsidian.common.md` → "After brain resolution" so the rule loads at every `/obsidian` connection.
+This section is referenced by `skills/brain/SKILL.md` → "After brain resolution" so the rule loads at every `brain` connection.

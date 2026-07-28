@@ -2,7 +2,7 @@
 
 Maintain the continuous evidence store that feeds all review reports (brag, feedback, complaint). Evidence items are captured as they happen — primarily via daily note categories, then harvested into self-contained atomic notes — and queried on demand when a report is needed. This guide covers the store schema, the capture-and-harvest cycle, and the backfill protocol for historical evidence.
 
-> Template: `TEMPLATES/TEMPLATE.evidence-note.common.md`. Conventions: `RULES-REVIEW-EVIDENCE.common.md`.
+> Template: `TEMPLATES/TEMPLATE.evidence-note.common.md`. Lifecycle owner: `RULES-REVIEW-EVIDENCE.common.md`.
 
 ## When this applies
 
@@ -14,7 +14,7 @@ Maintain the continuous evidence store that feeds all review reports (brag, feed
 ## Before starting
 
 - [ ] Confirm `WIP/evidence/` exists. Create it if not.
-- [ ] Read `RULES-REVIEW-EVIDENCE.common.md` for naming, sensitivity, and lifecycle conventions.
+- [ ] Read `RULES-REVIEW-EVIDENCE.common.md` for the owned naming, sensitivity, permanence, archive, and status contract.
 - [ ] If capturing sensitive evidence (complaints, interpersonal incidents), confirm the `sensitive` tag will be set on the resulting note.
 
 ## The evidence store
@@ -99,8 +99,8 @@ The note **body** is the `detail`: a self-contained prose account. A reader shou
 
 ### Phase 4: Maintain the store
 
-8. Evidence notes are append-only records. Do not edit the factual detail after creation; if the understanding changes, add a dated addendum to the body.
-9. `sensitive` notes are never moved, renamed, or surfaced in generated summaries without explicit user confirmation (enforced by maintenance jobs respecting the tag).
+8. Follow the evidence permanence and sensitivity contract in `RULES-REVIEW-EVIDENCE.common.md`. Do not restate or override it in this task-type guide.
+9. If the understanding changes, add a dated addendum to the body rather than rewriting the original account.
 10. People referenced in `people:` should have corresponding notes in `MEMORY/People/`. If a person note does not exist, create a stub.
 
 ## Division of labour: scripts vs LLM
@@ -120,7 +120,7 @@ The note **body** is the `detail`: a self-contained prose account. A reader shou
 - **Empty detail body.** An atomic note with just frontmatter and no body defeats the purpose. The body is the record; spend the tokens to write it.
 - **Forgetting `sensitive`.** If an item names someone in a negative context and `sensitive` is not set, maintenance jobs may surface or move it. Set the flag at creation time.
 - **Creating retroactive dailies for backfill.** Do not create a daily note for a date just to hold a backfilled item. Go directly to the store with `backfilled: true`.
-- **Editing facts after creation.** Evidence notes are append-only. If new information arrives, add a dated addendum rather than rewriting the original account.
+- **Editing facts after creation.** Use the addendum procedure above and the permanence contract in `RULES-REVIEW-EVIDENCE.common.md`.
 
 ## References
 

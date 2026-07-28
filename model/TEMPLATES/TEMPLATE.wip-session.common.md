@@ -1,6 +1,7 @@
 ---
 tags: [session, wip]
 ---
+<!-- content-boundary: {"kind":"template","template_id":"wip-session","rules":["model/RULES-SESSION-LIFECYCLE.common.md"],"lifecycle_policy":false} -->
 # Session <date> / <topic> / <id>
 
 ## State

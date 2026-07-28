@@ -21,7 +21,12 @@ TEMPLATE_CANDIDATES = [
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Inspect vault state and print a ready-to-send session bootstrap prompt.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Compatibility fallback: inspect vault state and print a ready-to-send "
+            "session bootstrap prompt when session_open.py is unavailable."
+        )
+    )
     parser.add_argument("--brain-root", default=".", help="Vault root path")
     return parser.parse_args()
 
@@ -176,7 +181,8 @@ def main() -> int:
     else:
         print("- Existing session notes: none found")
     print(
-        "Please run the session-start protocol in RULES-SESSION-LIFECYCLE.md -> Flow 2 (the rule is the single source of truth for the exact steps):"
+        "Compatibility fallback only. Prefer session_open.py for session-start authority; "
+        "if it is unavailable, follow RULES-SESSION-LIFECYCLE.md -> Flow 2:"
     )
     if not today_exists:
         print(

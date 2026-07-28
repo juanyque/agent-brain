@@ -54,10 +54,20 @@ Each job section follows this shape:
 
 - `### Purpose` — what this routine does.
 - `### Trigger` — required only for **event-driven** jobs (Daily, Session consolidation): user phrases like "nuevo día" / "nueva sesión" or explicit context changes that an agent intercepts in real time.
-- `### Tasks` — what to do. Generic tasks are defined here; local wrappers may add brain-specific tasks.
+- `### Schedule` — required only for **calendar-driven** jobs (Weekly, Monthly, Yearly): the period key used by `maintenance_scheduler.py`.
+- `### Links` — where the procedure lives. Jobs link to owner rules and task types; they do not duplicate flow checklists or detailed maintenance procedures.
 - Execution logs go in `JOBS_LOGS.md`, not in this file.
 
 **Calendar-driven jobs** (Weekly, Monthly, Yearly) do not declare a `### Trigger`. Their scheduling is derived from the `period` field in `JOBS_LOGS.md` and surfaced by `maintenance_scheduler.py`, which decides whether a job is due based on the latest entry. A user phrase such as "weekly maintenance" can always force one of them to run, but that is an override rather than the primary trigger.
+
+## Ownership metadata
+
+| Policy area | Owner | Authority |
+|---|---|---|
+| job-shape | JOBS.common.md | purpose-trigger-schedule-links-only |
+| procedure-source | RULES-SESSION-LIFECYCLE.common.md | linked-not-duplicated |
+| daily-semantics-source | RULES-DAILY-NOTES.common.md | linked-not-duplicated |
+| git-operations | user | explicit-authorization-required |
 
 ## Daily (Day change)
 
@@ -69,9 +79,9 @@ Each job section follows this shape:
 ### Trigger
 - User says "nuevo día", "new day", "cambio de día", "cambia de día", "we changed day", or similar indicating day rollover.
 
-### Tasks
-- Run the Flow 1 checklist in `RULES-SESSION-LIFECYCLE.md`.
-- Run the Objectives review pass for the closing day (`RULES-DAILY-NOTES.md` → Objectives review) before the empty-category cleanup.
+### Links
+- Procedure source of truth: `RULES-SESSION-LIFECYCLE.md` → Flow 1.
+- Daily semantics source of truth: `RULES-DAILY-NOTES.md` → Objectives review and cleanup timing.
 
 ## Session consolidation
 
@@ -82,40 +92,49 @@ Each job section follows this shape:
 ### Trigger
 - User says "nueva sesión", "new session", "inicio sesión", or starts a clearly new session context.
 
-### Tasks
-- Run the Flow 2 checklist in `RULES-SESSION-LIFECYCLE.md`.
-- Run the Objectives review pass for the day being consolidated (`RULES-DAILY-NOTES.md` → Objectives review) before any empty-category cleanup.
-- Record stale-session follow-up items only if they require later maintenance.
+### Links
+- Procedure source of truth: `RULES-SESSION-LIFECYCLE.md` → Flow 2.
+- Daily semantics source of truth: `RULES-DAILY-NOTES.md` → Objectives review and cleanup timing.
+- Stale-session follow-up semantics: `RULES-SESSION-LIFECYCLE.md` → Previous sessions rollover.
 
 ## Weekly
 
 ### Purpose
 - Hold recurring weekly maintenance routines for the brain.
 
-### Tasks
-- Review orphaned or stale session notes that were not fully consolidated.
-- Review blocked or stale WIP items and decide whether they should remain in active WIP.
-- Run attachment-maintenance review: detect possible orphaned attachments, misplaced attachments, and conflict cases without deleting anything automatically; move suspected orphaned attachments to `QUARANTINE/ATTACHMENTS/` for review.
-- Review `QUARANTINE/TRASH/` for notes older than 15 days and propose candidates for permanent deletion. Do not delete automatically; list candidates and wait for explicit human approval.
-- Run the basename-collision detector to catch new duplicates created during the week: `_COMMON/SKILLS/obsidian/scripts/check_basename_collisions.py --brain-root <brain> --exclude-path <runtime-governed paths> [--apply]`. Read-only by default; `--apply` auto-renames files no reference points at (per-file safety). Interactive review of `(needs edits)` groups follows the procedure in `TASK_TYPES/basename-collision-cleanup.md` (wrapper to the common task-type guide).
+### Schedule
+- Period: `YYYY-Www`.
+
+### Links
+- Session cleanup and WIP review semantics: `RULES-SESSION-LIFECYCLE.md` → Previous sessions rollover, Closing gate, and Recurring session and WIP review.
+- Attachment review semantics: `RULES-ATTACHMENTS.md`.
+- Trash review semantics: `brain-maintenance.md` → Recurring maintenance reviews.
+- Basename collision procedure: `TASK_TYPES/basename-collision-cleanup.md`.
 
 ## Monthly
 
 ### Purpose
 - Hold recurring monthly maintenance routines for the brain.
 
-### Tasks
-- Review whether WIP items should be consolidated into MEMORY, moved to BACKLOG, or archived to ARCHIVED (for historically important but no longer active content).
-- Review aged review reports in `WIP/` (brag, feedback, complaint reports whose cycle has closed): propose moving them to `ARCHIVED/Reviews/` via `git mv`. Do not move reports tagged `sensitive` without explicit confirmation. Evidence notes in `WIP/evidence/` are permanent and never proposed for archival.
-- Review ARCHIVED contents for stale references or dead links; note findings but do not delete content automatically.
-- Review recurring maintenance rules and refine them if they are creating unnecessary friction.
-- Review whether attachment-handling rules or scripts need refinement based on real conflict cases.
+### Schedule
+- Period: `YYYY-MM`.
+
+### Links
+- WIP and MEMORY semantics: `BRAIN.md`.
+- Review report lifecycle: `RULES-REVIEW-EVIDENCE.md`.
+- Attachment handling semantics: `RULES-ATTACHMENTS.md`.
+- Maintenance-rule refinement: `brain-maintenance.md` → Recurring maintenance reviews.
+- Git operations remain user-authorized only; this job may identify candidates but does not authorize moves.
 
 ## Yearly
 
 ### Purpose
 - Hold recurring yearly maintenance routines for the brain.
 
-### Tasks
-- Move closed-year daily notes into `JOURNAL/<year>/` while keeping the current year directly under `JOURNAL/`.
-- Review whether non-daily notes still remain in `JOURNAL/` and classify them.
+### Schedule
+- Period: `YYYY`.
+
+### Links
+- Journal structure and classification: `RULES-DAILY-NOTES.md` → Journal archive and classification.
+- Daily-note semantics: `RULES-DAILY-NOTES.md`.
+- File movement rules: `RULES-FILE-NAMING.md`.

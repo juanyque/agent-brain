@@ -2,7 +2,7 @@
 
 Generate a brag report from the evidence store for a given date range, then curate it into a narrative a manager or peer reviewer can use. The report follows Julia Evans's brag-document section structure (Projects, Collaboration, Learning, Outside of work, Reflection) but is assembled from structured evidence notes rather than maintained as a standing annual document.
 
-> Template: `TEMPLATES/TEMPLATE.brag-report.common.md`. Conventions: `RULES-REVIEW-EVIDENCE.common.md`. Store guide: `TASK_TYPES/evidence-management.common.md`.
+> Template: `TEMPLATES/TEMPLATE.brag-report.common.md`. Lifecycle owner: `RULES-REVIEW-EVIDENCE.common.md`. Store guide: `TASK_TYPES/evidence-management.common.md`.
 
 ## When this applies
 
@@ -14,7 +14,7 @@ Generate a brag report from the evidence store for a given date range, then cura
 
 - [ ] Confirm `WIP/evidence/` exists and has harvested items (run the harvest first if dailies have unlinked stubs — see `TASK_TYPES/evidence-management.common.md`).
 - [ ] Determine the date range for the report. This is driven by your review cycle, not by calendar year. If your fiscal year starts in July, a report covering Jul 2025–Jun 2026 is correct.
-- [ ] Read `RULES-REVIEW-EVIDENCE.common.md` for naming and lifecycle conventions.
+- [ ] Read `RULES-REVIEW-EVIDENCE.common.md` for the owned naming, archive, and status contract.
 - [ ] If the brain has `WIP/OBJECTIVES.md`, have it open. The report should reflect progress against objectives.
 
 ## Process
@@ -46,11 +46,11 @@ Generate a brag report from the evidence store for a given date range, then cura
 ### Phase 4: Share
 
 10. Share the report with your manager. Share with peer reviewers if your team's norm supports it.
-11. Update `status: draft` -> `status: submitted` in frontmatter once shared.
+11. Update `status` to the shared value that matches the sharing outcome. Allowed statuses are owned by `RULES-REVIEW-EVIDENCE.common.md`.
 
 ### Phase 5: Archive
 
-12. After the review cycle closes and the report is no longer actively referenced, a maintenance job proposes moving it to `ARCHIVED/Reports/report-brag-<date>-<slug>.md` via `git mv`. The evidence store remains unchanged; only the report moves.
+12. After the review cycle closes and the report is no longer actively referenced, follow the report archive contract in `RULES-REVIEW-EVIDENCE.common.md`. The evidence store remains unchanged.
 
 ## Note shape
 

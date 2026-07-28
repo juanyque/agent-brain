@@ -8,7 +8,7 @@ status: draft
 ---
 # Feedback report - <cycle> - <person>
 
-> Generated from the evidence store (`WIP/evidence/`) for the person and cycle below, then curated. Keep it concrete: cite specific situations and outcomes, not generic praise or vague criticism.
+> Shape only. Generated from the evidence store (`WIP/evidence/`) for the person and cycle below, then curated. Lifecycle/status values are owned by `RULES-REVIEW-EVIDENCE.common.md`.
 
 - **Person**: [[<person note in MEMORY/People>]]
 - **Relationship**: (teammate, cross-team collaborator, report, manager, etc.)

@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "model" / "SCRIPTS"
@@ -17,14 +18,28 @@ from _common import Reporter  # noqa: E402
 from brain_state import detect_state  # noqa: E402
 from home_setup import TEMPLATE_SYMLINKS, WRAPPERS, apply, print_plan  # noqa: E402
 
+MODEL_DIR = Path(__file__).resolve().parents[1] / "model"
+COMMON_RULE_NAMES = sorted(path.name for path in MODEL_DIR.glob("RULES-*.common.md"))
+OPTIONAL_TEMPLATE_NAMES = sorted(
+    path.name
+    for path in (MODEL_DIR / "TEMPLATES").glob("TEMPLATE.*.common.md")
+    if f"TEMPLATES/{path.name}" not in set(TEMPLATE_SYMLINKS.values())
+)
+
 
 def create_common(root: Path) -> Path:
     common = root / "model"
     common.mkdir()
     for common_name in WRAPPERS.values():
         (common / common_name).write_text(f"# {common_name}\n", encoding="utf-8")
+    for common_name in COMMON_RULE_NAMES:
+        (common / common_name).write_text(f"# {common_name}\n", encoding="utf-8")
     for common_rel in TEMPLATE_SYMLINKS.values():
         path = common / common_rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"# {path.name}\n", encoding="utf-8")
+    for common_name in OPTIONAL_TEMPLATE_NAMES:
+        path = common / "TEMPLATES" / common_name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"# {path.name}\n", encoding="utf-8")
     task_types = common / "TASK_TYPES"
@@ -88,6 +103,112 @@ class BrainStateTests(unittest.TestCase):
 
 
 class HomeSetupTests(unittest.TestCase):
+    def test_discovers_every_common_rule_wrapper(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            brain.mkdir()
+            common = create_common(root)
+            reporter = Reporter(root / "home-setup.log")
+
+            with redirect_stdout(io.StringIO()):
+                apply(brain, common, True, True, reporter)
+
+            for common_name in COMMON_RULE_NAMES:
+                local_name = common_name.removesuffix(".common.md") + ".md"
+                local_path = brain / local_name
+                self.assertTrue(local_path.is_file(), local_name)
+                self.assertIn(f"_COMMON/{common_name}", local_path.read_text(encoding="utf-8"))
+            for local_name in ("AGENTS.md", "BRAIN.md", "JOBS.md"):
+                self.assertTrue((brain / local_name).is_file(), local_name)
+
+    def test_custom_wrapper_is_preserved(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            brain.mkdir()
+            common = create_common(root)
+            custom = "# Local rule\n\nKeep this private override.\n"
+            local_path = brain / "RULES-OPTIONAL-CAPABILITIES.md"
+            local_path.write_text(custom, encoding="utf-8")
+            reporter = Reporter(root / "home-setup.log")
+
+            with redirect_stdout(io.StringIO()):
+                apply(brain, common, True, True, reporter)
+
+            self.assertEqual(local_path.read_text(encoding="utf-8"), custom)
+
+    def test_conditional_templates_are_not_linked(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            brain.mkdir()
+            common = create_common(root)
+            reporter = Reporter(root / "home-setup.log")
+
+            with redirect_stdout(io.StringIO()):
+                apply(brain, common, True, True, reporter)
+
+            for common_name in OPTIONAL_TEMPLATE_NAMES:
+                local_name = common_name.removeprefix("TEMPLATE.")
+                local_name = local_name.removesuffix(".common.md")
+                local_path = brain / "TEMPLATES" / f"{local_name} Template.md"
+                self.assertFalse(local_path.exists() or local_path.is_symlink(), local_name)
+
+    def test_apply_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            brain.mkdir()
+            common = create_common(root)
+            reporter = Reporter(root / "home-setup.log")
+
+            with redirect_stdout(io.StringIO()):
+                apply(brain, common, True, True, reporter)
+                first = tree_snapshot(brain)
+                apply(brain, common, True, True, reporter)
+            second = tree_snapshot(brain)
+
+        self.assertEqual(first, second)
+
+    def test_dangling_wrapper_entry_is_not_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            brain.mkdir()
+            common = create_common(root)
+            outside_target = root / "outside-wrapper.md"
+            local_path = brain / "RULES-FILE-NAMING.md"
+            local_path.symlink_to(outside_target)
+            reporter = Reporter(root / "home-setup.log")
+
+            with redirect_stdout(io.StringIO()):
+                apply(brain, common, True, True, reporter)
+
+            self.assertTrue(local_path.is_symlink())
+            self.assertEqual(os.readlink(local_path), str(outside_target))
+            self.assertFalse(outside_target.exists())
+
+    def test_symlinked_parent_outside_brain_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            brain.mkdir()
+            common = create_common(root)
+            outside = root / "outside"
+            outside.mkdir()
+            (brain / "TEMPLATES").symlink_to(outside, target_is_directory=True)
+            before_brain = tree_snapshot(brain)
+            before_outside = tree_snapshot(outside)
+            reporter = Reporter(root / "home-setup.log")
+
+            with self.assertRaises(SystemExit):
+                with redirect_stdout(io.StringIO()):
+                    apply(brain, common, True, True, reporter)
+
+            self.assertEqual(tree_snapshot(brain), before_brain)
+            self.assertEqual(tree_snapshot(outside), before_outside)
+
     def test_conflict_plan_distinguishes_current_and_desired_targets(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -256,6 +377,53 @@ class HomeSetupTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertFalse(original_exists)
         self.assertEqual(staged_content, "private notes\n")
+
+    def test_virgin_apply_moves_content_without_mutating_git_index_or_invoking_git(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            brain.mkdir()
+            common = create_common(root)
+            subprocess.run(["git", "init", "-q"], cwd=brain, check=True)
+            (brain / "notes.md").write_text("private notes\n", encoding="utf-8")
+            subprocess.run(["git", "add", "notes.md"], cwd=brain, check=True)
+            index_before = (brain / ".git" / "index").read_bytes()
+            stage_before = subprocess.run(
+                ["git", "ls-files", "--stage"],
+                cwd=brain,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            reporter = Reporter(root / "home-setup.log")
+
+            with patch("home_setup_filesystem.subprocess.run", wraps=subprocess.run) as run:
+                with redirect_stdout(io.StringIO()):
+                    apply(brain, common, False, True, reporter)
+
+            index_after = (brain / ".git" / "index").read_bytes()
+            stage_after = subprocess.run(
+                ["git", "ls-files", "--stage"],
+                cwd=brain,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            git_subprocesses = [
+                call.args[0]
+                for call in run.call_args_list
+                if call.args and call.args[0][0] == "git"
+            ]
+            original_exists = (brain / "notes.md").exists()
+            staged_content = (brain / "_STAGING" / "notes.md").read_text(
+                encoding="utf-8"
+            )
+
+        self.assertFalse(original_exists)
+        self.assertEqual(staged_content, "private notes\n")
+        self.assertEqual(index_after, index_before)
+        self.assertEqual(stage_after, stage_before)
+        self.assertEqual(git_subprocesses, [])
 
 
 if __name__ == "__main__":

@@ -7,6 +7,15 @@ Use this rule when creating, rolling over, cleaning, or correcting daily notes i
 - The canonical daily-note structure is `TEMPLATES/Daily Note Template.md`.
 - Do not redefine the full daily-note shape in this rule. If the structure needs to change, update the template first, then keep this rule aligned with the intent.
 
+## Ownership metadata
+
+| Policy area | Owner | Authority |
+|---|---|---|
+| daily-shape-semantics | RULES-DAILY-NOTES.common.md | canonical |
+| cleanup-eligibility | RULES-DAILY-NOTES.common.md | canonical |
+| todo-carryover-semantics | RULES-DAILY-NOTES.common.md | canonical |
+| session-registration | session_open.py | idempotent-upsert-authority |
+
 ## Activity organization
 
 - Daily activity belongs under `# Actions` → `* [[WORK]]:`.
@@ -69,3 +78,9 @@ This review is a checklist step in the Daily and Session-consolidation jobs (`JO
 ## Continuing session across days
 
 - If a session continues across multiple days, it may appear in both days' `# Sessions`, but detailed work still belongs under the correct day's `# Actions` → `* [[WORK]]:` project/context entry.
+
+## Journal archive and classification
+
+- Recurring yearly maintenance moves closed-year daily notes into `JOURNAL/<year>/` while keeping the current year directly under `JOURNAL/`.
+- Recurring yearly maintenance reviews whether non-daily notes still remain in `JOURNAL/` and classifies them under the appropriate information-architecture owner instead of leaving them mixed with daily notes.
+- These reviews do not silently move or delete content. Any Git operation or destructive action still requires explicit user authorization under the shared Git authority and brain-maintenance rules.

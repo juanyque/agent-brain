@@ -23,7 +23,7 @@ The process supports two operational modes, determined by the presence of `_STAG
   ```bash
   python3 <common_path>/SCRIPTS/home_setup.py --brain <brain_path> --apply
   ```
-  This refreshes missing wrappers/templates and synchronizes the runtime skill installation via `skill_setup.py` unless `--skip-skill` is passed. Because `_COMMON` is already attached, `home_setup.py` must not move content into `_STAGING/`; it only applies its idempotent maintenance-safe setup steps.
+  This refreshes missing wrappers/templates and synchronizes runtime wiring through `runtime_manager.py` unless runtime work is explicitly skipped. Because `_COMMON` is already attached, `home_setup.py` must not move content into `_STAGING/`; it only applies its idempotent maintenance-safe setup steps.
 - If `_COMMON` does not exist, **you MUST ask the user before running `home_setup.py --apply`**. The choice between full reorder and skipping the staging sweep is a user decision, not an agent decision.
   - **Required:** invoke `AskUserQuestion` with a question equivalent to: "¿Quieres hacer una ordenación completa del brain? (mueve todo el contenido a `_STAGING/` para drenar después por áreas vía `brain init`, además de migrar runtime-tied dirs a `_AGENTS/` y crear `_COMMON` + wrappers)". Offer at least two options: full reorder (default, recommended for new brains) and skip staging sweep.
   - **Forbidden:** do not assume the user wants to skip based on brain size, number of items at root, presence of existing organization, or any other heuristic. The default is full reorder; deviating from it requires the user's explicit answer to the question.
@@ -99,7 +99,7 @@ After a batch is applied, ask separately for any of the following before executi
 
 ### 3.8. Special case: daily-note template divergence
 
-- If the user's brain has a local `TEMPLATES/Daily Note Template.md` that differs from the common source (`_COMMON/TEMPLATES/TEMPLATE.daily-note.md`), **do not auto-resolve the divergence**. Do not symlink the common over the local, do not create today's daily note using either shape silently, do not move on.
+- If the user's brain has a local `TEMPLATES/Daily Note Template.md` that differs from the common source (`_COMMON/TEMPLATES/TEMPLATE.daily-note.common.md`), **do not auto-resolve the divergence**. Do not symlink the common over the local, do not create today's daily note using either shape silently, do not move on.
 - Surface the diff to the user and propose unification: enrich the common template with the local additions, then collapse to a single shared template via symlink. This converges runtimes across brains instead of perpetuating per-brain divergence.
 - Record the divergence + unification proposal in `WIP/STANDARDIZE_PROCESS.md` as a pending decision. Do not write today's daily note until the user has resolved this.
 
@@ -128,3 +128,9 @@ After a batch is applied, ask separately for any of the following before executi
   ```
 - The assessment must not move, delete, or rewrite brain content except for writing the report when `--apply` is passed.
 - Present the assessment to the user before making semantic changes. Safe deterministic fixes may be applied automatically when they are reversible and non-destructive; ambiguous or destructive decisions require user approval.
+
+## 5. Recurring maintenance reviews
+
+- Weekly trash review: review `QUARANTINE/TRASH/` for notes older than 15 days and propose candidates for permanent deletion. Do not delete automatically; list candidates and wait for explicit human approval.
+- Monthly maintenance-rule review: review recurring maintenance rules and refine them if they are creating unnecessary friction.
+- These recurring reviews may produce recommendations, WIP entries, or proposed rule edits. They do not authorize content moves, Git operations, or permanent deletion without the explicit user approval required by the relevant rule.

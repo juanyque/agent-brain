@@ -1,4 +1,6 @@
 # Optional capabilities
+<!-- content-boundary: {"kind":"policy-owner","policy_id":"policy.optional-capabilities","owner":"model/RULES-OPTIONAL-CAPABILITIES.common.md"} -->
+<!-- content-boundary: {"kind":"optional-capability","capability":"graphify","startup":"excluded"} -->
 
 Use this rule when a project's active WIP context references an optional tool or
 capability that is not part of the base brain model.

@@ -7,36 +7,36 @@ Detailed per-script documentation lives next to each script as `SCRIPT.<name>.co
 ## Conventions
 
 - Each script has a companion Markdown doc named `SCRIPT.<script-name>.common.md`.
-- Python scripts and latest-run logs use simple CLI-oriented basenames; Markdown docs keep Obsidian-safe `.common.md` names. Example family: `skill_setup.py`, `SCRIPT.skill-setup.common.md`, and `skill_setup.log`.
+- Python scripts and latest-run logs use simple CLI-oriented basenames; Markdown docs keep Obsidian-safe `.common.md` names. Example family: `home_setup.py`, `SCRIPT.home-setup.common.md`, and `home_setup.log`.
 - Scripts that inspect or change state print to console and overwrite a latest-run log next to the script (`SCRIPTS/<script-name>.log`).
 - Scripts that create, move, rename, link, or rewrite files are dry-run by default and require `--apply` for changes.
 - Log files are execution artifacts and are gitignored.
 - No script overwrites vault-local files automatically.
 
-## `skill_setup.py`
+## `skill_link.sh`
 
-Install a shared skill into an external agent runtime via symlinks. Full doc: `SCRIPT.skill-setup.common.md`.
+Install a shared skill into an external agent runtime via symlinks. Full doc: `SCRIPT.skill-link.common.md`.
 
 ```bash
 # Dry-run
-python3 SCRIPTS/skill_setup.py --runtime ~/.agents/skills --skill obsidian
+SCRIPTS/skill_link.sh brain ~/.agents
 
 # Apply
-python3 SCRIPTS/skill_setup.py --runtime ~/.agents/skills --skill obsidian --apply
+SCRIPTS/skill_link.sh brain ~/.agents --apply
 ```
 
-Refuses to modify an existing unmarked runtime skill directory unless `--force-adopt` is passed.
+Backs up an existing target before linking when `--apply` is passed.
 
-## `vault_setup.py`
+## `home_setup.py`
 
-Attach an Obsidian vault to this common project by creating `_COMMON` and missing local wrappers. Full doc: `SCRIPT.vault-setup.common.md`.
+Attach a brain to this common project by creating `_COMMON` and missing local wrappers. Full doc: `SCRIPT.home-setup.common.md`.
 
 ```bash
 # Dry-run
-python3 SCRIPTS/vault_setup.py --vault /path/to/vault
+python3 SCRIPTS/home_setup.py --brain /path/to/brain
 
 # Apply
-python3 SCRIPTS/vault_setup.py --vault /path/to/vault --apply
+python3 SCRIPTS/home_setup.py --brain /path/to/brain --apply
 ```
 
 Creates `_COMMON` when missing and creates only missing wrapper files. Existing local files are reported and never overwritten.
@@ -83,3 +83,19 @@ python3 SCRIPTS/profile_secrets.py --brain /path/to/brain --keychain macos
 
 The preflight never returns a secret value. Required unresolved references fail closed; optional
 references remain visible without failing the command.
+
+## `model_check.py`
+
+Read-only contract checker for the public operating model, local worktree gates, committed-range
+gates, context budgets, route/set equality, ownership metadata, and brain compatibility. It is the
+canonical script behind CI strict gates and the todo19 `complete-local-gate` QA-manifest alias.
+
+```bash
+python3 SCRIPTS/model_check.py --strict --format json
+python3 SCRIPTS/model_check.py --strict --only worktree-scope,whitespace --format json
+python3 SCRIPTS/model_check.py --strict --git-base "$MODEL_BASE" --only committed-scope --format json
+```
+
+The checker never fetches, pushes, stages, commits, or rewrites Git state. Callers must provide a
+locally available committed base; CI proves that object with `git cat-file -e` before invoking the
+committed-range gate.

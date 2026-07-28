@@ -1,4 +1,5 @@
 # Test Coverage Analysis — task-type guide
+<!-- content-boundary: {"kind":"task-type","task_id":"test-coverage-analysis","rules":[],"templates":[]} -->
 
 Análisis de cobertura de tests de un proyecto para decidir qué tests crear, rehacer o eliminar — típicamente como preparación de un upgrade sensible (Python version, MySQL version, dependency major bump).
 

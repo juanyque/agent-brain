@@ -10,6 +10,8 @@ tags: [evidence]
 ---
 # <Summary as title>
 
+> Shape only. Permanence and sensitivity are owned by `RULES-REVIEW-EVIDENCE.common.md`.
+
 <Detail in prose. Self-contained: a reader should understand this item
 without opening any linked source. Transcribe the relevant content of
 attachments (Slack screenshots, emails) here so the note is searchable

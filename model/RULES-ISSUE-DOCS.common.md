@@ -1,4 +1,5 @@
 # Issue working-doc rules
+<!-- content-boundary: {"kind":"policy-owner","policy_id":"policy.issue-docs","owner":"model/RULES-ISSUE-DOCS.common.md"} -->
 
 Use this rule whenever an agent begins implementation work on a tracker ticket (Jira / GitHub issue / equivalent). The artefact this rule produces is a **live working document** kept in sync with the work in progress — not a post-hoc consolidation summary.
 
@@ -135,7 +136,7 @@ If the derived title would collide with another folder under the same `<repo>`, 
 
 ## Lifecycle: WIP → MEMORY
 
-When the ticket reaches a terminal state (PR merged / ticket closed / cancelled), move the folder via `git mv`:
+When the ticket reaches a terminal state (PR merged / ticket closed / cancelled), move the folder via `git mv` only with explicit user authorization for the Git operation:
 
 ```
 WIP/<project-area>/<repo>/<TICKET-ID> - <Short title>/

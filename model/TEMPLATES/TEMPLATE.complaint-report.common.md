@@ -5,7 +5,7 @@ filed:
 ---
 # Complaint report - <topic>
 
-> Generated from the evidence store (`WIP/evidence/`) for the topic below, then curated. Separate facts from interpretations. The evidence notes in the store transcribe attachment content; this report references them. Carry the `sensitive` tag: maintenance jobs must not move, archive, or surface this note without explicit confirmation.
+> Shape only. Generated from the evidence store (`WIP/evidence/`) for the topic below, then curated. Lifecycle, status, and sensitive handling are owned by `RULES-REVIEW-EVIDENCE.common.md`.
 
 - **Generated**: YYYY-MM-DD
 - **Topic filter**: <topic slug>
@@ -14,7 +14,7 @@ filed:
 - **Subject**: what this complaint is about, in one or two sentences.
 - **Person(s) involved**: [[<person note in MEMORY/People>]]
 - **Date range**: YYYY-MM-DD to YYYY-MM-DD (first incident to last).
-- **Current status**: open / escalated to <who> / under investigation / resolved / closed.
+- **Current status**: see frontmatter and `RULES-REVIEW-EVIDENCE.common.md`.
 - **Desired outcome**: what resolution would look like.
 
 ## Timeline of incidents

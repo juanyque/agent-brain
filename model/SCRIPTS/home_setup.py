@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Attach a brain to the agent-brain model — structure only (D21).
-
-Handles: pre-cleanup (.DS_Store, empty dirs), staging (virgin -> _STAGING/),
-and model attachment (_COMMON symlink, wrappers, templates). No runtime logic;
-runtime_manager.py handles all runtime concerns.
-
-Dry-run by default. Pass --apply to execute.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -19,20 +10,22 @@ from brain_state import (  # noqa: E402  (lives next to this script)
     link_status,
     staging_status,
 )
-from _common import Reporter, build_command_string  # noqa: E402  (lives next to this script)
+from _common import Reporter, build_command_string, script_log_path  # noqa: E402  (lives next to this script)
 from home_setup_content import (  # noqa: E402  (lives next to this script)
     TEMPLATE_SYMLINKS,
     WRAPPERS,
     apply_managed_content,
-    discover_task_type_wrappers,
+    discover_wrappers,
+    entry_exists_no_follow,
     is_current_template_symlink,
     managed_content_errors,
+    preflight_managed_content,
     via_common_symlink_target,
 )
 from home_setup_filesystem import (  # noqa: E402  (lives next to this script)
     cleanup_empty_dirs_recursively,
     collect_movable_items,
-    git_mv_to_staging,
+    move_to_staging,
     run_cleanup_ds_store,
 )
 
@@ -112,12 +105,10 @@ def print_plan(
         reporter.write(f"{COMMON_LINK_NAME}: already attached")
 
     reporter.write("wrappers:")
-    task_type_wrappers = discover_task_type_wrappers(common)
-    combined_wrappers = list(WRAPPERS.items()) + list(task_type_wrappers.items())
-    for local_name, common_name in combined_wrappers:
+    for local_name, common_name in discover_wrappers(common).items():
         local_path = brain_root / local_name
         common_path = common / common_name
-        if local_path.exists():
+        if entry_exists_no_follow(local_path):
             local_status = "exists, will not overwrite"
         elif common_path.exists():
             local_status = "missing, can create"
@@ -162,9 +153,11 @@ def apply(
     from datetime import datetime, timezone
 
     status, desired = link_status(brain_root, common)
+    if status in {"missing", "ok"} or (status.startswith("conflict") and switch_model):
+        preflight_managed_content(brain_root, common)
 
     if status == "missing" and not skip_full_reorder:
-        git_mv_to_staging(brain_root, reporter, dry_run=False)
+        move_to_staging(brain_root, reporter, dry_run=False)
 
     link_path = brain_root / COMMON_LINK_NAME
 
@@ -215,7 +208,7 @@ def main() -> int:
     parser.add_argument("--skip-full-reorder", action="store_true", help="Skip staging sweep. Only attach _COMMON + wrappers.")
     parser.add_argument("--switch-model", action="store_true", help="Repoint _COMMON if it conflicts (D25). A .backup-<ts> is created.")
     args = parser.parse_args()
-    reporter = Reporter(Path(__file__).with_suffix(".log"))
+    reporter = Reporter(script_log_path(Path(__file__)))
     command_string = build_command_string()
 
     try:
@@ -255,7 +248,7 @@ def main() -> int:
                     )
             elif link_st != "ok" and not args.skip_full_reorder:
                 reporter.write("")
-                git_mv_to_staging(brain_root, reporter, dry_run=True)
+                move_to_staging(brain_root, reporter, dry_run=True)
             reporter.write("Dry run only. Re-run with --apply to create missing safe items.")
             reporter.flush()
             return 0

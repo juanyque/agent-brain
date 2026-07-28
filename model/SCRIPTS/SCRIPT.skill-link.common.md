@@ -32,6 +32,6 @@ skill_link.sh boyscout ~/.agents --apply
 An explicit source directory must contain `SKILL.md`. Its directory basename becomes the installed
 skill name. The source remains owned by its project; runtime homes receive symlinks rather than copies.
 
-## Legacy
+## Compatibility
 
-`skill_setup.py` (203 lines, with ownership markers and per-file link mode) is deprecated. It remains in the repo only because `home_setup.py` still calls it — Backlog A removes that call and deletes the script. For all new manual skill installations, use `skill_link.sh`.
+Older setup documentation may mention a Python skill-linking helper. That helper is no longer part of the model; for all manual skill installations, use `skill_link.sh`.

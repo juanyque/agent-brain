@@ -19,17 +19,66 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      - name: Resolve comparison base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          MODEL_BASE: 993247b2850ac86993c7c6dd18e6c4fd9ec6df7c
+        run: |
+          set -eu
+          candidate=""
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            candidate="$PR_BASE_SHA"
+          elif [ -n "$PUSH_BEFORE_SHA" ] && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            candidate="$PUSH_BEFORE_SHA"
+          fi
+          if [ -n "$candidate" ] && git cat-file -e "${candidate}^{commit}"; then
+            MODEL_BASE="$candidate"
+          elif ! git cat-file -e "${MODEL_BASE}^{commit}"; then
+            MODEL_BASE="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+            git cat-file -e "${MODEL_BASE}^{commit}"
+          else
+            git cat-file -e "${MODEL_BASE}^{commit}"
+          fi
+          printf 'MODEL_BASE=%s\n' "$MODEL_BASE" >> "$GITHUB_ENV"
+
+      - name: Run committed-range gates
+        run: |
+          set -eu
+          git diff "${MODEL_BASE}...HEAD" --check
+          python3 model/SCRIPTS/model_check.py --strict --git-base "$MODEL_BASE" --only committed-scope --format json
+
       - name: Run contract and integration tests
         run: python3 -m unittest discover -s tests -v
 
-      - name: Check Python syntax
-        run: python3 -m compileall -q model/SCRIPTS skills tests
+      - name: Run immutable baseline tests
+        run: python3 tests/support/run_baseline_tests.py --root . --git-ref 993247b2850ac86993c7c6dd18e6c4fd9ec6df7c --expected-ids tests/fixtures/baseline-test-ids.txt
 
-      - name: Check whitespace errors
-        run: git diff --check
+      - name: Check Python syntax
+        run: python3 tests/support/compile_sources.py model/SCRIPTS skills tests
+
+      - name: Check shell syntax
+        run: |
+          set -eu
+          find bootstrap-zero.sh model/SCRIPTS -type f -name '*.sh' -print0 \
+            | while IFS= read -r -d '' file; do
+                bash -n "$file"
+              done
+
+      - name: Run worktree gates
+        run: |
+          set -eu
+          git diff HEAD --check
+          python3 model/SCRIPTS/model_check.py --strict --only worktree-scope,whitespace --format json
+
+      - name: Run strict operating-model gate
+        run: python3 model/SCRIPTS/model_check.py --strict --format json

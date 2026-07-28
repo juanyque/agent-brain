@@ -6,11 +6,11 @@ status: draft
 ---
 # Brag report - <period label>
 
-> Generated from the evidence store (`WIP/evidence/`) for the period below, then curated. Adapted from Julia Evans's brag-document concept. The evidence index at the bottom links back to the source notes.
+> Shape only. Generated from the evidence store (`WIP/evidence/`) for the period below, then curated. Lifecycle/status values are owned by `RULES-REVIEW-EVIDENCE.common.md`.
 
 - **Period**: <period_start> to <period_end>
 - **Generated**: YYYY-MM-DD
-- **Status**: draft / submitted / archived
+- **Status**: see frontmatter and `RULES-REVIEW-EVIDENCE.common.md`
 
 ## Goals for this period
 - List the major goals you were working toward during this period. Draw from `WIP/OBJECTIVES.md` if it exists. Sharing these with your manager and peers helps them see how to support you.

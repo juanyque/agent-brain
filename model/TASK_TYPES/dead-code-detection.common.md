@@ -1,4 +1,5 @@
 # Dead Code Detection — task-type guide
+<!-- content-boundary: {"kind":"task-type","task_id":"dead-code-detection","rules":[],"templates":[]} -->
 
 Análisis sistemático para identificar código muerto en un proyecto con el mínimo de falsos positivos — funciones/clases/módulos nunca referenciados, imports no consumidos, código inalcanzable, tests inválidos.
 
