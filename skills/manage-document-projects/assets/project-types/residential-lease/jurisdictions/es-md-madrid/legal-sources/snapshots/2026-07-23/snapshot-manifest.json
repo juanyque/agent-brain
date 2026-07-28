@@ -1,0 +1,106 @@
+{
+  "snapshot_schema": "0.1.0",
+  "snapshot_date": "2026-07-23",
+  "created_at": "2026-07-23T20:51:11Z",
+  "source_inventory": "../../static-sources.tsv",
+  "source_inventory_sha256": "62560f60eef6cccb3a22a8b3e1fbaddb82de6c31f639c6da2365053237f57cdc",
+  "policy": {
+    "immutability": "append-only-by-date",
+    "raw_format": "preserved-official-response-by-source",
+    "normalized_format": "gfm-markdown-via-pandoc",
+    "legal_review_status": "pending-legal-review"
+  },
+  "sources": [
+    {
+      "id": "es-lau-1994",
+      "title": "Ley 29/1994, de Arrendamientos Urbanos",
+      "official_url": "https://www.boe.es/eli/es/l/1994/11/24/29/con",
+      "source_format": "html",
+      "resolved_url": "https://www.boe.es/eli/es/l/1994/11/24/29/con",
+      "http_status": "200",
+      "content_type": "text/html;charset=UTF-8",
+      "raw_path": "raw/es-lau-1994.html",
+      "raw_sha256": "629a98bb8ded6a1b264a634f641c5b3407a0d4a4e581c1871265979e11508f45",
+      "markdown_path": "markdown/es-lau-1994.md",
+      "markdown_sha256": "1ec0759104a2c9041760ec8ad4a2d7ba4bccf302e307528a7db2b2dab2824272"
+    },
+    {
+      "id": "es-housing-law-2023",
+      "title": "Ley 12/2023, por el derecho a la vivienda",
+      "official_url": "https://www.boe.es/eli/es/l/2023/05/24/12/con",
+      "source_format": "html",
+      "resolved_url": "https://www.boe.es/eli/es/l/2023/05/24/12/con",
+      "http_status": "200",
+      "content_type": "text/html;charset=UTF-8",
+      "raw_path": "raw/es-housing-law-2023.html",
+      "raw_sha256": "8f832a078d92e2e833a4d35b249ff02d79f66c3c8401fb1fb20ea4860ee45f7c",
+      "markdown_path": "markdown/es-housing-law-2023.md",
+      "markdown_sha256": "0c48d6384d98341a8823fb645b97ee2ef048e8d00ca7481d716a028c4b08a7e4"
+    },
+    {
+      "id": "es-civil-code",
+      "title": "Código Civil",
+      "official_url": "https://www.boe.es/eli/es/rd/1889/07/24/(1)/con",
+      "source_format": "html",
+      "resolved_url": "https://www.boe.es/eli/es/rd/1889/07/24/(1)/con",
+      "http_status": "200",
+      "content_type": "text/html;charset=UTF-8",
+      "raw_path": "raw/es-civil-code.html",
+      "raw_sha256": "897f6f527aa445e6e7f7c41dcfef1c35a5c3001e54d4cde28427921898bde0f8",
+      "markdown_path": "markdown/es-civil-code.md",
+      "markdown_sha256": "19abba6dfe9aa35a2a31c9cae8879a71bbb9c8da2349e0ca5f49a141e50b3af7"
+    },
+    {
+      "id": "es-rdl-7-2019",
+      "title": "Real Decreto-ley 7/2019, de medidas urgentes en materia de vivienda y alquiler",
+      "official_url": "https://www.boe.es/eli/es/rdl/2019/03/01/7/con",
+      "source_format": "html",
+      "resolved_url": "https://www.boe.es/eli/es/rdl/2019/03/01/7/con",
+      "http_status": "200",
+      "content_type": "text/html;charset=UTF-8",
+      "raw_path": "raw/es-rdl-7-2019.html",
+      "raw_sha256": "072666ea38f369ab47936bb9ede0707c21326d1197ca5cc73ccb48453043f121",
+      "markdown_path": "markdown/es-rdl-7-2019.md",
+      "markdown_sha256": "8e251495a3deada4c530c14a7d3a6972513929a1bb60f7a0b67c3fee22f7d720"
+    },
+    {
+      "id": "es-consumer-housing-info-1989",
+      "title": "Real Decreto 515/1989, de información en compraventa y arrendamiento de viviendas",
+      "official_url": "https://www.boe.es/eli/es/rd/1989/04/21/515/con",
+      "source_format": "html",
+      "resolved_url": "https://www.boe.es/eli/es/rd/1989/04/21/515/con",
+      "http_status": "200",
+      "content_type": "text/html;charset=UTF-8",
+      "raw_path": "raw/es-consumer-housing-info-1989.html",
+      "raw_sha256": "1a6b22eefe61eb16f3e187a95d3eb1ee698788090baca568f80eb58f6f37c259",
+      "markdown_path": "markdown/es-consumer-housing-info-1989.md",
+      "markdown_sha256": "b86fceea45af8575e994a973ae8ec5359d6248eead7ef4e4eec33085d9f2a135"
+    },
+    {
+      "id": "es-md-deposit-decree-181-1996",
+      "title": "Decreto 181/1996, sobre depósito de fianzas de arrendamientos en la Comunidad de Madrid",
+      "official_url": "https://www.comunidad.madrid/docs/assets/2018/07/12/dec_181_1996.pdf",
+      "source_format": "pdf",
+      "resolved_url": "https://www.comunidad.madrid/docs/assets/2018/07/12/dec_181_1996.pdf",
+      "http_status": "200",
+      "content_type": "application/pdf",
+      "raw_path": "raw/es-md-deposit-decree-181-1996.pdf",
+      "raw_sha256": "e4d3e8f5a70287612e7cb9c08cb20feee0053eec5e471697a6a3eac567c4908f",
+      "markdown_path": "markdown/es-md-deposit-decree-181-1996.md",
+      "markdown_sha256": "b20c43be375a9e7abd71d09fa06a7c901ff08a0d061114ea24afa2f489a70492"
+    },
+    {
+      "id": "es-md-deposit-law-12-1997",
+      "title": "Ley 12/1997, sobre inspección y potestad sancionadora en materia de depósito de fianzas",
+      "official_url": "https://www.boe.es/eli/es-md/l/1997/06/04/12/con",
+      "source_format": "html",
+      "resolved_url": "https://www.boe.es/eli/es-md/l/1997/06/04/12/con",
+      "http_status": "200",
+      "content_type": "text/html;charset=UTF-8",
+      "raw_path": "raw/es-md-deposit-law-12-1997.html",
+      "raw_sha256": "757201c557dd0da156aac60037ad07f95c0dbd9f93787f1cff3e3ae03edb0820",
+      "markdown_path": "markdown/es-md-deposit-law-12-1997.md",
+      "markdown_sha256": "44dfac6864996f86a428828151fc8fc30ad20ef0a86fdf7873d4981ed75959c9"
+    }
+  ]
+}

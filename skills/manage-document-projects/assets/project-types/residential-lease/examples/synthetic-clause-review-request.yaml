@@ -1,0 +1,22 @@
+review_version: "0.1.0"
+project_type: ../project-type.yaml
+data: minimal-project.yaml
+document: lease
+reviewed_on: "2026-07-24"
+reviewer:
+  name: Revisor sintético para pruebas
+  professional_id: SYNTHETIC-NOT-A-CREDENTIAL
+  signer_identity: synthetic-reviewer@example.test
+approved_clause_versions:
+  - lease.object-and-use@0.1.0
+  - lease.term-and-delivery@0.1.0
+  - lease.rent-and-payment@0.1.1
+  - lease.deposit-and-guarantee@0.1.0
+  - lease.rent-update@0.1.0
+  - lease.conservation-and-works@0.1.0
+  - lease.expenses-and-supplies@0.1.0
+  - lease.assignment-subletting-and-preemption@0.1.0
+  - lease.withdrawal-and-termination@0.1.0
+excluded_clause_versions:
+  - id: lease.notices-and-disputes@0.1.0
+    reason_code: synthetic-qa-exclusion

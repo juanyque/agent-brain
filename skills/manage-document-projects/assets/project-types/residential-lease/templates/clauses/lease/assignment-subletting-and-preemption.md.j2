@@ -1,0 +1,31 @@
+<!-- clause: lease.assignment-subletting-and-preemption@0.1.0 -->
+### Cesión, subarriendo y adquisición preferente
+
+{% if operation.lease.assignment.assignment_policy == "written-consent-required" -%}
+La parte arrendataria no podrá ceder el contrato sin consentimiento previo y
+escrito de la parte arrendadora.
+{%- elif operation.lease.assignment.assignment_policy == "prohibited" -%}
+La cesión del contrato queda prohibida.
+{%- else -%}
+La cesión se admite en los términos expresamente permitidos por este contrato
+y por la normativa aplicable.
+{%- endif %}
+
+{% if operation.lease.assignment.subletting_policy == "partial-with-written-consent" -%}
+El subarriendo solo podrá ser parcial y requerirá consentimiento previo y
+escrito de la parte arrendadora.
+{%- elif operation.lease.assignment.subletting_policy == "prohibited" -%}
+El subarriendo queda prohibido.
+{%- else -%}
+El subarriendo se admite en los términos expresamente permitidos por este
+contrato y por la normativa aplicable.
+{%- endif %}
+
+{% if operation.lease.preemption.waiver -%}
+La parte arrendataria renuncia al derecho de adquisición preferente, sin
+perjuicio de la comunicación previa de la intención de vender que resulte
+legalmente obligatoria.
+{%- else -%}
+La parte arrendataria conserva sus derechos legales de tanteo y retracto en
+caso de venta de la vivienda.
+{%- endif %}

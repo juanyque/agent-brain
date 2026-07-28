@@ -1,0 +1,60 @@
+layer_version: "0.1.0"
+id: es-md-madrid
+version: "0.1.0"
+status: pending-legal-review
+project_type: residential-lease
+sources: sources.yaml
+consulted_on: "2026-07-23"
+legal_source_snapshot: legal-sources/snapshots/2026-07-23/snapshot-manifest.json
+dynamic_source_policy: resolve-live-at-generation-or-review
+
+generation_checks:
+  - id: contract-effective-date
+    status: required
+    purpose: Select the legal wording and transitional regime in force.
+    required_facts:
+      - project.effective_date
+      - operation.lease.signature_date
+
+  - id: landlord-capacity
+    status: required
+    purpose: Resolve duration, guarantees, expenses and any large-landlord rules.
+    required_facts:
+      - operation.lease.landlord_context.legal_form
+      - operation.lease.landlord_context.residential_property_count
+      - operation.lease.landlord_context.residential_floor_area_sqm
+
+  - id: market-tension-status
+    status: resolve-at-generation
+    purpose: Check whether a current official declaration affects the property.
+    required_facts:
+      - property.address
+      - property.cadastral_reference
+      - prior_lease_history
+    source_refs:
+      - es-housing-law-2023
+      - es-rental-reference-system
+
+  - id: rent-update-regime
+    status: resolve-at-generation
+    purpose: Select the agreed method and the official limit or index applicable.
+    required_facts:
+      - operation.lease.signature_date
+      - operation.lease.rent_update.enabled
+      - operation.lease.rent_update.reference_index
+      - update_effective_date
+    source_refs:
+      - es-lau-1994
+      - es-irav-ine
+
+  - id: security-deposit-filing
+    status: pending-legal-review
+    purpose: Generate the post-signature filing task for the Madrid deposit.
+    responsible_party: landlord
+    source_refs:
+      - es-lau-1994
+      - es-md-deposit-decree-181-1996
+      - es-md-deposit-law-12-1997
+      - es-md-deposit-service
+
+clause_overrides: []

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manage Document Projects"
+  short_description: "Create and publish governed document projects"
+  default_prompt: "Use $manage-document-projects to create a governed document project and produce a printable output."

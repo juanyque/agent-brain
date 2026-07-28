@@ -1,0 +1,83 @@
+@page {
+  size: A4;
+  margin: 18mm 18mm 20mm;
+
+  @bottom-center {
+    content: counter(page) " / " counter(pages);
+    color: #666;
+    font-size: 9pt;
+  }
+}
+
+:root {
+  color: #1f2933;
+  font-family: "Source Serif 4", "Noto Serif", Georgia, serif;
+  font-size: 10pt;
+  line-height: 1.3;
+}
+
+body {
+  margin: 0;
+  hyphens: auto;
+}
+
+h1,
+h2,
+h3 {
+  color: #111827;
+  font-family: "Source Sans 3", "Noto Sans", Arial, sans-serif;
+  line-height: 1.2;
+  page-break-after: avoid;
+}
+
+h1 {
+  font-size: 16pt;
+  margin: 0 0 8mm;
+  text-align: center;
+}
+
+h2 {
+  font-size: 12pt;
+  margin: 4mm 0 2mm;
+}
+
+h3 {
+  font-size: 10.5pt;
+  margin: 4mm 0 1.5mm;
+}
+
+p {
+  margin: 0 0 2.5mm;
+  orphans: 3;
+  widows: 3;
+}
+
+table {
+  border-collapse: collapse;
+  break-inside: avoid;
+  margin: 3mm 0;
+  width: 100%;
+}
+
+th,
+td {
+  border: 0.25mm solid #9ca3af;
+  padding: 1.5mm;
+  text-align: left;
+  vertical-align: top;
+}
+
+tr,
+figure,
+blockquote {
+  break-inside: avoid;
+}
+
+.page-break {
+  break-before: page;
+}
+
+.signature-block {
+  break-inside: avoid;
+  margin-top: 18mm;
+}

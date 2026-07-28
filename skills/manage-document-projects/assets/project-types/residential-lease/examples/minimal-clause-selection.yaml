@@ -1,0 +1,45 @@
+selection_version: 0.3.0
+catalog: residential-lease-clauses@0.3.0
+jurisdiction: es-md-madrid@0.1.0
+data_revision: '1'
+document: lease
+status: draft-not-for-signature
+candidate_clauses:
+- lease.object-and-use@0.1.0
+- lease.term-and-delivery@0.1.0
+- lease.rent-and-payment@0.1.1
+- lease.deposit-and-guarantee@0.1.0
+- lease.rent-update@0.1.0
+- lease.conservation-and-works@0.1.0
+- lease.expenses-and-supplies@0.1.0
+- lease.assignment-subletting-and-preemption@0.1.0
+- lease.withdrawal-and-termination@0.1.0
+blocked_clauses:
+- id: lease.notices-and-disputes@0.1.0
+  reasons:
+  - legal-review-required
+  missing_data_paths: []
+not_applicable_clauses: []
+generation_checks:
+- contract-effective-date
+- landlord-capacity
+- market-tension-status
+- rent-update-regime
+- security-deposit-filing
+legal_review:
+  status: required
+  approved_clause_versions: []
+  excluded_clause_versions: []
+generation_review:
+  status: required
+  resolved_checks: []
+  valid_until: null
+provenance:
+  data_sha256: aa2697666da49c107fbe61d83003dff8449f474377354d0474b51a53b96aba95
+  schema_sha256: 90a73378aff04590e1e9779b6de1dc2d93139684d8f961bdbd9b780a219af58b
+  catalog_sha256: 6a8741b77a4d0822a07decb80d9fc33756b735a12c487c40b5e34ac656631cc0
+  jurisdiction_sha256: 7dda9d5d1244eadf2769e14118db10c8ce3c6676cbd897560277b6e591f46139
+  sources_sha256: 775c07e02ec1ff1b4384591ac81bfb4376268fd4442c19302f0838fc66944254
+  legal_source_snapshot_sha256: f996dc003db9b02e7b312a373f7cc9f8de260476c6c241169587e20f8410681a
+  approval_sha256: null
+  jurisdiction_resolution_sha256: null

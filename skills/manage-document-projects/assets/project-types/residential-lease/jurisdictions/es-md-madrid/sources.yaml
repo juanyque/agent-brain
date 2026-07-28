@@ -1,0 +1,109 @@
+registry_version: "0.1.1"
+jurisdiction: es-md-madrid
+status: research-draft
+consulted_on: "2026-07-24"
+active_static_snapshot: legal-sources/snapshots/2026-07-23/snapshot-manifest.json
+
+sources:
+  - id: es-lau-1994
+    title: Ley 29/1994, de Arrendamientos Urbanos
+    authority: Boletín Oficial del Estado
+    kind: legislation
+    scope: ES
+    official_url: https://www.boe.es/eli/es/l/1994/11/24/29/con
+    consolidated_update_published: "2023-05-25"
+    preservation: static-snapshot
+    snapshot_ref: legal-sources/snapshots/2026-07-23/markdown/es-lau-1994.md
+    status: candidate-primary-source
+
+  - id: es-housing-law-2023
+    title: Ley 12/2023, por el derecho a la vivienda
+    authority: Boletín Oficial del Estado
+    kind: legislation
+    scope: ES
+    official_url: https://www.boe.es/eli/es/l/2023/05/24/12/con
+    consolidated_update_published: "2026-02-28"
+    preservation: static-snapshot
+    snapshot_ref: legal-sources/snapshots/2026-07-23/markdown/es-housing-law-2023.md
+    status: candidate-primary-source
+
+  - id: es-civil-code
+    title: Código Civil
+    authority: Boletín Oficial del Estado
+    kind: legislation
+    scope: ES
+    official_url: https://www.boe.es/eli/es/rd/1889/07/24/(1)/con
+    consolidated_update_published: "2025-01-03"
+    preservation: static-snapshot
+    snapshot_ref: legal-sources/snapshots/2026-07-23/markdown/es-civil-code.md
+    status: candidate-primary-source
+
+  - id: es-rdl-7-2019
+    title: Real Decreto-ley 7/2019, de medidas urgentes en materia de vivienda y alquiler
+    authority: Boletín Oficial del Estado
+    kind: amending-legislation
+    scope: ES
+    official_url: https://www.boe.es/eli/es/rdl/2019/03/01/7/con
+    consolidated_update_published: "2020-02-29"
+    preservation: static-snapshot
+    snapshot_ref: legal-sources/snapshots/2026-07-23/markdown/es-rdl-7-2019.md
+    status: candidate-primary-source
+
+  - id: es-consumer-housing-info-1989
+    title: Real Decreto 515/1989, de información en compraventa y arrendamiento de viviendas
+    authority: Boletín Oficial del Estado
+    kind: legislation
+    scope: ES
+    official_url: https://www.boe.es/eli/es/rd/1989/04/21/515/con
+    preservation: static-snapshot
+    snapshot_ref: legal-sources/snapshots/2026-07-23/markdown/es-consumer-housing-info-1989.md
+    status: candidate-primary-source
+
+  - id: es-irav-ine
+    title: Índice de Referencia de Arrendamientos de Vivienda
+    authority: Instituto Nacional de Estadística
+    kind: official-index
+    scope: ES
+    official_url: https://www.ine.es/dyngs/INEbase/operacion.htm?c=Estadistica_C&cid=1254736177110&idp=1254735976607&menu=resultados
+    preservation: resolve-live
+    status: resolve-current-value-at-use
+
+  - id: es-rental-reference-system
+    title: Sistema Estatal de Referencia del precio del alquiler de vivienda
+    authority: Ministerio de Vivienda y Agenda Urbana
+    kind: official-service
+    scope: ES
+    official_url: https://serpavi.mivau.gob.es/
+    preservation: resolve-live
+    status: resolve-property-and-zone-at-use
+
+  - id: es-md-deposit-decree-181-1996
+    title: Decreto 181/1996, sobre depósito de fianzas de arrendamientos en la Comunidad de Madrid
+    authority: Comunidad de Madrid
+    kind: legislation
+    scope: ES-MD
+    official_url: https://www.comunidad.madrid/docs/assets/2018/07/12/dec_181_1996.pdf
+    incorporated_amendments:
+      - Decreto 111/2016, de 22 de noviembre
+    preservation: static-snapshot
+    snapshot_ref: legal-sources/snapshots/2026-07-23/markdown/es-md-deposit-decree-181-1996.md
+    status: candidate-primary-source
+
+  - id: es-md-deposit-law-12-1997
+    title: Ley 12/1997, sobre inspección y potestad sancionadora en materia de depósito de fianzas
+    authority: Boletín Oficial del Estado
+    kind: legislation
+    scope: ES-MD
+    official_url: https://www.boe.es/eli/es-md/l/1997/06/04/12/con
+    preservation: static-snapshot
+    snapshot_ref: legal-sources/snapshots/2026-07-23/markdown/es-md-deposit-law-12-1997.md
+    status: candidate-primary-source
+
+  - id: es-md-deposit-service
+    title: Depósito de fianzas en régimen general
+    authority: Comunidad de Madrid
+    kind: official-procedure
+    scope: ES-MD
+    official_url: https://sede.comunidad.madrid/impuestos-tasas-precios-publicos/deposito-fianzas-regimen-general
+    preservation: resolve-live
+    status: resolve-procedure-at-use

@@ -1,0 +1,50 @@
+schema_version: "0.2.0"
+
+project:
+  id: example-residential-lease-incomplete
+  type: residential-lease
+  type_version: "0.2.0"
+  jurisdiction: es-md-madrid
+  effective_date: "2026-07-23"
+  data_revision: "1"
+
+property:
+  id: example-home
+  address:
+    full_text: Calle Ejemplo 1, 1-A
+    postal_code: "28000"
+    municipality: Madrid
+    province: Madrid
+    country_code: ES
+  intended_use: habitual-residence
+
+parties:
+  landlords:
+    - id: example-landlord
+      full_name: Persona Arrendadora Demo
+      identity:
+        kind: other
+        number: DEMO-LANDLORD-ID
+      notification_address: Dirección de notificaciones de prueba
+      email: landlord@example.invalid
+  tenants:
+    - id: example-tenant
+      full_name: Persona Arrendataria Demo
+      identity:
+        kind: other
+        number: DEMO-TENANT-ID
+      notification_address: Dirección de notificaciones de prueba
+      email: tenant@example.invalid
+
+operation:
+  currency: EUR
+  lease:
+    signature_date: "2026-08-01"
+    start_date: "2026-08-01"
+    initial_duration_months: 12
+    monthly_rent: 1250
+    payment_due_day: 5
+    deposit_amount: 1250
+    additional_guarantee_amount: 0
+  payment:
+    method: bank-transfer

@@ -1,0 +1,74 @@
+manifest_version: "0.2.0"
+id: residential-lease
+version: "0.2.0"
+title: Residential lease
+status: draft
+
+data_schema: schemas/project-data.schema.json
+example_data: examples/minimal-project.yaml
+clause_catalog: clauses/catalog.yaml
+clause_selection_example: examples/minimal-clause-selection.yaml
+clause_selection_request_example: examples/minimal-clause-selection-request.yaml
+clause_review_request_example: examples/synthetic-clause-review-request.yaml
+jurisdiction_check_request_example: examples/synthetic-jurisdiction-check-request.yaml
+clause_selector: ../../../scripts/select_clauses.py
+
+defaults_profiles:
+  residential-standard: defaults/residential-standard.yaml
+
+jurisdictions:
+  es-md-madrid:
+    status: pending-legal-review
+    layer: jurisdictions/es-md-madrid/jurisdiction.yaml
+    sources: jurisdictions/es-md-madrid/sources.yaml
+    legal_source_snapshot: jurisdictions/es-md-madrid/legal-sources/snapshots/2026-07-23/snapshot-manifest.json
+
+documents:
+  reservation:
+    status: template-ready
+    template: templates/reservation.md.j2
+    data_requirement: operation.reservation
+  lease:
+    status: template-ready
+    template: templates/lease.md.j2
+    data_requirement: operation.lease
+  inventory:
+    status: template-ready
+    template: templates/inventory.md.j2
+    data_requirement: inventory
+  access-license:
+    status: template-ready
+    template: templates/access-license.md.j2
+    data_requirement: operation.lease.early_access
+  termination:
+    status: planned
+
+workflow:
+  states:
+    - draft
+    - reviewed
+    - approved
+    - signed
+    - superseded
+  terminal_states:
+    - signed
+    - superseded
+
+output_profiles:
+  css-pdf-a4:
+    path: ../../profiles/css-pdf/document.css
+    formats:
+      - html
+      - pdf
+
+governance:
+  data_classification: restricted
+  examples: synthetic-only
+  originals: immutable
+  legal_review_required: true
+  clause_catalog: draft-0.3.0
+  clause_approver: ../../../scripts/approve_clauses.py
+  governance_signer: ../../../scripts/sign_governance.py
+  approval_status_updater: ../../../scripts/update_approval_status.py
+  jurisdiction_check_resolver: ../../../scripts/resolve_jurisdiction_checks.py
+  document_releaser: ../../../scripts/release_document.py

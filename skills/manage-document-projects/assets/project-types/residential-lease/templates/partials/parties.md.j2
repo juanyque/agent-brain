@@ -1,0 +1,23 @@
+{% macro party_list(title, parties) -%}
+## {{ title }}
+
+{% for party in parties -%}
+{{ loop.index }}. **{{ party.full_name }}**,
+   {% if party.identity.kind == "organization-tax-id" %}NIF de organización{% elif party.identity.kind == "passport" %}pasaporte{% elif party.identity.kind == "other" %}documento de identidad{% else %}{{ party.identity.kind|upper }}{% endif %} número
+   **{{ party.identity.number }}**, con domicilio a efectos de notificaciones en
+   {{ party.notification_address }}{% if party.email is defined %} y correo
+   electrónico {{ party.email }}{% endif %}{% if party.phone is defined %},
+   teléfono {{ party.phone }}{% endif %}.
+{% endfor %}
+{%- endmacro %}
+
+{% macro signatures(landlords, tenants) -%}
+## Firmas
+
+| Parte arrendadora | Parte arrendataria |
+| --- | --- |
+{% set count = [landlords|length, tenants|length]|max -%}
+{% for index in range(count) -%}
+| {% if landlords[index] is defined %}{{ landlords[index].full_name }}<br><br>Firma: ____________________{% endif %} | {% if tenants[index] is defined %}{{ tenants[index].full_name }}<br><br>Firma: ____________________{% endif %} |
+{% endfor %}
+{%- endmacro %}

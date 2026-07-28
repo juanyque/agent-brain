@@ -1,0 +1,103 @@
+schema_version: "0.2.0"
+
+project:
+  id: synthetic-residential-lease
+  type: residential-lease
+  type_version: "0.2.0"
+  jurisdiction: es-md-madrid
+  effective_date: "2026-01-15"
+  data_revision: "1"
+  defaults_profile: residential-standard
+
+property:
+  id: synthetic-home
+  address:
+    full_text: FFFF FFFFFFFFFF 6, 6-E
+    postal_code: "28666"
+    municipality: Madrid
+    province: Madrid
+    country_code: ES
+  intended_use: habitual-residence
+
+parties:
+  landlords:
+    - id: synthetic-landlord
+      full_name: XXXX XXXXX XXXXX
+      identity:
+        kind: dni
+        number: 11111111-A
+      notification_address: CCCC CCCCCCCC 88, 8-C, 28888 Madrid
+  tenants:
+    - id: synthetic-tenant-one
+      full_name: YYYY YYYYY YYYYYY
+      identity:
+        kind: dni
+        number: 22222222-B
+      notification_address: DDDD DDDDDDDDDD 44, 4-D, 28444 Madrid
+    - id: synthetic-tenant-two
+      full_name: ZZZZ ZZZZZ ZZZZZZ
+      identity:
+        kind: dni
+        number: 33333333-C
+      notification_address: EEEE EEEEEEEE 55, 5-E, 28555 Madrid
+
+operation:
+  currency: EUR
+  reservation:
+    agreement_date: "2026-01-15"
+    payment_deadline: "2026-01-19"
+    contract_deadline: "2026-01-30"
+    amount: 5555
+    application: first-rent
+    insurance:
+      status: pending
+  lease:
+    signature_date: "2026-01-20"
+    start_date: "2026-02-13"
+    monthly_rent: 9999
+    early_access:
+      signature_date: "2026-01-20"
+      keys_delivered_on: "2026-01-20"
+      access_from: "2026-01-20"
+      access_until: "2026-02-12"
+      purpose: moving-and-fitout
+      rent_free: true
+      habitual_occupancy: false
+      tenant_responsible_for_damage_and_consumption: true
+  payment:
+    iban: ES12 3456 7890 1234 5678 9012
+
+inventory:
+  event_date: "2026-01-20"
+  rooms:
+    - id: kitchen
+      name: Cocina
+      items:
+        - Mobiliario alto y bajo de prueba
+        - Placa, horno y campana de prueba
+        - Frigorífico y lavadora de prueba
+    - id: bathroom
+      name: Baño
+      items:
+        - Lavabo, inodoro y ducha de prueba
+        - Mueble y espejo de prueba
+  keys:
+    - kind: portal
+      quantity: 2
+      delivered_on: "2026-01-20"
+    - kind: vivienda
+      quantity: 2
+      delivered_on: "2026-01-20"
+  meter_readings:
+    - utility: electricity
+      value: 777777.77
+      unit: kWh
+      read_on: "2026-01-20"
+    - utility: water
+      value: 888888.88
+      unit: m3
+      read_on: "2026-01-20"
+    - utility: gas
+      value: 999999.99
+      unit: m3
+      read_on: "2026-01-20"

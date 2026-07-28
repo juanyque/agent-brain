@@ -1,0 +1,25 @@
+request_version: "0.1.0"
+project_type: ../project-type.yaml
+data: minimal-project.yaml
+document: lease
+resolved_on: "2026-07-24"
+valid_until: "2026-07-31"
+checks:
+  - id: contract-effective-date
+    outcome_code: synthetic-qa-no-legal-conclusion
+    source_ids: []
+  - id: landlord-capacity
+    outcome_code: synthetic-qa-no-legal-conclusion
+    source_ids: []
+  - id: market-tension-status
+    outcome_code: synthetic-qa-no-legal-conclusion
+    source_ids:
+      - es-rental-reference-system
+  - id: rent-update-regime
+    outcome_code: synthetic-qa-no-legal-conclusion
+    source_ids:
+      - es-irav-ine
+  - id: security-deposit-filing
+    outcome_code: synthetic-qa-no-legal-conclusion
+    source_ids:
+      - es-md-deposit-service

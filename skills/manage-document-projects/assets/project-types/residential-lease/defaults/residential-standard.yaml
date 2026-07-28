@@ -1,0 +1,77 @@
+defaults_version: "0.1.0"
+profile: residential-standard
+
+data:
+  parties:
+    landlord_capacity: owner
+    tenant_liability: joint-and-several
+  operation:
+    payment:
+      method: bank-transfer
+    reservation:
+      payment_terms:
+        mode: bank-transfer
+        business_days: 2
+      refund_policy:
+        insurer_denial: refund
+        insurer_no_decision_by_contract_deadline: refund-unless-written-extension
+        landlord_withdrawal_or_material_change: refund
+        candidate_breach_or_withdrawal: forfeiture
+        payment_not_received_by_deadline: reservation-lapses
+        mutual_agreement: written-agreement
+    lease:
+      initial_duration_months: 12
+      payment_due_day: 5
+      landlord_context:
+        legal_form: natural-person
+        acts_as_business: false
+        residential_property_count: 1
+        residential_floor_area_sqm: 60
+      rent_update:
+        enabled: true
+        reference_index: cpi
+        positive_variations_only: true
+        mandatory_cap: irav-or-current-legal-limit
+      works_policy:
+        tenant_works: written-consent-required
+        drilling_bathroom_kitchen: prohibited
+      expenses:
+        community_fees: landlord
+        property_tax: landlord
+        waste_fee: landlord
+        management_fees: landlord
+        maintenance: landlord
+        home_insurance: landlord
+      supplies:
+        metered_supplies: tenant
+        contracts_holder: tenant
+        holder_change_deadline_days: 5
+        deregistration_at_end: prohibited
+      assignment:
+        assignment_policy: prohibited
+        subletting_policy: prohibited
+      preemption:
+        waiver: true
+      pets:
+        policy: prohibited
+      recovery_for_need:
+        enabled_when_legally_applicable: true
+      nonpayment_insurance:
+        required_before_signature: true
+      withdrawal:
+        minimum_stay_months: 12
+        notice_days: 30
+        compensation: one-month-per-remaining-year
+        early_departure_rent_due_through_month: 6
+      termination:
+        additional_obligation_refs: []
+
+rules:
+  deposit_months: 1
+  additional_guarantee_months: 1
+  reservation_application_priority:
+    - first-rent
+    - additional-guarantee
+    - security-deposit
+  natural_person_extension_years: 5
+  legal_person_extension_years: 7

@@ -1,0 +1,8 @@
+# source_id	title	official_url	source_format	content_container_id	expected_marker
+es-lau-1994	Ley 29/1994, de Arrendamientos Urbanos	https://www.boe.es/eli/es/l/1994/11/24/29/con	html	textoxslt	Ley 29/1994
+es-housing-law-2023	Ley 12/2023, por el derecho a la vivienda	https://www.boe.es/eli/es/l/2023/05/24/12/con	html	textoxslt	Ley 12/2023
+es-civil-code	Código Civil	https://www.boe.es/eli/es/rd/1889/07/24/(1)/con	html	textoxslt	Código Civil
+es-rdl-7-2019	Real Decreto-ley 7/2019, de medidas urgentes en materia de vivienda y alquiler	https://www.boe.es/eli/es/rdl/2019/03/01/7/con	html	textoxslt	Real Decreto-ley 7/2019
+es-consumer-housing-info-1989	Real Decreto 515/1989, de información en compraventa y arrendamiento de viviendas	https://www.boe.es/eli/es/rd/1989/04/21/515/con	html	textoxslt	Real Decreto 515/1989
+es-md-deposit-decree-181-1996	Decreto 181/1996, sobre depósito de fianzas de arrendamientos en la Comunidad de Madrid	https://www.comunidad.madrid/docs/assets/2018/07/12/dec_181_1996.pdf	pdf	-	Decreto 181/1996
+es-md-deposit-law-12-1997	Ley 12/1997, sobre inspección y potestad sancionadora en materia de depósito de fianzas	https://www.boe.es/eli/es-md/l/1997/06/04/12/con	html	textoxslt	Ley 12/1997

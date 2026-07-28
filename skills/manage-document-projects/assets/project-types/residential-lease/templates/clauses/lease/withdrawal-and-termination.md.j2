@@ -1,0 +1,41 @@
+<!-- clause: lease.withdrawal-and-termination@0.1.0 -->
+### Desistimiento y resolución
+
+La parte arrendataria asume una permanencia inicial de
+**{{ operation.lease.withdrawal.minimum_stay_months }} meses** y comunicará
+cualquier desistimiento con al menos
+**{{ operation.lease.withdrawal.notice_days }} días** de antelación.
+
+Si abandona la vivienda antes de completar el sexto mes, deberá abonar las
+rentas pendientes hasta ese momento. Además, tanto en ese caso como en un
+desistimiento posterior, se aplicará la compensación pactada por el periodo
+comprendido entre el sexto mes y la siguiente renovación anual.
+
+{% if operation.lease.withdrawal.compensation == "one-month-per-remaining-year" -%}
+En ese caso indemnizará con una mensualidad de la renta vigente por cada año
+que reste hasta la siguiente renovación anual, prorrateándose los periodos
+inferiores al año.
+{%- else -%}
+No se pacta indemnización contractual por desistimiento.
+{%- endif %}
+
+El incumplimiento de las obligaciones permitirá a la parte cumplidora exigir
+su cumplimiento o promover la resolución con arreglo a la normativa
+aplicable. Se mantienen las causas legales específicas de resolución por
+impago, falta de fianza, cesión o subarriendo inconsentidos, daños u obras no
+consentidas, actividades prohibidas y pérdida del destino habitual, así como
+las causas legalmente reconocidas a la parte arrendataria.
+
+No se permiten animales en la vivienda. La contratación y aprobación del
+seguro de impago es condición necesaria antes de la firma. La parte
+arrendadora podrá recuperar la vivienda por necesidad cuando concurran los
+requisitos legales aplicables.
+
+{% if operation.lease.termination.additional_obligation_refs %}
+Las obligaciones adicionales identificadas para revisión son:
+{% for obligation in operation.lease.termination.additional_obligation_refs %}
+- `{{ obligation }}`
+{% endfor %}
+Estas referencias no operarán como causas contractuales hasta que sus
+fragmentos versionados hayan sido incorporados y revisados.
+{% endif %}

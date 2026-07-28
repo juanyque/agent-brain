@@ -1,0 +1,17 @@
+<!-- clause: lease.rent-update@0.1.0 -->
+### Actualización de la renta
+
+Las partes pactan la actualización anual de la renta en la fecha en que se
+cumpla cada año de vigencia del contrato. El índice de referencia declarado es
+{% if operation.lease.rent_update.reference_index == "irav" -%}
+el **Índice de Referencia de Arrendamientos de Vivienda (IRAV)**
+{%- elif operation.lease.rent_update.reference_index == "cpi" -%}
+el **Índice de Precios de Consumo (IPC)**
+{%- else -%}
+el mecanismo que deberá identificarse expresamente antes de la firma
+{%- endif %}.
+
+Solo se aplicarán variaciones positivas. El incremento resultante nunca podrá
+superar el IRAV ni cualquier otro límite imperativo vigente en la fecha de
+actualización. La renta actualizada solo será exigible desde el mes siguiente
+a su notificación escrita, con indicación del porcentaje aplicado.

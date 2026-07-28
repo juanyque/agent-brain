@@ -1,0 +1,25 @@
+<!-- clause: lease.conservation-and-works@0.1.0 -->
+### Conservación, reparaciones y obras
+
+La parte arrendadora realizará las reparaciones necesarias para conservar la
+habitabilidad de la vivienda, salvo los deterioros imputables a la parte
+arrendataria. Esta comunicará cuanto antes la necesidad de reparación y
+facilitará su comprobación. Las pequeñas reparaciones derivadas del desgaste
+por el uso ordinario serán de cuenta de la parte arrendataria.
+
+{% if operation.lease.works_policy.tenant_works == "written-consent-required" -%}
+La parte arrendataria no realizará obras que modifiquen la vivienda o sus
+accesorios sin consentimiento previo y escrito de la parte arrendadora.
+{%- elif operation.lease.works_policy.tenant_works == "prohibited" -%}
+La parte arrendataria no realizará obras que modifiquen la vivienda o sus
+accesorios.
+{%- else -%}
+La parte arrendataria podrá realizar las obras autorizadas por este contrato,
+sin afectar a la estabilidad, seguridad ni elementos comunes del inmueble.
+{%- endif %}
+
+Las actuaciones de adaptación por discapacidad o edad y las obras urgentes se
+regirán por sus requisitos legales específicos.
+
+Queda prohibido taladrar paredes o revestimientos de la cocina y del baño sin
+autorización previa y escrita de la parte arrendadora.

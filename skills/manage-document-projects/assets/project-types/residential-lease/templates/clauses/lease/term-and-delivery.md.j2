@@ -1,0 +1,15 @@
+<!-- clause: lease.term-and-delivery@0.1.0 -->
+### Duración inicial y entrega
+
+El arrendamiento comenzará el **{{ operation.lease.start_date|es_date }}** y tendrá una
+duración inicial declarada de **{{ operation.lease.initial_duration_months }}
+meses**.
+
+Finalizado el plazo inicial, las prórrogas legales alcanzarán, cuando proceda,
+una duración total mínima de **{{ operation.lease.legal_extension_years }}
+años**. El primer periodo anual termina el
+**{{ operation.lease.first_annual_period_end|es_date }}** y su primera
+renovación comienza el **{{ operation.lease.first_renewal_date|es_date }}**.
+
+La entrega anticipada de llaves se regula exclusivamente mediante la
+autorización temporal relacionada y no adelanta el inicio del arrendamiento.

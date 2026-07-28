@@ -1,0 +1,4 @@
+request_version: "0.1.0"
+project_type: ../project-type.yaml
+data: minimal-project.yaml
+document: lease

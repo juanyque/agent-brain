@@ -1,0 +1,1000 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-brain:manage-document-projects:residential-lease:0.2.0:project-data",
+  "title": "Residential lease project data",
+  "description": "Core structured data shared by reservation, lease, and inventory documents.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project",
+    "property",
+    "parties",
+    "operation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.2.0"
+    },
+    "project": {
+      "$ref": "#/$defs/project"
+    },
+    "property": {
+      "$ref": "#/$defs/property"
+    },
+    "parties": {
+      "$ref": "#/$defs/parties"
+    },
+    "operation": {
+      "$ref": "#/$defs/operation"
+    },
+    "inventory": {
+      "$ref": "#/$defs/inventory"
+    }
+  },
+  "$defs": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "type_version",
+        "jurisdiction",
+        "effective_date",
+        "data_revision"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "type": {
+          "const": "residential-lease"
+        },
+        "type_version": {
+          "const": "0.2.0"
+        },
+        "jurisdiction": {
+          "type": "string",
+          "pattern": "^[a-z]{2}(?:-[a-z0-9]+)+$"
+        },
+        "effective_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "data_revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "defaults_profile": {
+          "const": "residential-standard"
+        }
+      }
+    },
+    "property": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "address",
+        "intended_use"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "address": {
+          "$ref": "#/$defs/address"
+        },
+        "intended_use": {
+          "const": "habitual-residence"
+        },
+        "cadastral_reference": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "address": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "full_text",
+        "postal_code",
+        "municipality",
+        "country_code"
+      ],
+      "properties": {
+        "full_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "postal_code": {
+          "type": "string",
+          "pattern": "^[0-9]{5}$"
+        },
+        "municipality": {
+          "type": "string",
+          "minLength": 1
+        },
+        "province": {
+          "type": "string",
+          "minLength": 1
+        },
+        "country_code": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        }
+      }
+    },
+    "parties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "landlords",
+        "tenants"
+      ],
+      "properties": {
+        "landlord_capacity": {
+          "enum": [
+            "owner",
+            "authorized-representative"
+          ]
+        },
+        "tenant_liability": {
+          "enum": [
+            "joint-and-several",
+            "several"
+          ]
+        },
+        "landlords": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/party"
+          }
+        },
+        "tenants": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/party"
+          }
+        }
+      }
+    },
+    "party": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "full_name",
+        "identity",
+        "notification_address"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "full_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "notification_address": {
+          "type": "string",
+          "minLength": 1
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 5
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "number"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "dni",
+            "nie",
+            "passport",
+            "organization-tax-id",
+            "other"
+          ]
+        },
+        "number": {
+          "type": "string",
+          "minLength": 3
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currency",
+        "lease"
+      ],
+      "properties": {
+        "currency": {
+          "const": "EUR"
+        },
+        "reservation": {
+          "$ref": "#/$defs/reservation"
+        },
+        "lease": {
+          "$ref": "#/$defs/lease"
+        },
+        "payment": {
+          "$ref": "#/$defs/payment"
+        }
+      }
+    },
+    "reservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agreement_date",
+        "payment_deadline",
+        "contract_deadline",
+        "amount",
+        "application"
+      ],
+      "properties": {
+        "agreement_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "payment_deadline": {
+          "type": "string",
+          "format": "date"
+        },
+        "contract_deadline": {
+          "type": "string",
+          "format": "date"
+        },
+        "amount": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        },
+        "application": {
+          "enum": [
+            "first-rent",
+            "security-deposit",
+            "other"
+          ]
+        },
+        "paid_on": {
+          "type": "string",
+          "format": "date"
+        },
+        "payment_terms": {
+          "$ref": "#/$defs/reservationPaymentTerms"
+        },
+        "application_priority": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "first-rent",
+              "additional-guarantee",
+              "security-deposit"
+            ]
+          }
+        },
+        "refund_policy": {
+          "$ref": "#/$defs/reservationRefundPolicy"
+        },
+        "insurance": {
+          "$ref": "#/$defs/insuranceApproval"
+        }
+      }
+    },
+    "lease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signature_date",
+        "start_date",
+        "monthly_rent"
+      ],
+      "properties": {
+        "signature_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "start_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "initial_duration_months": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "monthly_rent": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        },
+        "annual_rent": {
+          "$ref": "#/$defs/nonNegativeAmount",
+          "readOnly": true
+        },
+        "payment_due_day": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31
+        },
+        "deposit_amount": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        },
+        "additional_guarantee_amount": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        },
+        "landlord_context": {
+          "$ref": "#/$defs/landlordContext"
+        },
+        "rent_update": {
+          "$ref": "#/$defs/rentUpdate"
+        },
+        "works_policy": {
+          "$ref": "#/$defs/worksPolicy"
+        },
+        "expenses": {
+          "$ref": "#/$defs/expenses"
+        },
+        "supplies": {
+          "$ref": "#/$defs/supplies"
+        },
+        "assignment": {
+          "$ref": "#/$defs/assignment"
+        },
+        "preemption": {
+          "$ref": "#/$defs/preemption"
+        },
+        "withdrawal": {
+          "$ref": "#/$defs/withdrawal"
+        },
+        "termination": {
+          "$ref": "#/$defs/termination"
+        },
+        "legal_extension_years": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "first_annual_period_end": {
+          "type": "string",
+          "format": "date"
+        },
+        "first_renewal_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "first_full_rent_due_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "initial_payment": {
+          "$ref": "#/$defs/initialPayment"
+        },
+        "early_access": {
+          "$ref": "#/$defs/earlyAccess"
+        },
+        "pets": {
+          "$ref": "#/$defs/petsPolicy"
+        },
+        "recovery_for_need": {
+          "$ref": "#/$defs/recoveryForNeed"
+        },
+        "nonpayment_insurance": {
+          "$ref": "#/$defs/nonpaymentInsurance"
+        }
+      }
+    },
+    "landlordContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "legal_form",
+        "acts_as_business",
+        "residential_property_count",
+        "residential_floor_area_sqm"
+      ],
+      "properties": {
+        "legal_form": {
+          "enum": [
+            "natural-person",
+            "legal-person"
+          ]
+        },
+        "acts_as_business": {
+          "type": "boolean"
+        },
+        "residential_property_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "residential_floor_area_sqm": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        }
+      }
+    },
+    "rentUpdate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "enabled": {
+              "const": false
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "reference_index"
+          ],
+          "properties": {
+            "enabled": {
+              "const": true
+            },
+            "reference_index": {
+              "enum": [
+                "irav",
+                "cpi",
+                "other"
+              ]
+            },
+            "positive_variations_only": {
+              "type": "boolean"
+            },
+            "mandatory_cap": {
+              "enum": [
+                "irav-or-current-legal-limit"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "worksPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_works"
+      ],
+      "properties": {
+        "tenant_works": {
+          "enum": [
+            "written-consent-required",
+            "prohibited",
+            "allowed"
+          ]
+        },
+        "drilling_bathroom_kitchen": {
+          "enum": [
+            "prohibited",
+            "allowed"
+          ]
+        }
+      }
+    },
+    "expenses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "community_fees",
+        "property_tax",
+        "waste_fee",
+        "management_fees"
+      ],
+      "properties": {
+        "community_fees": {
+          "$ref": "#/$defs/payer"
+        },
+        "property_tax": {
+          "$ref": "#/$defs/payer"
+        },
+        "waste_fee": {
+          "$ref": "#/$defs/payer"
+        },
+        "management_fees": {
+          "$ref": "#/$defs/payer"
+        },
+        "maintenance": {
+          "$ref": "#/$defs/payer"
+        },
+        "home_insurance": {
+          "$ref": "#/$defs/payer"
+        }
+      }
+    },
+    "supplies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metered_supplies",
+        "contracts_holder"
+      ],
+      "properties": {
+        "metered_supplies": {
+          "$ref": "#/$defs/payer"
+        },
+        "contracts_holder": {
+          "enum": [
+            "landlord",
+            "tenant"
+          ]
+        },
+        "holder_change_deadline_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deregistration_at_end": {
+          "enum": [
+            "prohibited",
+            "allowed"
+          ]
+        }
+      }
+    },
+    "assignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignment_policy",
+        "subletting_policy"
+      ],
+      "properties": {
+        "assignment_policy": {
+          "enum": [
+            "written-consent-required",
+            "prohibited",
+            "allowed"
+          ]
+        },
+        "subletting_policy": {
+          "enum": [
+            "partial-with-written-consent",
+            "prohibited",
+            "allowed"
+          ]
+        }
+      }
+    },
+    "preemption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "waiver"
+      ],
+      "properties": {
+        "waiver": {
+          "type": "boolean"
+        }
+      }
+    },
+    "withdrawal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compensation"
+      ],
+      "properties": {
+        "compensation": {
+          "enum": [
+            "none",
+            "one-month-per-remaining-year"
+          ]
+        },
+        "minimum_stay_months": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notice_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "early_departure_rent_due_through_month": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "termination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "additional_obligation_refs"
+      ],
+      "properties": {
+        "additional_obligation_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/stableId"
+          }
+        }
+      }
+    },
+    "payment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "enum": [
+            "bank-transfer",
+            "direct-debit",
+            "other"
+          ]
+        },
+        "iban": {
+          "type": "string",
+          "minLength": 15,
+          "maxLength": 34
+        }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "event_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "rooms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/room"
+          }
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/keyDelivery"
+          }
+        },
+        "meter_readings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/meterReading"
+          }
+        }
+      }
+    },
+    "room": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "items"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "photos": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "keyDelivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "quantity"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notes": {
+          "type": "string"
+        },
+        "delivered_on": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "meterReading": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "utility",
+        "value"
+      ],
+      "properties": {
+        "utility": {
+          "enum": [
+            "electricity",
+            "water",
+            "gas"
+          ]
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "read_on": {
+          "type": "string",
+          "format": "date"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "reservationPaymentTerms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "bank-transfer",
+            "paid-in-act",
+            "pending"
+          ]
+        },
+        "business_days": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "reservationRefundPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "insurer_denial",
+        "insurer_no_decision_by_contract_deadline",
+        "landlord_withdrawal_or_material_change",
+        "candidate_breach_or_withdrawal",
+        "payment_not_received_by_deadline",
+        "mutual_agreement"
+      ],
+      "properties": {
+        "insurer_denial": {
+          "const": "refund"
+        },
+        "insurer_no_decision_by_contract_deadline": {
+          "const": "refund-unless-written-extension"
+        },
+        "landlord_withdrawal_or_material_change": {
+          "const": "refund"
+        },
+        "candidate_breach_or_withdrawal": {
+          "const": "forfeiture"
+        },
+        "payment_not_received_by_deadline": {
+          "const": "reservation-lapses"
+        },
+        "mutual_agreement": {
+          "const": "written-agreement"
+        }
+      }
+    },
+    "insuranceApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "approved",
+            "denied"
+          ]
+        },
+        "decided_on": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "pending"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "decided_on"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "decided_on"
+            ]
+          }
+        }
+      ]
+    },
+    "initialPayment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prorated_first_rent",
+        "reservation_applied",
+        "remaining_first_rent",
+        "total_due_at_signature"
+      ],
+      "properties": {
+        "prorated_first_rent": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        },
+        "reservation_applied": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        },
+        "remaining_first_rent": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        },
+        "total_due_at_signature": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        }
+      }
+    },
+    "earlyAccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signature_date",
+        "keys_delivered_on",
+        "access_from",
+        "access_until",
+        "purpose",
+        "rent_free",
+        "habitual_occupancy",
+        "tenant_responsible_for_damage_and_consumption"
+      ],
+      "properties": {
+        "signature_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "keys_delivered_on": {
+          "type": "string",
+          "format": "date"
+        },
+        "access_from": {
+          "type": "string",
+          "format": "date"
+        },
+        "access_until": {
+          "type": "string",
+          "format": "date"
+        },
+        "purpose": {
+          "enum": [
+            "moving-and-fitout"
+          ]
+        },
+        "rent_free": {
+          "const": true
+        },
+        "habitual_occupancy": {
+          "const": false
+        },
+        "tenant_responsible_for_damage_and_consumption": {
+          "const": true
+        }
+      }
+    },
+    "petsPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy"
+      ],
+      "properties": {
+        "policy": {
+          "enum": [
+            "prohibited",
+            "allowed"
+          ]
+        }
+      }
+    },
+    "recoveryForNeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled_when_legally_applicable"
+      ],
+      "properties": {
+        "enabled_when_legally_applicable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "nonpaymentInsurance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required_before_signature"
+      ],
+      "properties": {
+        "required_before_signature": {
+          "type": "boolean"
+        }
+      }
+    },
+    "stableId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "nonNegativeAmount": {
+      "type": "number",
+      "minimum": 0
+    },
+    "payer": {
+      "enum": [
+        "landlord",
+        "tenant"
+      ]
+    }
+  }
+}

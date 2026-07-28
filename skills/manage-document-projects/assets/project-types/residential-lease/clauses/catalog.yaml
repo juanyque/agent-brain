@@ -1,0 +1,187 @@
+catalog_version: "0.3.0"
+id: residential-lease-clauses
+project_type: residential-lease
+version: "0.3.0"
+status: draft
+legal_review: required
+default_jurisdiction: es-md-madrid
+
+clauses:
+  - id: lease.object-and-use
+    version: "0.1.0"
+    title: Objeto y destino
+    documents: [lease]
+    status: pending-legal-review
+    implementation: fragment-ready
+    fragment: ../templates/clauses/lease/object-and-use.md.j2
+    applicability:
+      mode: always
+    required_data:
+      - property.address
+      - property.intended_use
+    source_refs:
+      - source_id: es-lau-1994
+        provisions: [art. 2, art. 4, art. 6]
+
+  - id: lease.term-and-delivery
+    version: "0.1.0"
+    title: Duración inicial y entrega
+    documents: [lease]
+    status: pending-legal-review
+    implementation: fragment-ready
+    fragment: ../templates/clauses/lease/term-and-delivery.md.j2
+    applicability:
+      mode: always
+    required_data:
+      - operation.lease.start_date
+      - operation.lease.initial_duration_months
+    source_refs:
+      - source_id: es-lau-1994
+        provisions: [art. 9, art. 10]
+
+  - id: lease.rent-and-payment
+    version: "0.1.1"
+    title: Renta y pago
+    documents: [lease]
+    status: pending-legal-review
+    implementation: fragment-ready
+    fragment: ../templates/clauses/lease/rent-and-payment.md.j2
+    applicability:
+      mode: always
+    required_data:
+      - operation.currency
+      - operation.lease.monthly_rent
+      - operation.lease.payment_due_day
+      - operation.payment.method
+    source_refs:
+      - source_id: es-lau-1994
+        provisions: [art. 17]
+      - source_id: es-housing-law-2023
+        provisions: [disposición final primera]
+
+  - id: lease.deposit-and-guarantee
+    version: "0.1.0"
+    title: Fianza y garantía adicional
+    documents: [lease]
+    status: pending-legal-review
+    implementation: fragment-ready
+    fragment: ../templates/clauses/lease/deposit-and-guarantee.md.j2
+    applicability:
+      mode: always
+    required_data:
+      - operation.currency
+      - operation.lease.deposit_amount
+      - operation.lease.additional_guarantee_amount
+    source_refs:
+      - source_id: es-lau-1994
+        provisions: [art. 36, disposición adicional tercera]
+      - source_id: es-md-deposit-decree-181-1996
+        provisions: [art. 2, art. 4, art. 5]
+
+  - id: lease.rent-update
+    version: "0.1.0"
+    title: Actualización de la renta
+    documents: [lease]
+    status: pending-legal-review
+    implementation: fragment-ready
+    fragment: ../templates/clauses/lease/rent-update.md.j2
+    applicability:
+      mode: when
+      path: operation.lease.rent_update.enabled
+      equals: true
+    required_data:
+      - operation.lease.signature_date
+      - operation.lease.rent_update.reference_index
+    source_refs:
+      - source_id: es-lau-1994
+        provisions: [art. 18]
+      - source_id: es-irav-ine
+        provisions: [serie vigente en la fecha de actualización]
+
+  - id: lease.conservation-and-works
+    version: "0.1.0"
+    title: Conservación, reparaciones y obras
+    documents: [lease]
+    status: pending-legal-review
+    implementation: fragment-ready
+    fragment: ../templates/clauses/lease/conservation-and-works.md.j2
+    applicability:
+      mode: always
+    required_data:
+      - operation.lease.works_policy
+    source_refs:
+      - source_id: es-lau-1994
+        provisions: [art. 21, art. 22, art. 23, art. 24]
+
+  - id: lease.expenses-and-supplies
+    version: "0.1.0"
+    title: Gastos, tributos y suministros
+    documents: [lease]
+    status: pending-legal-review
+    implementation: fragment-ready
+    fragment: ../templates/clauses/lease/expenses-and-supplies.md.j2
+    applicability:
+      mode: always
+    required_data:
+      - operation.lease.expenses
+      - operation.lease.supplies
+      - operation.lease.landlord_context
+    source_refs:
+      - source_id: es-lau-1994
+        provisions: [art. 20]
+      - source_id: es-consumer-housing-info-1989
+        provisions: [art. 4, art. 7]
+      - source_id: es-housing-law-2023
+        provisions: [disposición final primera]
+
+  - id: lease.assignment-subletting-and-preemption
+    version: "0.1.0"
+    title: Cesión, subarriendo y adquisición preferente
+    documents: [lease]
+    status: pending-legal-review
+    implementation: fragment-ready
+    fragment: ../templates/clauses/lease/assignment-subletting-and-preemption.md.j2
+    applicability:
+      mode: always
+    required_data:
+      - operation.lease.assignment
+      - operation.lease.preemption
+    source_refs:
+      - source_id: es-lau-1994
+        provisions: [art. 8, art. 25]
+
+  - id: lease.withdrawal-and-termination
+    version: "0.1.0"
+    title: Desistimiento y resolución
+    documents: [lease]
+    status: pending-legal-review
+    implementation: fragment-ready
+    fragment: ../templates/clauses/lease/withdrawal-and-termination.md.j2
+    applicability:
+      mode: always
+    required_data:
+      - operation.lease.withdrawal
+      - operation.lease.termination
+      - operation.lease.landlord_context.legal_form
+    source_refs:
+      - source_id: es-lau-1994
+        provisions: [art. 11, art. 27]
+      - source_id: es-civil-code
+        provisions: [art. 1124, art. 1255]
+
+  - id: lease.notices-and-disputes
+    version: "0.1.0"
+    title: Notificaciones, legislación y controversias
+    documents: [lease]
+    status: pending-legal-review
+    implementation: blocked-legal-review
+    applicability:
+      mode: always
+    required_data:
+      - parties.landlords
+      - parties.tenants
+    source_refs:
+      - source_id: es-lau-1994
+        provisions: [art. 4]
+      - source_id: es-civil-code
+        provisions: [art. 1255]

@@ -1,0 +1,25 @@
+<!-- clause: lease.rent-and-payment@0.1.1 -->
+### Renta y pago
+
+La renta mensual declarada es de **{{ operation.lease.monthly_rent|es_money }}**
+y deberá satisfacerse antes del día
+**{{ operation.lease.payment_due_day }}** de cada mes.
+
+El medio de pago acordado es **{% if operation.payment.method == "bank-transfer"
+%}transferencia bancaria{% elif operation.payment.method == "direct-debit"
+%}domiciliación bancaria{% else %}otro medio pendiente de precisar{% endif
+%}**{% if operation.payment.iban is defined %}, mediante el IBAN
+**{{ operation.payment.iban|es_iban }}**{% endif %}.
+
+Por el periodo comprendido entre el
+**{{ operation.lease.start_date|es_date }}** y el último día de ese mes se
+devengan **{{ operation.lease.initial_payment.prorated_first_rent|es_money }}**.
+Aplicada la reserva de
+**{{ operation.lease.initial_payment.reservation_applied|es_money }}**, quedan
+**{{ operation.lease.initial_payment.remaining_first_rent|es_money }}** de
+primera renta. Junto con la fianza y la garantía adicional, el total exigible
+en la firma es de
+**{{ operation.lease.initial_payment.total_due_at_signature|es_money }}**.
+
+La primera mensualidad natural completa deberá abonarse como máximo el
+**{{ operation.lease.first_full_rent_due_date|es_date }}**.

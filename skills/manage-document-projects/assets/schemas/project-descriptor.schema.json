@@ -1,0 +1,488 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-brain.local/manage-document-projects/project-descriptor-0.2.0.schema.json",
+  "title": "Document project descriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "descriptor_version",
+    "project",
+    "package",
+    "governance",
+    "references",
+    "data_store",
+    "activation_gate"
+  ],
+  "properties": {
+    "descriptor_version": {
+      "const": "0.2.0"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "property_ref"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "status": {
+          "enum": [
+            "planning",
+            "active",
+            "closed"
+          ]
+        },
+        "property_ref": {
+          "$ref": "#/$defs/opaqueId"
+        }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "jurisdiction",
+        "effective_date_policy"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        },
+        "jurisdiction": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "effective_date_policy": {
+          "const": "resolve-at-operation"
+        }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_classification",
+        "personal_data_location",
+        "signed_documents",
+        "private_keys"
+      ],
+      "properties": {
+        "data_classification": {
+          "const": "restricted"
+        },
+        "personal_data_location": {
+          "enum": [
+            "secure-store-only",
+            "private-brain-plaintext"
+          ]
+        },
+        "signed_documents": {
+          "const": "immutable-revisions"
+        },
+        "private_keys": {
+          "const": "external-to-project"
+        }
+      }
+    },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "brain_ref"
+      ],
+      "properties": {
+        "brain_ref": {
+          "type": "string",
+          "pattern": "^brain://[a-z0-9]+(?:[./-][a-z0-9]+)*$"
+        },
+        "data_ref": {
+          "type": "string",
+          "pattern": "^brain://[a-z0-9]+(?:[./-][a-z0-9]+)*$"
+        }
+      }
+    },
+    "data_store": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/unselectedStore"
+        },
+        {
+          "$ref": "#/$defs/plaintextPrototypeStore"
+        },
+        {
+          "$ref": "#/$defs/selectedStore"
+        },
+        {
+          "$ref": "#/$defs/configuredStore"
+        }
+      ]
+    },
+    "activation_gate": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/blockedGate"
+        },
+        {
+          "$ref": "#/$defs/prototypeGate"
+        },
+        {
+          "$ref": "#/$defs/readyGate"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "storeId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "unselectedStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "store_id"
+      ],
+      "properties": {
+        "status": {
+          "const": "unselected"
+        },
+        "store_id": {
+          "$ref": "#/$defs/storeId"
+        }
+      }
+    },
+    "selectedStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "store_id",
+        "backend"
+      ],
+      "properties": {
+        "status": {
+          "const": "selected"
+        },
+        "store_id": {
+          "$ref": "#/$defs/storeId"
+        },
+        "backend": {
+          "enum": [
+            "macos-encrypted-sparsebundle",
+            "cryptomator",
+            "managed-object-storage"
+          ]
+        }
+      }
+    },
+    "plaintextPrototypeStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "store_id",
+        "backend",
+        "root_ref",
+        "version_control",
+        "future_hardening"
+      ],
+      "properties": {
+        "status": {
+          "const": "prototype"
+        },
+        "store_id": {
+          "$ref": "#/$defs/storeId"
+        },
+        "backend": {
+          "const": "private-brain-plaintext"
+        },
+        "root_ref": {
+          "type": "string",
+          "pattern": "^brain://[a-z0-9]+(?:[./-][a-z0-9]+)*$"
+        },
+        "version_control": {
+          "const": "git"
+        },
+        "future_hardening": {
+          "enum": [
+            "password-protected-archive",
+            "file-encryption",
+            "undecided"
+          ]
+        }
+      }
+    },
+    "configuredStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "store_id",
+        "backend",
+        "root_ref",
+        "encryption",
+        "access_policy_ref",
+        "backup",
+        "retention_matrix_ref"
+      ],
+      "properties": {
+        "status": {
+          "const": "configured"
+        },
+        "store_id": {
+          "$ref": "#/$defs/storeId"
+        },
+        "backend": {
+          "enum": [
+            "macos-encrypted-sparsebundle",
+            "cryptomator",
+            "managed-object-storage"
+          ]
+        },
+        "root_ref": {
+          "type": "string",
+          "pattern": "^secure-store://[a-z0-9]+(?:[./-][a-z0-9]+)*$"
+        },
+        "encryption": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "at_rest",
+            "keys_separated"
+          ],
+          "properties": {
+            "at_rest": {
+              "const": true
+            },
+            "keys_separated": {
+              "const": true
+            }
+          }
+        },
+        "access_policy_ref": {
+          "type": "string",
+          "pattern": "^secure-ref://access-policies/[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "backup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "encrypted",
+            "recovery_tested_on"
+          ],
+          "properties": {
+            "encrypted": {
+              "const": true
+            },
+            "recovery_tested_on": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        },
+        "retention_matrix_ref": {
+          "type": "string",
+          "pattern": "^secure-ref://retention/[a-z0-9]+(?:-[a-z0-9]+)*$"
+        }
+      }
+    },
+    "gateChecks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_store_location",
+        "access_policy",
+        "backup",
+        "recovery_test",
+        "retention_matrix"
+      ],
+      "properties": {
+        "data_store_location": {
+          "$ref": "#/$defs/checkStatus"
+        },
+        "access_policy": {
+          "$ref": "#/$defs/checkStatus"
+        },
+        "backup": {
+          "$ref": "#/$defs/checkStatus"
+        },
+        "recovery_test": {
+          "$ref": "#/$defs/checkStatus"
+        },
+        "retention_matrix": {
+          "$ref": "#/$defs/checkStatus"
+        }
+      }
+    },
+    "checkStatus": {
+      "enum": [
+        "pending",
+        "passed"
+      ]
+    },
+    "blockedGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "not": {
+        "properties": {
+          "checks": {
+            "properties": {
+              "data_store_location": {
+                "const": "passed"
+              },
+              "access_policy": {
+                "const": "passed"
+              },
+              "backup": {
+                "const": "passed"
+              },
+              "recovery_test": {
+                "const": "passed"
+              },
+              "retention_matrix": {
+                "const": "passed"
+              }
+            },
+            "required": [
+              "data_store_location",
+              "access_policy",
+              "backup",
+              "recovery_test",
+              "retention_matrix"
+            ]
+          }
+        },
+        "required": [
+          "checks"
+        ]
+      },
+      "required": [
+        "status",
+        "real_data_allowed",
+        "checks"
+      ],
+      "properties": {
+        "status": {
+          "const": "blocked"
+        },
+        "real_data_allowed": {
+          "const": false
+        },
+        "checks": {
+          "$ref": "#/$defs/gateChecks"
+        }
+      }
+    },
+    "prototypeGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "real_data_allowed",
+        "risk_acceptance",
+        "checks"
+      ],
+      "properties": {
+        "status": {
+          "const": "prototype"
+        },
+        "real_data_allowed": {
+          "const": true
+        },
+        "risk_acceptance": {
+          "const": "plaintext-personal-private-repository"
+        },
+        "checks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "data_store_location",
+            "access_policy",
+            "backup",
+            "recovery_test",
+            "retention_matrix"
+          ],
+          "properties": {
+            "data_store_location": {
+              "const": "passed"
+            },
+            "access_policy": {
+              "const": "passed"
+            },
+            "backup": {
+              "$ref": "#/$defs/checkStatus"
+            },
+            "recovery_test": {
+              "$ref": "#/$defs/checkStatus"
+            },
+            "retention_matrix": {
+              "$ref": "#/$defs/checkStatus"
+            }
+          }
+        }
+      }
+    },
+    "readyGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "real_data_allowed",
+        "checks"
+      ],
+      "properties": {
+        "status": {
+          "const": "ready"
+        },
+        "real_data_allowed": {
+          "const": true
+        },
+        "checks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "data_store_location",
+            "access_policy",
+            "backup",
+            "recovery_test",
+            "retention_matrix"
+          ],
+          "properties": {
+            "data_store_location": {
+              "const": "passed"
+            },
+            "access_policy": {
+              "const": "passed"
+            },
+            "backup": {
+              "const": "passed"
+            },
+            "recovery_test": {
+              "const": "passed"
+            },
+            "retention_matrix": {
+              "const": "passed"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,148 @@
+---
+title: "Contrato de reserva de vivienda"
+document_type: reservation
+project_type: residential-lease
+template_version: "0.2.0"
+data_revision: "{{ project.data_revision }}"
+lang: es
+---
+
+> **BORRADOR PENDIENTE DE REVISIÓN JURÍDICA. NO FIRMAR.**
+
+{% import "partials/parties.md.j2" as party_macros -%}
+<p align="right">En {{ property.address.municipality }}, a
+{{ operation.reservation.agreement_date|es_date }}</p>
+
+{{ party_macros.party_list("Parte arrendadora", parties.landlords) }}
+
+{{ party_macros.party_list("Parte arrendataria", parties.tenants) }}
+
+La parte arrendadora manifiesta que actúa
+{% if parties.landlord_capacity == "owner" -%}
+como propietaria de la vivienda
+{%- else -%}
+con autorización suficiente para comprometer su arrendamiento
+{%- endif %}. La parte arrendataria manifiesta que interviene en su propio
+nombre y derecho{% if parties.tenant_liability == "joint-and-several" %} y,
+cuando está integrada por varias personas, sus miembros actúan como
+**arrendatarios solidarios**{% endif %}.
+
+Ambas partes se reconocen recíprocamente **capacidad legal suficiente** para
+suscribir este documento de reserva y acuerdan las siguientes condiciones.
+
+## 1. Objeto de la reserva
+
+La reserva se refiere a la vivienda situada en **{{ property.address.full_text }}**,
+{{ property.address.postal_code }} {{ property.address.municipality }}
+({{ property.address.province }}). La parte arrendadora se compromete a no
+ofrecerla a terceros mientras esta reserva permanezca vigente.
+
+## 2. Importe y forma de pago
+
+La reserva asciende a **{{ operation.reservation.amount|es_money }}**. La opción
+marcada a continuación es la acordada por las partes:
+
+- {% if operation.reservation.payment_terms.mode == "paid-in-act" %}[x]{% else %}[ ]{% endif %} **Entrega en metálico en este acto.** La parte arrendadora
+  declara recibir el importe y este documento sirve como recibo.
+- {% if operation.reservation.payment_terms.mode == "bank-transfer" %}[x]{% else %}[ ]{% endif %} **Transferencia bancaria.** La parte arrendataria la realizará en los **{{ operation.reservation.payment_terms.business_days }} días laborables** siguientes a la firma, con fecha límite
+  **{{ operation.reservation.payment_deadline|es_date }}**, al IBAN
+  **{{ operation.payment.iban|es_iban }}**.
+
+{% if operation.reservation.payment_terms.mode == "pending" -%}
+> **PENDIENTE:** antes de firmar debe marcarse exactamente una forma de pago.
+{%- endif %}
+
+Si se ha elegido transferencia y el importe no se recibe dentro del plazo,
+la reserva quedará sin efecto y la vivienda dejará de estar retenida. Al no
+haberse entregado cantidad alguna, no existirá importe que pueda perderse.
+
+## 3. Condiciones esenciales del futuro arrendamiento
+
+Las partes prevén formalizar el contrato como máximo el
+**{{ operation.reservation.contract_deadline|es_date }}**. Su contenido
+respetará, como mínimo, estas condiciones ya conocidas:
+
+1. **Destino.** La vivienda tendrá **uso exclusivo como vivienda habitual** de
+   las personas firmantes, que respetarán las normas de convivencia y los
+   estatutos de la comunidad.
+2. **Inicio y duración.** El arrendamiento comenzará el
+   **{{ operation.lease.start_date|es_date }}**, tendrá una duración inicial de
+   **{{ operation.lease.initial_duration_months }} meses** y quedará sujeto a
+   las prórrogas legales hasta alcanzar, cuando proceda, un mínimo total de
+   **cinco años**.
+3. **Renta.** La parte arrendataria abonará a la parte arrendadora, en concepto
+   de renta, la cantidad de **{{ operation.lease.annual_rent|es_money }}
+   anuales**, pagadera por mensualidades anticipadas de
+   **{{ operation.lease.monthly_rent|es_money }}** cada una, dentro de los
+   **primeros cinco días** de cada mes, mediante transferencia al IBAN indicado
+   en este documento.
+4. **Actualización.** La renta podrá actualizarse anualmente
+   {% if operation.lease.rent_update.reference_index == "cpi" and operation.lease.rent_update.positive_variations_only %}conforme a las **variaciones positivas del IPC**{% elif operation.lease.rent_update.reference_index == "cpi" %}conforme a las variaciones del IPC{% elif operation.lease.rent_update.reference_index == "irav" %}conforme al IRAV{% else %}conforme al índice expresamente pactado en el contrato{% endif %}
+   y dentro del límite legal aplicable en cada momento.
+5. **Fianza y garantía.** En la firma se entregarán una fianza de
+   **{{ operation.lease.deposit_amount|es_money }}** y una garantía adicional de
+   **{{ operation.lease.additional_guarantee_amount|es_money }}**.
+6. **Gastos y suministros.** La parte arrendadora asumirá los gastos de
+   comunidad, el impuesto sobre bienes inmuebles, la tasa de residuos y los
+   gastos de gestión y formalización. La parte arrendataria asumirá los
+   suministros individualizados y cambiará su titularidad en un máximo de
+   **{{ operation.lease.supplies.holder_change_deadline_days }} días** desde la
+   firma.
+7. **Permanencia y desistimiento.** La permanencia mínima prevista será de
+   {% if operation.lease.withdrawal.minimum_stay_months == 12 %}**un año**{% else %}**{{ operation.lease.withdrawal.minimum_stay_months }} meses**{% endif %}. Cualquier
+   desistimiento deberá comunicarse con
+   **{{ operation.lease.withdrawal.notice_days }} días** de antelación y tendrá
+   las consecuencias económicas que se detallen en el contrato dentro de los
+   límites legales.
+8. **Cesión, subarriendo y animales.** No se permitirá la cesión ni el
+   subarriendo de la vivienda{% if operation.lease.pets.policy == "prohibited"
+   %}, ni la tenencia de animales{% endif %}, salvo autorización previa y
+   escrita de la parte arrendadora cuando legalmente proceda.
+9. **Inventario y llaves.** El estado de la vivienda, el inventario, las
+   lecturas de contadores y las llaves se documentarán en la entrega. Cualquier
+   acceso anterior al inicio del arrendamiento exigirá una autorización
+   independiente y no adelantará por sí solo la fecha de inicio.
+
+## 4. Seguro de impago
+
+La formalización del arrendamiento queda condicionada a que la entidad
+aseguradora apruebe el estudio de riesgo de la parte arrendataria.
+{% if operation.reservation.insurance.status == "pending" -%}
+A la firma de esta reserva, el estudio **se encuentra pendiente**. No se
+atribuye a la aseguradora una fecha de respuesta que las partes no controlan.
+{%- elif operation.reservation.insurance.status == "approved" -%}
+La aprobación consta con fecha
+**{{ operation.reservation.insurance.decided_on|es_date }}**.
+{%- else -%}
+La operación consta como no aprobada por la aseguradora desde el
+**{{ operation.reservation.insurance.decided_on|es_date }}**.
+{%- endif %}
+
+## 5. Aplicación de la reserva
+
+Si se firma el arrendamiento, la reserva se descontará sucesivamente de la
+primera renta, de la garantía adicional y de la fianza, hasta agotar su
+importe.
+
+## 6. Resultado si no se firma el arrendamiento
+
+- Si la parte arrendataria desiste, se niega a firmar en las condiciones aquí
+  recogidas o incumple una obligación necesaria para formalizar el contrato,
+  **perderá el importe de la reserva** ya entregado.
+- Si la aseguradora rechaza la operación, la parte arrendadora
+  **devolverá íntegramente** la reserva.
+- Si al llegar la fecha límite no existe respuesta de la aseguradora, la
+  reserva se devolverá, salvo que ambas partes acuerden por escrito ampliar
+  el plazo.
+- Si la parte arrendadora desiste, no puede entregar la vivienda o pretende
+  modificar una condición esencial recogida en este documento, devolverá
+  íntegramente la reserva.
+- Si las partes resuelven la reserva de mutuo acuerdo, dejarán por escrito el
+  destino del importe entregado.
+
+## 7. Lectura, conformidad y firma
+
+Las partes declaran haber leído y comprendido el documento, que firman por
+duplicado y a un solo efecto en el lugar y fecha indicados.
+
+{{ party_macros.signatures(parties.landlords, parties.tenants) }}

@@ -1,0 +1,29 @@
+descriptor_version: "0.2.0"
+project:
+  id: example-residential-lease
+  status: planning
+  property_ref: property-example-001
+package:
+  id: residential-lease
+  version: "0.2.0"
+  jurisdiction: es-md-madrid
+  effective_date_policy: resolve-at-operation
+governance:
+  data_classification: restricted
+  personal_data_location: secure-store-only
+  signed_documents: immutable-revisions
+  private_keys: external-to-project
+references:
+  brain_ref: brain://wip/example-residential-lease
+data_store:
+  status: unselected
+  store_id: example-residential-lease-secure
+activation_gate:
+  status: blocked
+  real_data_allowed: false
+  checks:
+    data_store_location: pending
+    access_policy: pending
+    backup: pending
+    recovery_test: pending
+    retention_matrix: pending

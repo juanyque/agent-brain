@@ -1,0 +1,44 @@
+---
+title: "Autorización temporal de acceso previo"
+document_type: access-license
+project_type: residential-lease
+template_version: "0.1.0"
+data_revision: "{{ project.data_revision }}"
+lang: es
+---
+
+> **BORRADOR PENDIENTE DE REVISIÓN JURÍDICA. NO FIRMAR.**
+>
+> La entrega anticipada de llaves puede afectar a la fecha de puesta a
+> disposición y exige revisión profesional expresa antes de su uso.
+
+{% import "partials/parties.md.j2" as party_macros -%}
+Fecha de firma: **{{ operation.lease.early_access.signature_date|es_date }}**  
+Vivienda: **{{ property.address.full_text }}**, {{ property.address.postal_code }}
+{{ property.address.municipality }}.
+
+{{ party_macros.party_list("Parte arrendadora", parties.landlords) }}
+
+{{ party_macros.party_list("Parte arrendataria", parties.tenants) }}
+
+## Alcance de la autorización
+
+La parte arrendadora autoriza el acceso limitado a la vivienda desde el
+**{{ operation.lease.early_access.access_from|es_date }}** hasta el
+**{{ operation.lease.early_access.access_until|es_date }}**, exclusivamente
+para mudanza y acondicionamiento previo.
+
+Las llaves se entregan el
+**{{ operation.lease.early_access.keys_delivered_on|es_date }}**. Este acceso:
+
+- no devenga renta;
+- no permite ocupar la vivienda como residencia habitual;
+- no adelanta el inicio del arrendamiento, fijado en
+  **{{ operation.lease.start_date|es_date }}**;
+- hace responsable a la parte arrendataria de los daños y consumos derivados
+  del acceso anticipado.
+
+La renta, la duración contractual y los periodos anuales comienzan únicamente
+en la fecha de inicio del arrendamiento.
+
+{{ party_macros.signatures(parties.landlords, parties.tenants) }}

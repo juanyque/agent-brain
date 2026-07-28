@@ -1,0 +1,54 @@
+---
+title: "Inventario de vivienda"
+document_type: inventory
+project_type: residential-lease
+template_version: "0.2.0"
+data_revision: "{{ project.data_revision }}"
+lang: es
+---
+
+> **BORRADOR PENDIENTE DE REVISIÓN. NO FIRMAR.**
+
+{% import "partials/parties.md.j2" as party_macros -%}
+Proyecto: `{{ project.id }}`  
+Vivienda: **{{ property.address.full_text }}**  
+Fecha del inventario y entrega de llaves: **{{ inventory.event_date|es_date }}**
+
+## Estancias y elementos
+
+{% for room in inventory.rooms -%}
+### {{ room.name }}
+
+{% for item in room["items"] -%}
+- {{ item }}
+{% endfor %}
+{% if room.photos is defined -%}
+
+Fotografías asociadas:
+
+{% for photo in room.photos -%}
+- `{{ photo }}`
+{% endfor %}
+{% endif %}
+
+{% endfor -%}
+## Llaves entregadas
+
+| Tipo | Cantidad | Fecha |
+| --- | ---: | --- |
+{% for key in inventory["keys"] -%}
+| {{ key.kind }} | {{ key.quantity }} | {{ key.delivered_on|es_date }} |
+{% endfor %}
+
+## Lecturas de contadores
+
+| Suministro | Lectura | Unidad | Fecha | Observaciones |
+| --- | ---: | --- | --- | --- |
+{% for reading in inventory.meter_readings -%}
+| {% if reading.utility == "electricity" %}electricidad{% elif reading.utility == "water" %}agua{% else %}gas{% endif %} | {{ reading.value|es_number }} | {{ reading.unit }} | {{ reading.read_on|es_date }} | {% if reading.notes is defined %}{{ reading.notes }}{% endif %} |
+{% endfor %}
+
+Las partes deberán comprobar este inventario y registrar por separado cualquier
+discrepancia, estado de conservación o evidencia fotográfica antes de aprobarlo.
+
+{{ party_macros.signatures(parties.landlords, parties.tenants) }}
