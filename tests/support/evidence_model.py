@@ -53,60 +53,6 @@ def validate_operating_model(value: dict[str, JsonValue]) -> None:
         raise ContractError("temporary and final payload mappings overlap")
 
 
-def validate_ledger(value: dict[str, JsonValue]) -> None:
-    documents = _array(value.get("documents"), "documents")
-    paths: list[str] = []
-    ids: set[str] = set()
-    for document in documents:
-        if not isinstance(document, dict) or not isinstance(document.get("path"), str):
-            raise ContractError("invalid ledger document")
-        path = document["path"]
-        paths.append(path)
-        ranges = _array(document.get("ranges"), "ranges")
-        expected_start = 1
-        for row in ranges:
-            if not isinstance(row, dict):
-                raise ContractError("invalid ledger range")
-            if row.get("start_line") != expected_start:
-                raise ContractError("ledger range gap or overlap")
-            end = row.get("end_line")
-            identifier = row.get("id")
-            sha256 = row.get("sha256")
-            if (
-                not isinstance(end, int)
-                or end < expected_start
-                or not isinstance(identifier, str)
-                or identifier in ids
-                or not isinstance(sha256, str)
-                or len(sha256) != 64
-            ):
-                raise ContractError("invalid ledger range contract")
-            ids.add(identifier)
-            expected_start = end + 1
-    if paths != sorted(set(paths)):
-        raise ContractError("ledger documents must be unique and sorted")
-    claims = _array(value.get("relocation_claims"), "relocation_claims")
-    for claim in claims:
-        if not isinstance(claim, dict) or claim.get("approval_required") is not True:
-            raise ContractError("relocation claim weakens copy-before-trim")
-        status = claim.get("status")
-        if status == "destination-unverified":
-            continue
-        if status != "copy-then-trim":
-            raise ContractError("relocation claim weakens copy-before-trim")
-        destination = claim.get("copied_destination")
-        sources = claim.get("source_evidence")
-        if not isinstance(destination, dict) or not isinstance(sources, list):
-            raise ContractError("copy-then-trim claim lacks hash evidence")
-        if not isinstance(destination.get("heading"), str) or not isinstance(
-            destination.get("sha256"), str
-        ):
-            raise ContractError("copy-then-trim destination evidence is incomplete")
-        for source in sources:
-            if not isinstance(source, dict) or not isinstance(source.get("sha256"), str):
-                raise ContractError("copy-then-trim source evidence is incomplete")
-
-
 def validate_qa(value: dict[str, JsonValue]) -> None:
     todos = _array(value.get("todos"), "todos")
     if [item.get("todo") for item in todos if isinstance(item, dict)] != list(range(1, 20)):
@@ -133,7 +79,5 @@ def validate_schema(value: dict[str, JsonValue]) -> None:
     schema = value.get("schema_version")
     if schema == "agent-brain-operating-model/v1":
         validate_operating_model(value)
-    elif schema == "agent-brain-operating-model-ledger/v1":
-        validate_ledger(value)
     elif schema == "agent-brain-qa-commands/v1":
         validate_qa(value)

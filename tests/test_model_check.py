@@ -631,10 +631,10 @@ class OwnershipContractTests(route_contract_cases.RouteContractCases, unittest.T
             "test_missing_route_target_is_rejected_with_contract_code",
         )
 
-    def test_git_authority_is_explicit(self) -> None:
+    def test_git_authority_is_bounded(self) -> None:
         run_case_method(
             ownership_cases.OwnershipContractCases,
-            "test_common_git_authority_requires_explicit_git_authorization",
+            "test_common_git_authority_declares_bounded_internal_move_authorization",
         )
 
     def test_git_authority_parser_regression_is_discovered(self) -> None:
@@ -905,7 +905,7 @@ class SessionOwnershipTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(parsed_json(result)["findings"][0]["code"], "jobs-flow-checklist")
 
-    def test_git_command_bearing_model_docs_require_user_authorization(self) -> None:
+    def test_git_command_bearing_model_docs_have_bounded_authorization(self) -> None:
         result = run_cli(
             "--strict",
             "--only",
@@ -948,6 +948,37 @@ class SessionOwnershipTests(unittest.TestCase):
         self.assertEqual([finding["code"] for finding in findings], ["git-authority-explicit"])
         self.assertEqual(findings[0]["path"], "model/RULES-SESSION-LIFECYCLE.common.md")
         self.assertIn("line:", findings[0]["target"])
+
+    def test_standing_move_authorization_does_not_authorize_git_add(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            shutil.copytree(ROOT / "model", root / "model", ignore=shutil.ignore_patterns("__pycache__"))
+            shutil.copytree(ROOT / "skills", root / "skills", ignore=shutil.ignore_patterns("__pycache__"))
+            lifecycle = root / "model" / "RULES-SESSION-LIFECYCLE.common.md"
+            lifecycle.write_text(
+                lifecycle.read_text(encoding="utf-8")
+                + "\n## Test-only Git operation fixture\n\n"
+                + "Run `git add WIP/example` under the bounded standing authorization "
+                + "in `AGENTS.common.md`.\n",
+                encoding="utf-8",
+            )
+
+            result = run_cli(
+                "--root",
+                str(root),
+                "--model",
+                str(root / "model" / "OPERATING-MODEL.json"),
+                "--strict",
+                "--only",
+                "git-authority-explicit",
+                "--format",
+                "json",
+            )
+            findings = parsed_json(result)["findings"]
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual([finding["code"] for finding in findings], ["git-authority-explicit"])
+        self.assertEqual(findings[0]["path"], "model/RULES-SESSION-LIFECYCLE.common.md")
 
 
 class EvidenceOwnershipTests(unittest.TestCase):

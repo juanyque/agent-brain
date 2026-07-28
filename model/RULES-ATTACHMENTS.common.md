@@ -33,6 +33,6 @@ This file is the canonical operational policy for attachment ownership and reloc
 
 ## Tooling
 
-- Use `attachments_audit.py` to audit `ATTACHMENTS/` folders under a chosen scope and, only with explicit user authorization for the Git operation, relocate safe cases with `git mv`.
+- Use `attachments_audit.py` to audit `ATTACHMENTS/` folders under a chosen scope and, after the required apply-mode confirmation, relocate safe cases with `git mv` under the bounded standing authorization in `AGENTS.common.md`.
 - Use `canvas_path_repair.py` to audit `.canvas` file-node paths and optionally repair only uniquely resolvable broken paths.
 - Run the dry-run command first, inspect machine-readable or console output, then ask for explicit approval before any `--apply` invocation.

@@ -83,4 +83,4 @@ This review is a checklist step in the Daily and Session-consolidation jobs (`JO
 
 - Recurring yearly maintenance moves closed-year daily notes into `JOURNAL/<year>/` while keeping the current year directly under `JOURNAL/`.
 - Recurring yearly maintenance reviews whether non-daily notes still remain in `JOURNAL/` and classifies them under the appropriate information-architecture owner instead of leaving them mixed with daily notes.
-- These reviews do not silently move or delete content. Any Git operation or destructive action still requires explicit user authorization under the shared Git authority and brain-maintenance rules.
+- These reviews do not silently choose what to move or delete. Once a move is justified by the yearly-maintenance rule, its brain-internal `git mv` uses the bounded standing authorization in `AGENTS.common.md`; permanent deletion and all other Git operations still require explicit user authorization.

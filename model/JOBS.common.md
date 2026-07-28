@@ -67,7 +67,8 @@ Each job section follows this shape:
 | job-shape | JOBS.common.md | purpose-trigger-schedule-links-only |
 | procedure-source | RULES-SESSION-LIFECYCLE.common.md | linked-not-duplicated |
 | daily-semantics-source | RULES-DAILY-NOTES.common.md | linked-not-duplicated |
-| git-operations | user | explicit-authorization-required |
+| brain-internal-moves | user | standing-preauthorization |
+| other-git-operations | user | explicit-authorization-required |
 
 ## Daily (Day change)
 

@@ -136,7 +136,7 @@ If the derived title would collide with another folder under the same `<repo>`, 
 
 ## Lifecycle: WIP → MEMORY
 
-When the ticket reaches a terminal state (PR merged / ticket closed / cancelled), move the folder via `git mv` only with explicit user authorization for the Git operation:
+When the ticket reaches a terminal state (PR merged / ticket closed / cancelled), move the folder via `git mv` under the bounded standing authorization in `AGENTS.common.md`:
 
 ```
 WIP/<project-area>/<repo>/<TICKET-ID> - <Short title>/

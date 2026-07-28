@@ -8,8 +8,6 @@ Do not treat this repo as a brain. There are no daily notes, no WIP, no JOURNAL.
 
 This root `AGENTS.md` is maintainer-only repository guidance. It is not loaded into brain session context.
 
-For no-loss relocation and future trimming evidence, maintainers must use `docs/migrations/2026-07-operating-model-ledger.json`.
-
 ## Repository structure
 
 ```
@@ -133,10 +131,10 @@ When editing this repo, the granular rule files are the source of truth for thei
 
 ## Test Commands
 
-Run the focused task-6 contract first:
+Run the focused operating-model contract first:
 
 ```bash
-python3 -m unittest tests.test_operating_model_ledger.AgentRelocationTests tests.test_model_check.OwnershipContractTests.test_missing_skills_audience_is_rejected -v
+python3 -m unittest tests.test_operating_model_evidence.OperatingModelContractTests tests.test_model_check.OwnershipContractTests.test_missing_skills_audience_is_rejected -v
 ```
 
 For broader verification, run the pinned baseline, full suite, strict checker, canonical JSON, compile, and diff checks described by `tests/fixtures/operating-model-qa-commands.json`.

@@ -57,28 +57,12 @@ def write_minimal_lane_freeze(path: Path) -> None:
 
 
 class ModelNegativeCases:
-    def test_ledger_gap_claim_and_dependency_failures_are_rejected(self) -> None:
-        fixtures = (
-            {
-                "schema_version": "agent-brain-operating-model-ledger/v1",
-                "documents": [{"path": "a", "ranges": [
-                    {"end_line": 1, "id": "a", "sha256": "0" * 64, "start_line": 2}
-                ]}],
-                "relocation_claims": [],
-            },
-            {
-                "schema_version": "agent-brain-operating-model-ledger/v1",
-                "documents": [],
-                "relocation_claims": [{
-                    "approval_required": False, "status": "trimmable"
-                }],
-            },
-            {
-                "schema_version": "agent-brain-operating-model/v1",
-                "dependency_graph": [{"depends_on": [1], "todo": 1}],
-                "future_routes": [],
-            },
-        )
+    def test_dependency_graph_failures_are_rejected(self) -> None:
+        fixtures = ({
+            "schema_version": "agent-brain-operating-model/v1",
+            "dependency_graph": [{"depends_on": [1], "todo": 1}],
+            "future_routes": [],
+        },)
         with tempfile.TemporaryDirectory() as raw:
             for index, fixture in enumerate(fixtures):
                 path = Path(raw) / f"{index}.json"

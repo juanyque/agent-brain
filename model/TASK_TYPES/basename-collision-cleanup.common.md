@@ -13,7 +13,7 @@ Resolve `*.md` basename collisions in the brain. Obsidian resolves `[[wikilinks]
 
 ## Before starting
 
-- [ ] Brain is a git repo. Renames must use `git mv` only with explicit user authorization for the Git operation; rollback commands such as `git checkout -- .` also require explicit user authorization.
+- [ ] Brain is a Git repo. Brain-internal renames use `git mv` under the bounded standing authorization in `AGENTS.common.md`; rollback commands such as `git checkout -- .` still require explicit user authorization.
 - [ ] Branch / working tree state is clean OR the user accepts mixing this work with in-progress changes.
 - [ ] Identify any runtime-governed subtrees that need exclusion (`_AGENTS/CLAUDE/memory/` is the canonical case — agent runtime hardcodes the paths).
 - [ ] Read `_COMMON/RULES-FILE-NAMING.common.md` → "Avoiding Obsidian basename collisions" to confirm the target naming convention.
@@ -66,7 +66,7 @@ For each group still surfaced after `--apply`:
    - Plan a rewrite: link target + (optionally) link label updated to match the new filename.
 9. Default rename preference: **Option A — full rename consistency**. Every duplicate (including the canonical) follows `_COMMON/RULES-FILE-NAMING.common.md` → "Avoiding Obsidian basename collisions". Update incoming refs to the new name. End-state: no generic basename remains in the brain.
 10. Confirm the batch with the user via `AskUserQuestion` if there's any non-trivial decision (label updates, ambiguous intent, etc.).
-11. Apply only after the user confirms the batch: `Edit` each referencing file, then move each group file with `git mv` only with explicit user authorization for the Git operation.
+11. Apply only after the user confirms the semantic batch: `Edit` each referencing file, then move each group file with `git mv` under the bounded standing authorization in `AGENTS.common.md`.
 12. Re-run `--show-refs <stem>` to confirm `total references: 0`.
 
 ### Phase 4 — Verify and close
@@ -93,7 +93,7 @@ Note the asymmetry: Obsidian wikilinks omit `.md`; markdown links can include or
 - **URL-encoded markdown links**: Obsidian writes `[text](Three%20laws%20of%20motion.md)` for filenames with spaces. The script's `--show-refs` decodes these when categorizing.
 - **`..` in wikilink paths**: `[[../X/stem|label]]` is valid and supported. Resolution is relative to the containing file's folder.
 - **Per-file safety vs bare-ref anchoring**: in interactive groups with unresolved bare refs, the script preserves one auto-safe file as the canonical anchor. If you rename it during interactive review, the bare refs become unresolved — proceed only if you've also accounted for those refs (Option A).
-- **`parent_slug` collision across projects** (rare): two ticket folders with the same name in different parent projects (e.g. `team-tools/PROJ-275/` + `Demo App/PROJ-275/`) auto-rename to the same `<stem>.proj-275.md` and create a new collision. Detector spots it on re-run; fix manually with `git mv` only with explicit user authorization for the Git operation, using a grandparent-included discriminator (`<stem>.team-tools-proj-275.md` and `<stem>.demo-app-proj-275.md`). See TOOL doc § "Edge case: `parent_slug` collision across projects".
+- **`parent_slug` collision across projects** (rare): two ticket folders with the same name in different parent projects (e.g. `team-tools/PROJ-275/` + `Demo App/PROJ-275/`) auto-rename to the same `<stem>.proj-275.md` and create a new collision. Detector spots it on re-run; after confirming the discriminator, fix it manually with `git mv` under the bounded standing authorization in `AGENTS.common.md`, using a grandparent-included discriminator (`<stem>.team-tools-proj-275.md` and `<stem>.demo-app-proj-275.md`). See TOOL doc § "Edge case: `parent_slug` collision across projects".
 
 ## Documentation convention
 

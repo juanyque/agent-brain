@@ -124,12 +124,16 @@ class OwnershipContractCases(unittest.TestCase):
         self.assertEqual([finding.code for finding in findings], ["missing-route-target"])
         self.assertEqual(findings[0].path, "model/RULES-MISSING.common.md")
 
-    def test_common_git_authority_requires_explicit_git_authorization(self) -> None:
+    def test_common_git_authority_declares_bounded_internal_move_authorization(self) -> None:
         from model_check_routes import git_authority
 
         authority = git_authority(COMMON_AGENTS)
 
-        self.assertEqual(authority.git_mv_condition, "explicit-git-authorization")
+        self.assertEqual(
+            authority.git_mv_condition,
+            "brain-internal-standing-authorization",
+        )
+        self.assertEqual(authority.other_git_condition, "explicit-git-authorization")
         self.assertEqual(authority.repository_state_mutation, "user-owned")
 
     def test_git_authority_parser_accepts_injected_malformed_policy_text(self) -> None:
@@ -139,7 +143,14 @@ class OwnershipContractCases(unittest.TestCase):
             "Git operations are allowed.\nGit repository state is user-owned.\n"
         )
 
-        self.assertEqual(authority.git_mv_condition, "missing-explicit-git-authorization")
+        self.assertEqual(
+            authority.git_mv_condition,
+            "missing-brain-internal-standing-authorization",
+        )
+        self.assertEqual(
+            authority.other_git_condition,
+            "missing-explicit-git-authorization",
+        )
         self.assertEqual(authority.repository_state_mutation, "user-owned")
 
     def test_orphan_common_rule_file_is_rejected(self) -> None:
@@ -199,8 +210,8 @@ class OwnershipMutationCases(unittest.TestCase):
         mutated = copy.deepcopy(model)
         mutated["route_graph"][0]["terminal"] = "model/RULES-MUTATED.common.md"
         common_text = COMMON_AGENTS.read_text(encoding="utf-8").replace(
-            "Git operations require explicit user authorization.",
-            "Git operations are allowed.",
+            "the destination does not exist",
+            "the destination may be overwritten",
         )
         with self.subTest("route-target"):
             findings = route_target_findings(ROOT, mutated, COMMON_AGENTS)
@@ -208,103 +219,8 @@ class OwnershipMutationCases(unittest.TestCase):
         with self.subTest("git-authority"):
             self.assertEqual(
                 git_authority_from_text(common_text).git_mv_condition,
-                "missing-explicit-git-authorization",
+                "missing-brain-internal-standing-authorization",
             )
-
-
-class Task7LedgerSemanticCases(unittest.TestCase):
-    def fixture(self) -> tuple[tempfile.TemporaryDirectory[str], Path, Path]:
-        raw = tempfile.TemporaryDirectory()
-        root = Path(raw.name)
-        shutil.copy(ROOT / "AGENTS.md", root / "AGENTS.md")
-        ledger = root / "docs" / "migrations" / "2026-07-operating-model-ledger.json"
-        ledger.parent.mkdir(parents=True)
-        shutil.copy(ROOT / "docs" / "migrations" / "2026-07-operating-model-ledger.json", ledger)
-        return raw, root, ledger
-
-    def findings_for(self, root: Path, ledger: Path) -> list[str]:
-        from model_check_contract import CodeDef
-        from model_check_ledger import task7_ledger_findings
-
-        code = CodeDef(
-            code="ledger-hash-mismatch",
-            family="ledger",
-            severity="error",
-            selection="default",
-            default=True,
-            check="metadata-declared",
-        )
-        return [finding.code for finding in task7_ledger_findings(root, ledger, code)]
-
-    def mutate_claim(self, ledger: Path, field: str, value: str | int) -> None:
-        body = json.loads(ledger.read_text(encoding="utf-8"))
-        trim_cluster = body["task7_trim_claims"][0]["cluster_id"]
-        destination = next(
-            claim["copied_destination"]
-            for claim in body["relocation_claims"]
-            if claim.get("cluster_id") == trim_cluster
-        )
-        destination[field] = value
-        ledger.write_text(
-            json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n",
-            encoding="utf-8",
-        )
-
-    def mutate_trim_claim(self, ledger: Path, field: str, value: str | int) -> None:
-        body = json.loads(ledger.read_text(encoding="utf-8"))
-        body["task7_trim_claims"][0][field] = value
-        ledger.write_text(
-            json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n",
-            encoding="utf-8",
-        )
-
-    def test_valid_current_task7_ledger_has_no_semantic_findings(self) -> None:
-        raw, root, ledger = self.fixture()
-        with raw:
-            findings = self.findings_for(root, ledger)
-
-        self.assertEqual(findings, [])
-
-    def test_zero_destination_hash_is_rejected(self) -> None:
-        raw, root, ledger = self.fixture()
-        with raw:
-            self.mutate_claim(ledger, "sha256", "0" * 64)
-            findings = self.findings_for(root, ledger)
-
-        self.assertEqual(findings, ["ledger-hash-mismatch"])
-
-    def test_wrong_destination_path_or_range_is_rejected(self) -> None:
-        raw, root, ledger = self.fixture()
-        with raw:
-            self.mutate_claim(ledger, "path", "MISSING.md")
-            wrong_path = self.findings_for(root, ledger)
-        raw, root, ledger = self.fixture()
-        with raw:
-            self.mutate_claim(ledger, "start_line", 9999)
-            wrong_range = self.findings_for(root, ledger)
-
-        self.assertEqual(wrong_path, ["ledger-hash-mismatch"])
-        self.assertEqual(wrong_range, ["ledger-hash-mismatch"])
-
-    def test_destination_byte_mutation_is_rejected(self) -> None:
-        raw, root, ledger = self.fixture()
-        with raw:
-            agents = root / "AGENTS.md"
-            agents.write_text(
-                agents.read_text(encoding="utf-8").replace("## Rule triggers", "## Rule trigger drift"),
-                encoding="utf-8",
-            )
-            findings = self.findings_for(root, ledger)
-
-        self.assertEqual(findings, ["ledger-hash-mismatch"])
-
-    def test_destination_byte_count_mismatch_is_rejected(self) -> None:
-        raw, root, ledger = self.fixture()
-        with raw:
-            self.mutate_trim_claim(ledger, "removed_bytes", 0)
-            findings = self.findings_for(root, ledger)
-
-        self.assertEqual(findings, ["ledger-hash-mismatch"])
 
 
 if __name__ == "__main__":

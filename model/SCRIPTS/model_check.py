@@ -25,10 +25,7 @@ from model_check_reports import (
     stable_json,
 )
 from model_check_loading import loading_findings
-from model_check_ledger import task7_ledger_findings
 from model_check_stale import scan_stale_references
-from model_check_task11_ledger import task11_ledger_findings
-from model_check_task12_ledger import task12_ledger_findings
 
 
 STALE_REFERENCE_CODES = frozenset(
@@ -173,19 +170,6 @@ def normal_report(
             continue
         if code.family == "loading":
             findings.extend(loading_findings(options.root, model, code))
-            continue
-        if code.code in {"ledger-hash-mismatch", "missing-relocation-claim"}:
-            ledger_path = options.root / "docs" / "migrations" / "2026-07-operating-model-ledger.json"
-            if code.code == "ledger-hash-mismatch":
-                findings.extend(task7_ledger_findings(options.root, ledger_path, code))
-                findings.extend(task11_ledger_findings(options.root, ledger_path, code))
-            findings.extend(
-                task12_ledger_findings(
-                    options.root,
-                    ledger_path,
-                    code,
-                )
-            )
             continue
         findings.extend(
             code_findings(options.root, model, options.model, code, options.brain, options.git_base)

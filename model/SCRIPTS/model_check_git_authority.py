@@ -11,6 +11,7 @@ GIT_MUTATION_RE = re.compile(
     r"\bgit\s+(?:add|am|apply|bisect|branch|checkout|cherry-pick|clean|commit|merge|mv|"
     r"pull|push|rebase|reset|restore|revert|rm|stash|switch|tag|worktree)\b"
 )
+GIT_MV_RE = re.compile(r"\bgit\s+mv\b")
 AUTHORIZATION_RE = re.compile(
     r"(?:explicit (?:user|human) (?:approval|authorization|confirmation|request|decision))|"
     r"(?:user-authorized)|(?:explicitly (?:approved|authorized|requested|confirmed|decides?))|"
@@ -22,11 +23,22 @@ GIT_AUTHORIZATION_RE = re.compile(
     r"(?:(?:explicit|user-authorized).{0,100}Git (?:operation|action|command|authorization))",
     re.IGNORECASE,
 )
+BOUNDED_MOVE_POLICY_REFERENCE_RE = re.compile(
+    r"bounded standing authorization in `(?:_COMMON/)?AGENTS\.common\.md`",
+    re.IGNORECASE,
+)
+STANDING_MOVE_POLICY = (
+    "Brain-internal `git mv` operations have standing user authorization when the move "
+    "is already justified by the current user request or an applicable brain workflow, "
+    "both paths are inside the same resolved brain root, the destination does not exist, "
+    "and the move does not cross an active peer-session scope."
+)
 
 
 @dataclass(frozen=True, slots=True)
 class GitAuthority:
     git_mv_condition: str
+    other_git_condition: str
     repository_state_mutation: str
 
 
@@ -35,13 +47,22 @@ def git_authority(common_path: Path) -> GitAuthority:
 
 
 def git_authority_from_text(text: str) -> GitAuthority:
-    git_condition = (
+    git_mv_condition = (
+        "brain-internal-standing-authorization"
+        if STANDING_MOVE_POLICY in text
+        else "missing-brain-internal-standing-authorization"
+    )
+    other_git_condition = (
         "explicit-git-authorization"
-        if "Git operations require explicit user authorization." in text
+        if "All other Git operations require explicit user authorization." in text
         else "missing-explicit-git-authorization"
     )
     mutation = "user-owned" if "Git repository state is user-owned." in text else "undeclared"
-    return GitAuthority(git_mv_condition=git_condition, repository_state_mutation=mutation)
+    return GitAuthority(
+        git_mv_condition=git_mv_condition,
+        other_git_condition=other_git_condition,
+        repository_state_mutation=mutation,
+    )
 
 
 def _model_markdown_paths(root: Path) -> tuple[Path, ...]:
@@ -79,7 +100,15 @@ def _git_authorized(line: str, context: str) -> bool:
         )
     ):
         return True
-    return GIT_AUTHORIZATION_RE.search(context) is not None
+    if GIT_AUTHORIZATION_RE.search(context) is not None:
+        return True
+    return (
+        GIT_MV_RE.search(line) is not None
+        and (
+            STANDING_MOVE_POLICY in context
+            or BOUNDED_MOVE_POLICY_REFERENCE_RE.search(context) is not None
+        )
+    )
 
 
 def git_command_guard_findings(root: Path, code: CodeDef) -> list[Finding]:
@@ -103,7 +132,10 @@ def git_command_guard_findings(root: Path, code: CodeDef) -> list[Finding]:
                     severity=code.severity,
                     path=rel_path,
                     target=f"line:{line_number}",
-                    message="Git-mutating command is not conditional on explicit user authorization",
+                    message=(
+                        "Git-mutating command is not conditional on explicit user authorization "
+                        "or the bounded standing git mv policy"
+                    ),
                 )
             )
     return sorted(findings, key=lambda item: (item.path, item.target, item.message))

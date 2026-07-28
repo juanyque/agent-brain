@@ -45,7 +45,7 @@ Memory files are standalone `.md` notes. The merge is per-file:
 
 1. List all files in `INBOX/_RUNTIME/<RT>/memory/` that do NOT exist in `_AGENTS/<RT>/memory/`.
 2. Present them to the user with a one-line preview (first content line).
-3. For each file the user selects to import: `git mv` from quarantine to brain memory.
+3. For each file the user selects to import: use `git mv` from quarantine to brain memory under the bounded standing authorization in `_COMMON/AGENTS.common.md`.
 4. Files the user does not select remain in quarantine for later review or deletion.
 
 ### 4. Settings JSON merge

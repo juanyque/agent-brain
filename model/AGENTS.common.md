@@ -47,10 +47,11 @@ Load the narrow rule payload before acting when a trigger matches:
 ## Git ownership for brains
 
 - Git repository state is user-owned.
-- Git operations require explicit user authorization.
-- Agents may edit, move, or create brain content when the task requires it, but must leave Git workflow decisions to the user unless explicitly asked for a Git operation.
-- Do not stage, unstage, commit, amend, reset, stash, branch, rebase, merge, push, force-push, run `git mv`, or otherwise mutate Git repository state during normal brain maintenance or documentation work.
-- Do not run commands that change the Git index, such as `git add`, `git restore --staged`, `git reset`, interactive staging, or equivalent tooling, unless the user explicitly requests that Git action.
+- Brain-internal `git mv` operations have standing user authorization when the move is already justified by the current user request or an applicable brain workflow, both paths are inside the same resolved brain root, the destination does not exist, and the move does not cross an active peer-session scope.
+- This standing authorization includes only index changes intrinsic to the approved move. Report each staged rename after execution.
+- The standing authorization is transport authority, not semantic authority: it does not authorize choosing an uncertain classification, expanding an approved batch, overwriting a destination, moving content outside or between brains, or permanently deleting content.
+- All other Git operations require explicit user authorization. Do not stage unrelated paths, unstage, commit, amend, reset, stash, branch, rebase, merge, push, force-push, or otherwise mutate Git repository state unless the user explicitly requests that Git action.
+- Do not run other commands that change the Git index, such as `git add`, `git restore --staged`, `git reset`, interactive staging, or equivalent tooling, unless the user explicitly requests that Git action.
 - It is acceptable to report relevant Git state when useful, but the user decides what to stage, review, commit, or push.
 
 ## Managed infrastructure access

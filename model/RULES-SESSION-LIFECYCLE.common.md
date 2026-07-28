@@ -18,7 +18,8 @@ This file is the canonical procedure for session lifecycle decisions.
 | multi-session-coordination | RULES-SESSION-LIFECYCLE.common.md | canonical |
 | canonical-open-authority | session_open.py | unique |
 | compatibility-fallback | session_bootstrap.py | compatibility-only |
-| git-operations | user | explicit-authorization-required |
+| brain-internal-moves | user | standing-preauthorization |
+| other-git-operations | user | explicit-authorization-required |
 
 ## Session notes
 
@@ -131,7 +132,7 @@ For each open session note in `WIP/SESSIONS/` that is **not** the current sessio
    - `WIP/WIP.md` or project-specific WIP notes for active operational state;
    - `BACKLOG/` for real but deferred tasks;
    - `MEMORY/` for stable reusable knowledge.
-   If the session implemented a tracker ticket, finalise its issue working doc and, only with explicit user authorization for the Git operation, move it to `MEMORY/Projects/...` via `git mv` per the "Consolidation rules" below. Then, once the **Closing gate** above passes, move the session note to `QUARANTINE/TRASH/` (permanent deletion still requires explicit user approval).
+   If the session implemented a tracker ticket, finalise its issue working doc and move it to `MEMORY/Projects/...` via `git mv` under the bounded standing authorization in `AGENTS.common.md`, per the "Consolidation rules" below. Then, once the **Closing gate** above passes, archive the tracked session note in `QUARANTINE/TRASH/` with `session_close.py --brain-root <brain> --apply consolidate <session-id> --archive`; this internal move needs no separate Git confirmation. Permanent deletion still requires explicit user approval.
 3. **If it is live or ambiguous** — `State` is `open` with a real pending next step, or you cannot tell whether it is done — **leave it untouched** in `WIP/SESSIONS/` (do not consolidate, edit, or move it — respect scope ownership per "Multi-session coordination"), record a stale-session follow-up only if it needs later maintenance, and report it. When unsure, ask the user rather than guessing.
 4. Report what was consolidated and closed, and what was left open and why.
 
@@ -146,16 +147,16 @@ The current session trace is mandatory even when previous sessions are intention
   be used as sources during consolidation but must not become durable references unless
   the user explicitly promotes them.
 - Do not duplicate full session transcripts into daily notes; summarize durable progress, decisions, blockers, and next actions.
-- Prefer moving fully consolidated session notes to `QUARANTINE/TRASH/` for reversible cleanup rather than keeping them active. Permanent deletion requires explicit user approval.
+- Archive fully consolidated, Git-tracked session notes in `QUARANTINE/TRASH/` with `session_close.py --brain-root <brain> --apply consolidate <session-id> --archive` rather than keeping them active. The bounded standing authorization in `AGENTS.common.md` covers this internal `git mv`; report the staged rename. If the note is untracked, consolidate it without `--archive` and report that it could not be moved safely. Permanent deletion requires explicit user approval.
 - Before moving a fully consolidated session note out of `WIP/SESSIONS/`, remove the `wip` tag from its frontmatter so closed notes do not appear in active WIP views.
 - If preserving a prior session note is necessary, it must be reported as a stale-session follow-up so `WIP/SESSIONS/` does not silently accumulate dead operational notes.
-- If the session was implementing a tracker ticket (Jira / GitHub issue / equivalent), its **issue working doc** has been kept current throughout the session per `RULES-ISSUE-DOCS.common.md`. At consolidation time, finalise that doc (update `## Status`, frontmatter `status`, `merged_at` if applicable) and, only with explicit user authorization for the Git operation, move the folder from `WIP/<project-area>/<repo>/` to `MEMORY/Projects/<project-area>/<repo>/` via `git mv`. The session note's "durable state preserved outside" closing-gate item is satisfied primarily by the issue working doc, not by the daily note alone.
+- If the session was implementing a tracker ticket (Jira / GitHub issue / equivalent), its **issue working doc** has been kept current throughout the session per `RULES-ISSUE-DOCS.common.md`. At consolidation time, finalise that doc (update `## Status`, frontmatter `status`, `merged_at` if applicable) and move the folder from `WIP/<project-area>/<repo>/` to `MEMORY/Projects/<project-area>/<repo>/` via `git mv` under the bounded standing authorization in `AGENTS.common.md`. The session note's "durable state preserved outside" closing-gate item is satisfied primarily by the issue working doc, not by the daily note alone.
 
 ## Recurring session and WIP review
 
 - Recurring maintenance reviews inspect orphaned or stale session notes that were not fully consolidated. Apply the Closing gate and Previous sessions rollover rules above: consolidate durable work into the day it happened, active WIP, BACKLOG, or MEMORY; leave live or ambiguous sessions untouched and report the reason.
 - Recurring maintenance reviews inspect blocked or stale WIP items and decide whether they should remain in active WIP, move to BACKLOG, consolidate to MEMORY, or archive as historically important inactive content under the established information-architecture rules.
-- These reviews identify candidates and decisions only. They do not authorize Git operations, peer-scope edits, or permanent deletion without the explicit user authorization required by the relevant rule.
+- These reviews identify candidates and decisions only. Once a move is semantically justified by the applicable rule, the bounded standing authorization in `AGENTS.common.md` covers its brain-internal `git mv`. The reviews do not authorize peer-scope edits, permanent deletion, or any other Git operation without the explicit user authorization required by the relevant rule.
 
 ## Multi-session coordination
 

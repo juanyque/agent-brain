@@ -4,7 +4,7 @@ The full workflow triggered by `brain init`, `brain maintain`, `brain clean`, `b
 
 The user should not need to know internal tool names. The skill resolves the brain, checks setup state, chooses the correct mode, runs safe deterministic tools, and presents decisions only when human judgment is needed.
 
-"Reversible through Git" is NOT a license to auto-apply: every `git mv` is reversible by `git reset --hard`, yet a brain crowded with 900+ undeclared renames is unusable. The narrow set of actions the skill MAY apply without explicit per-action user approval is limited to:
+Standing authorization for brain-internal `git mv` is transport authority, not permission to choose what should move. Semantic classifications, batch boundaries, and apply-mode writes still use the gates below; rollback and all other Git operations still require explicit user authorization. The narrow set of actions the skill MAY apply without a semantic or apply-mode decision from the user is limited to:
 
 - Read-only scripts (`find_home.py`, `standardize_assessment.py` in dry-run, `maintenance_scheduler.py` reports).
 - `home_setup.py --apply` after the user explicitly answered the setup question in step 1.
@@ -38,7 +38,7 @@ The process supports two operational modes, determined by the presence of `_STAG
 
 ## 3. Initial mode: drain `_STAGING/`
 
-**Hard rule: every batch in this drain — mechanical or content — requires explicit per-batch user confirmation via `AskUserQuestion` immediately before any `git mv` is executed. Reversibility through Git is not authorization. A single `brain init` session normally moves one batch and stops; the next batch belongs to the next session (or to an explicit "continue" answer from the user).**
+**Hard rule: every batch in this drain — mechanical or content — requires explicit per-batch user confirmation via `AskUserQuestion` immediately before execution. The confirmation approves scope and classification; brain-internal `git mv` then uses the bounded standing authorization in `_COMMON/AGENTS.common.md` without a second Git prompt. A single `brain init` session normally moves one batch and stops; the next batch belongs to the next session (or to an explicit "continue" answer from the user).**
 
 ### 3.1. Read prior state (no user confirmation needed; read-only)
 
@@ -58,7 +58,7 @@ The process supports two operational modes, determined by the presence of `_STAG
 
 ### 3.3. Execute the approved batch (only after explicit "proceed")
 
-- Apply only the moves the user just approved. Use `git mv` (never copy-and-delete) when the brain is a Git repository.
+- Apply only the moves the user just approved. Use `git mv` under the bounded standing authorization in `_COMMON/AGENTS.common.md` (never copy-and-delete) when the brain is a Git repository, then report the staged renames.
 - Never delete content. If something looks discardable, propose `QUARANTINE/TRASH/` with rationale in the same `AskUserQuestion` and only move on "proceed".
 - For `MEMORY/` destinations, propose the concrete subdirectory (e.g. `Clients`, `Projects`, `People`, `Tools`, `Services`) in the same question, not as an afterthought.
 - Stop the moves at the boundary the user approved. Do not bundle in adjacent files because they "look obviously related".
@@ -133,4 +133,4 @@ After a batch is applied, ask separately for any of the following before executi
 
 - Weekly trash review: review `QUARANTINE/TRASH/` for notes older than 15 days and propose candidates for permanent deletion. Do not delete automatically; list candidates and wait for explicit human approval.
 - Monthly maintenance-rule review: review recurring maintenance rules and refine them if they are creating unnecessary friction.
-- These recurring reviews may produce recommendations, WIP entries, or proposed rule edits. They do not authorize content moves, Git operations, or permanent deletion without the explicit user approval required by the relevant rule.
+- These recurring reviews may produce recommendations, WIP entries, or proposed rule edits. Once a content move is semantically justified, its brain-internal `git mv` uses the bounded standing authorization in `_COMMON/AGENTS.common.md`; permanent deletion and all other Git operations still require explicit user approval.

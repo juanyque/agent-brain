@@ -50,7 +50,7 @@ The procedural guides live in `TASK_TYPES/evidence-management.common.md` (the st
 
 - **Evidence store** lives under `WIP/evidence/`. Each item is an atomic note with structured frontmatter and a self-contained prose body. Evidence is append-only: it accumulates continuously and is not scoped to a particular review cycle or year.
 - **Reports** are generated on demand by filtering the store (by kind, date range, topic, or person). A report is a transient, curated artifact: generated as a draft, reviewed and enriched by the human, shared when needed, then archived. Reports live in `WIP/`.
-- **Archive**: when a report's cycle closes (review submitted, complaint resolved, fiscal period over), it moves to `ARCHIVED/Reviews/` via `git mv` only with explicit user authorization for the Git operation. The evidence store is never archived — it is the permanent raw material; reports are the point-in-time output.
+- **Archive**: when a report's cycle closes (review submitted, complaint resolved, fiscal period over), move it to `ARCHIVED/Reviews/` via `git mv` under the bounded standing authorization in `AGENTS.common.md`. The evidence store is never archived — it is the permanent raw material; reports are the point-in-time output.
 - People referenced by evidence and reports live in `MEMORY/People/`. Evidence notes link to people notes via the `people:` frontmatter field; people notes may have an optional `## Review history` section linking back.
 
 ## Three-layer model
@@ -113,7 +113,7 @@ generated draft (WIP/)  →  curated (WIP/)  →  submitted/delivered  →  ARCH
 1. **Generate**: query the evidence store by filter, assemble a draft narrative. The draft is mechanical output.
 2. **Curate**: the human adds impact, reflection, and narrative coherence. This step is what turns a filtered list into a useful document.
 3. **Submit or deliver**: update the report's `status` frontmatter to one of the allowed values in the machine-readable ownership contract above.
-4. **Archive**: after the cycle is fully closed, move the report to `ARCHIVED/Reviews/` with `git mv` only with explicit user authorization for the Git operation. Keep the same basename. Reports tagged `sensitive` (complaint reports) stay in `WIP/` unless the user explicitly decides to archive them, because retention may be governed by HR policy.
+4. **Archive**: after the cycle is fully closed, move the report to `ARCHIVED/Reviews/` with `git mv` under the bounded standing authorization in `AGENTS.common.md`. Keep the same basename. Reports tagged `sensitive` (complaint reports) stay in `WIP/` unless the user explicitly decides to archive them, because retention may be governed by HR policy.
 
 ## Daily note integration
 

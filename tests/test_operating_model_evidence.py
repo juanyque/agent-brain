@@ -31,9 +31,7 @@ from tests.support.evidence_json import file_record
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "tests" / "support" / "evidence_contract.py"
 RUNNER = ROOT / "tests" / "support" / "run_baseline_tests.py"
-MODEL_CHECK = ROOT / "model" / "SCRIPTS" / "model_check.py"
 MODEL = ROOT / "model" / "OPERATING-MODEL.json"
-LEDGER = ROOT / "docs" / "migrations" / "2026-07-operating-model-ledger.json"
 QA = ROOT / "tests" / "fixtures" / "operating-model-qa-commands.json"
 IDS = ROOT / "tests" / "fixtures" / "baseline-test-ids.txt"
 FINAL_LANE_COMMANDS = (
@@ -41,12 +39,6 @@ FINAL_LANE_COMMANDS = (
 )
 BASELINE = "993247b2850ac86993c7c6dd18e6c4fd9ec6df7c"
 ROOT_AGENTS = ROOT / "AGENTS.md"
-TASK10_EVIDENCE = Path(
-    "/Users/juan.garcia/.local/state/agent-brain/reviews/"
-    "agent-brain-operating-model/wave-3-execution-20260723"
-)
-TASK10_POST_MANIFEST = TASK10_EVIDENCE / "implementation-task-10-post.json"
-TASK10_POST_ARCHIVE = TASK10_EVIDENCE / "implementation-task-10-post.tar"
 
 
 def canonical(path: Path) -> dict[str, JsonValue]:
@@ -92,31 +84,6 @@ def verified_macos_tmp_alias() -> bool:
         return False
 
 
-def line_hash(path: Path, start_line: int, end_line: int) -> str:
-    lines = path.read_bytes().splitlines(keepends=True)
-    return hashlib.sha256(b"".join(lines[start_line - 1 : end_line])).hexdigest()
-
-
-def sealed_task10_file(path: str) -> bytes:
-    manifest = json.loads(TASK10_POST_MANIFEST.read_text(encoding="utf-8"))
-    digest = next(
-        row["sha256"]
-        for row in manifest["entries"]
-        if row.get("type") == "file"
-        and base64.b64decode(row["path_b64"]).decode("utf-8") == path
-    )
-    with tarfile.open(TASK10_POST_ARCHIVE, "r") as archive:
-        member = archive.extractfile(f"blobs/{digest}")
-        if member is None:
-            raise AssertionError(f"sealed task-10 blob is missing for {path}")
-        return member.read()
-
-
-def sealed_task10_line_hash(path: str, start_line: int, end_line: int) -> str:
-    lines = sealed_task10_file(path).splitlines(keepends=True)
-    return hashlib.sha256(b"".join(lines[start_line - 1 : end_line])).hexdigest()
-
-
 def heading_ranges(path: Path) -> dict[str, tuple[int, int]]:
     lines = path.read_text(encoding="utf-8").splitlines()
     headings: list[tuple[str, int]] = [
@@ -131,10 +98,9 @@ def heading_ranges(path: Path) -> dict[str, tuple[int, int]]:
     return ranges
 
 
-class OperatingModelLedgerTests(ModelNegativeCases, unittest.TestCase):
-    def test_canonical_manifests_cover_inventory_and_ranges(self) -> None:
+class OperatingModelContractTests(ModelNegativeCases, unittest.TestCase):
+    def test_governed_inventory_matches_model_markdown(self) -> None:
         model = canonical(MODEL)
-        ledger = canonical(LEDGER)
         governed = set(model["governed_inventory"])
         discovered = {
             str(path.relative_to(ROOT))
@@ -143,17 +109,6 @@ class OperatingModelLedgerTests(ModelNegativeCases, unittest.TestCase):
             if parent != ROOT or path.name == "AGENTS.md"
         }
         self.assertEqual(governed, discovered)
-        self.assertEqual(ledger["baseline_commit"], BASELINE)
-        by_path = {row["path"]: row for row in ledger["documents"]}
-        for path in governed:
-            lines = (ROOT / path).read_bytes().splitlines(keepends=True)
-            ranges = by_path[path]["ranges"]
-            self.assertEqual(ranges[0]["start_line"], 1)
-            self.assertEqual(ranges[-1]["end_line"], len(lines))
-            self.assertEqual(
-                [row["start_line"] for row in ranges[1:]],
-                [row["end_line"] + 1 for row in ranges[:-1]],
-            )
 
     def test_future_routes_are_exact_disjoint_and_fully_named(self) -> None:
         routes = canonical(MODEL)["future_routes"]
@@ -3294,367 +3249,6 @@ class RunTodoExpansionTests(unittest.TestCase):
         self.assertEqual(sealed.returncode, 0, sealed.stderr.decode("utf-8", "replace"))
         self.assertEqual(swapped_verify.returncode, 2)
         self.assertEqual(missing_verify.returncode, 2)
-
-
-class AgentRelocationTests(unittest.TestCase):
-    def test_root_agents_is_governed_maintainer_only_and_not_brain_context(self) -> None:
-        model = canonical(MODEL)
-        ledger = canonical(LEDGER)
-
-        self.assertTrue(ROOT_AGENTS.exists())
-        self.assertIn("AGENTS.md", model["governed_inventory"])
-        audience = {
-            row["path"]: row
-            for row in model["audience_contract"]
-            if isinstance(row, dict) and isinstance(row.get("path"), str)
-        }
-        self.assertEqual(audience["AGENTS.md"]["audience"], "maintainer-only")
-        self.assertEqual(audience["AGENTS.md"]["brain_session_context"], "excluded")
-        self.assertNotIn("AGENTS.md", model["context_contract"]["conditional_artifacts"])
-
-        documents = {row["path"]: row for row in ledger["documents"]}
-        root_ranges = documents["AGENTS.md"]["ranges"]
-        self.assertEqual(root_ranges[0]["start_line"], 1)
-        self.assertEqual(root_ranges[-1]["end_line"], len(ROOT_AGENTS.read_text().splitlines()))
-        self.assertEqual(
-            root_ranges[0]["sha256"],
-            line_hash(ROOT_AGENTS, root_ranges[0]["start_line"], root_ranges[0]["end_line"]),
-        )
-
-    def test_root_agents_contains_required_section_ownership_table(self) -> None:
-        text = ROOT_AGENTS.read_text(encoding="utf-8")
-        ranges = heading_ranges(ROOT_AGENTS)
-        required = {
-            "Repository",
-            "Consumed model",
-            "Brain-local wrappers",
-            "Runtime config",
-            "Rules",
-            "Jobs",
-            "Task types",
-            "Templates",
-            "Scripts",
-            "Skills",
-        }
-
-        self.assertIn("Section Ownership", ranges)
-        self.assertIn("docs/migrations/2026-07-operating-model-ledger.json", text)
-        self.assertLessEqual(
-            required,
-            {
-                line.split("|")[1].strip()
-                for line in text.splitlines()
-                if line.startswith("| ") and line.count("|") >= 3
-            },
-        )
-
-    def test_copy_then_trim_claims_bind_source_and_destination_hashes(self) -> None:
-        ledger = canonical(LEDGER)
-        claims = [
-            claim
-            for claim in ledger["relocation_claims"]
-            if claim.get("destination") == "AGENTS.md"
-        ]
-        self.assertGreaterEqual(len(claims), 6)
-
-        root_headings = heading_ranges(ROOT_AGENTS)
-        for claim in claims:
-            self.assertEqual(claim["status"], "copy-then-trim")
-            self.assertEqual(claim["approval_required"], True)
-            destination = claim["copied_destination"]
-            heading = destination["heading"]
-            self.assertIn(heading, root_headings)
-            start_line = destination["start_line"]
-            end_line = destination["end_line"]
-            self.assertEqual(
-                destination["sha256"],
-                line_hash(ROOT_AGENTS, start_line, end_line),
-            )
-            for source in claim["source_evidence"]:
-                self.assertEqual(
-                    source["sha256"],
-                    line_hash(ROOT / source["path"], source["start_line"], source["end_line"]),
-                )
-
-
-class BrainRelocationTests(unittest.TestCase):
-    def attachment_claim(self) -> dict[str, JsonValue]:
-        ledger = canonical(LEDGER)
-        return next(
-            claim
-            for claim in ledger["relocation_claims"]
-            if claim.get("route_id") == "rule.attachments"
-        )
-
-    def test_attachment_rule_destination_binds_brain_source_hashes(self) -> None:
-        claim = self.attachment_claim()
-        destination = claim["copied_destination"]
-        sources = claim["source_evidence"]
-
-        self.assertEqual(claim["status"], "copy-then-trim")
-        self.assertEqual(claim["trim_status"], "source-trimmed-task-11")
-        self.assertEqual(destination["path"], "model/RULES-ATTACHMENTS.common.md")
-        self.assertEqual(
-            destination["sha256"],
-            line_hash(ROOT / destination["path"], destination["start_line"], destination["end_line"]),
-        )
-        self.assertEqual(
-            [(row["path"], row["start_line"], row["end_line"], row["sha256"]) for row in sources],
-            [
-                (
-                    "model/BRAIN.common.md",
-                    198,
-                    207,
-                    "cdba50864af7a3539899224870ffc422a5afecc7f691d84e87eda2dfaf8688da",
-                ),
-                (
-                    "model/BRAIN.common.md",
-                    245,
-                    245,
-                    "8529790ab0c2fdf43b3a68ab89a97a92b3ac60a086eb47a6adba550c76797de4",
-                ),
-                (
-                    "model/BRAIN.common.md",
-                    262,
-                    262,
-                    "25224b2e279a400812cfa7adeae8f777e69dfd8cefa0c030508205284da1712e",
-                ),
-            ],
-        )
-
-    def test_attachment_route_metadata_is_materialized_without_trimming_brain(self) -> None:
-        model = canonical(MODEL)
-        ledger = canonical(LEDGER)
-        brain_ranges = {
-            row["id"]: row
-            for document in ledger["documents"]
-            if document["path"] == "model/BRAIN.common.md"
-            for row in document["ranges"]
-        }
-        scenario = next(
-            row
-            for row in model["context_contract"]["scenario_metadata"]
-            if row["id"] == "scenario.attachments"
-        )
-        route = next(row for row in model["route_graph"] if row["route_id"] == "rule.attachments")
-        future_route_ids = {row["route_id"] for row in model["future_routes"]}
-
-        self.assertEqual(route["scenario_id"], "scenario.attachments")
-        self.assertEqual(route["terminal"], "model/RULES-ATTACHMENTS.common.md")
-        self.assertEqual(route["terminal_status"], "current")
-        self.assertEqual(scenario["payload_status"], "current-terminal")
-        self.assertNotIn("temporary_payloads", scenario)
-        self.assertNotIn("payload_source_ranges", scenario)
-        self.assertNotIn("rule.attachments", future_route_ids)
-        self.assertEqual(brain_ranges["document.model-brain"]["end_line"], 95)
-        self.assertEqual(
-            brain_ranges["document.model-brain"]["status"],
-            "retained-after-task-11-trim",
-        )
-        self.assertEqual(
-            brain_ranges["document.model-brain"]["sha256"],
-            line_hash(ROOT / "model/BRAIN.common.md", 1, 97),
-        )
-
-    def test_attachment_rule_is_governed_and_wrapper_discovered(self) -> None:
-        model = canonical(MODEL)
-        sys.path.insert(0, str(ROOT / "model" / "SCRIPTS"))
-        from home_setup_content import discover_wrappers
-
-        wrappers = discover_wrappers(ROOT / "model")
-        audience = {
-            row["path"]: row
-            for row in model["audience_contract"]
-            if isinstance(row, dict) and isinstance(row.get("path"), str)
-        }
-
-        self.assertIn("model/RULES-ATTACHMENTS.common.md", model["governed_inventory"])
-        self.assertEqual(
-            audience["model/RULES-ATTACHMENTS.common.md"]["brain_session_context"],
-            "conditional",
-        )
-        self.assertEqual(
-            wrappers["RULES-ATTACHMENTS.md"],
-            "RULES-ATTACHMENTS.common.md",
-        )
-
-    def test_task10_brain_trim_inputs_are_recorded_after_trim(self) -> None:
-        model = canonical(MODEL)
-        ledger = canonical(LEDGER)
-        claim = self.attachment_claim()
-        brain_document = next(
-            document
-            for document in ledger["documents"]
-            if document["path"] == "model/BRAIN.common.md"
-        )
-        brain_owner = next(
-            row
-            for row in model["policy_owners"]
-            if row["owner"] == "model/BRAIN.common.md"
-        )
-
-        self.assertEqual(claim["trim_status"], "source-trimmed-task-11")
-        self.assertEqual(brain_document["ranges"][0]["status"], "retained-after-task-11-trim")
-        self.assertEqual(brain_document["ranges"][0]["end_line"], 95)
-        self.assertEqual(brain_owner["policy_id"], "policy.information-architecture")
-        self.assertEqual(
-            brain_document["ranges"][0]["sha256"],
-            line_hash(ROOT / "model/BRAIN.common.md", 1, 97),
-        )
-
-
-class BrainTrimTests(unittest.TestCase):
-    def test_removed_source_evidence_hashes_recompute_from_sealed_task10_snapshot(self) -> None:
-        ledger = canonical(LEDGER)
-
-        for claim in ledger["task11_trim_claims"]:
-            for source in claim["removed_source_evidence"]:
-                self.assertEqual(source["path"], "model/BRAIN.common.md")
-                self.assertEqual(
-                    source["sha256"],
-                    sealed_task10_line_hash(
-                        source["path"],
-                        source["start_line"],
-                        source["end_line"],
-                    ),
-                    claim["cluster_id"],
-                )
-
-    def test_removed_clusters_have_verified_destinations_or_retained_references(self) -> None:
-        ledger = canonical(LEDGER)
-        claims = ledger["task11_trim_claims"]
-
-        self.assertEqual(
-            [claim["cluster_id"] for claim in claims],
-            [
-                "cluster.brain.attachments-policy",
-                "cluster.brain.daily-session-procedure",
-                "cluster.brain.evidence-report-lifecycle",
-                "cluster.brain.naming-policy",
-                "cluster.brain.optional-capability-operations",
-                "cluster.brain.reorganization-procedure",
-                "cluster.brain.runtime-tool-paths",
-                "cluster.brain.task-type-template-schema",
-            ],
-        )
-        for claim in claims:
-            self.assertEqual(claim["status"], "source-trimmed-task-11")
-            for source in claim["removed_source_evidence"]:
-                self.assertEqual(source["path"], "model/BRAIN.common.md")
-                self.assertRegex(source["sha256"], r"^[0-9a-f]{64}$")
-            target = claim["verified_reference"]
-            self.assertEqual(
-                target["sha256"],
-                line_hash(ROOT / target["path"], target["start_line"], target["end_line"]),
-            )
-
-    def test_task_type_destination_preserves_removed_schema_promotion_and_wrappers(self) -> None:
-        ledger = canonical(LEDGER)
-        claim = next(
-            row
-            for row in ledger["task11_trim_claims"]
-            if row["cluster_id"] == "cluster.brain.task-type-template-schema"
-        )
-        target = claim["verified_reference"]
-        text = (ROOT / target["path"]).read_text(encoding="utf-8")
-
-        self.assertEqual(target["path"], "model/TASK_TYPES/TASK_TYPES.common.md")
-        self.assertEqual(
-            target["sha256"],
-            line_hash(ROOT / target["path"], target["start_line"], target["end_line"]),
-        )
-        self.assertIn("When this applies", text)
-        self.assertIn("Before starting", text)
-        self.assertIn("Process", text)
-        self.assertIn("Note shape", text)
-        self.assertIn("Common gotchas", text)
-        self.assertIn("References", text)
-        self.assertIn("Promotion to skill", text)
-        self.assertIn("Common vs brain-local", text)
-
-    def test_brain_document_range_binds_trimmed_conceptual_guide(self) -> None:
-        ledger = canonical(LEDGER)
-        brain_document = next(
-            document
-            for document in ledger["documents"]
-            if document["path"] == "model/BRAIN.common.md"
-        )
-        brain_range = brain_document["ranges"][0]
-
-        self.assertEqual(brain_range["status"], "retained-after-task-11-trim")
-        self.assertLessEqual(brain_range["end_line"], 150)
-        self.assertEqual(
-            brain_range["sha256"],
-            line_hash(ROOT / "model/BRAIN.common.md", 1, brain_range["end_line"]),
-        )
-
-
-class Task12RelocationLedgerTests(unittest.TestCase):
-    def test_task12_recurring_job_relocation_claims_bind_sources_and_destinations(self) -> None:
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-B",
-                str(MODEL_CHECK),
-                "--strict",
-                "--only",
-                "ledger-hash-mismatch,missing-relocation-claim",
-                "--format",
-                "json",
-            ],
-            cwd=ROOT,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        body = json.loads(result.stdout)
-
-        self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertEqual(body["findings"], [])
-
-    def test_missing_task12_recurring_job_relocation_claim_is_rejected(self) -> None:
-        with tempfile.TemporaryDirectory() as raw:
-            root = Path(raw)
-            shutil.copytree(ROOT / "model", root / "model", ignore=shutil.ignore_patterns("__pycache__"))
-            docs = root / "docs" / "migrations"
-            docs.mkdir(parents=True)
-            ledger = docs / "2026-07-operating-model-ledger.json"
-            body = canonical(LEDGER)
-            body["task12_recurring_job_relocation_claims"] = [
-                row
-                for row in body.get("task12_recurring_job_relocation_claims", [])
-                if row["cluster_id"] != "cluster.jobs.weekly-stale-wip-review"
-            ]
-            ledger.write_text(
-                json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n",
-                encoding="utf-8",
-            )
-
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "-B",
-                    str(MODEL_CHECK),
-                    "--root",
-                    str(root),
-                    "--model",
-                    str(root / "model" / "OPERATING-MODEL.json"),
-                    "--strict",
-                    "--only",
-                    "missing-relocation-claim",
-                    "--format",
-                    "json",
-                ],
-                cwd=ROOT,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            findings = json.loads(result.stdout)["findings"]
-
-        self.assertEqual(result.returncode, 1)
-        self.assertEqual([finding["code"] for finding in findings], ["missing-relocation-claim"])
-        self.assertEqual(findings[0]["target"], "cluster.jobs.weekly-stale-wip-review")
 
 
 if __name__ == "__main__":

@@ -36,8 +36,8 @@ This script creates `_COMMON` when missing and creates only missing local wrappe
 When `--skip-full-reorder` is not passed, the script also:
 
 - Sweeps recursively-empty visible directories from the brain root before reading state. Useful after `git reset --hard` of a prior migration: git leaves empty dir shells that confuse subsequent state checks. Top-level dotfile dirs (`.git/`, `.obsidian/`, etc.) and symlinks are never touched.
-- When `_COMMON` does not exist: scans the canonical external agent runtime homes (`~/.agents`, `~/.claude`, `~/.codex`, plus any `--runtime-home` path) for symlinks pointing into the brain. Each top-level brain directory referenced by such a symlink is moved into `_AGENTS/<name>/` with `git mv`, the external symlinks are re-pointed to the new location, and the originals are preserved as `.bak.<timestamp>` siblings. A per-migration WIP doc is written at `WIP/AGENTS_MIGRATION.<date>.md` describing every rewrite and the exact cleanup commands.
-- When `_COMMON` does not exist: creates `_STAGING/` and moves all remaining non-hidden brain content into it using `git mv`. This signals initial reorganization mode.
+- When `_COMMON` does not exist: scans the canonical external agent runtime homes (`~/.agents`, `~/.claude`, `~/.codex`, plus any `--runtime-home` path) for symlinks pointing into the brain. After the required setup decision, each top-level brain directory referenced by such a symlink is moved into `_AGENTS/<name>/` with `git mv` under the bounded standing authorization in `_COMMON/AGENTS.common.md`, the external symlinks are re-pointed to the new location, and the originals are preserved as `.bak.<timestamp>` siblings. A per-migration WIP doc is written at `WIP/AGENTS_MIGRATION.<date>.md` describing every rewrite and the exact cleanup commands.
+- When `_COMMON` does not exist: after the required full-reorder decision, creates `_STAGING/` and moves all remaining non-hidden brain content into it using `git mv` under the same bounded standing authorization. This signals initial reorganization mode.
 
 For direct low-level repair, `home_setup.py` supports `--skip-full-reorder`; never choose it autonomously.
 

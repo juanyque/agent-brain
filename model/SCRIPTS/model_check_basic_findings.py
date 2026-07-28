@@ -88,7 +88,8 @@ def git_authority_findings(root: Path, code: CodeDef) -> list[Finding]:
     findings = git_command_guard_findings(root, code)
     authority = git_authority(root / "model" / "AGENTS.common.md")
     if (
-        authority.git_mv_condition == "explicit-git-authorization"
+        authority.git_mv_condition == "brain-internal-standing-authorization"
+        and authority.other_git_condition == "explicit-git-authorization"
         and authority.repository_state_mutation == "user-owned"
     ):
         return findings
@@ -98,8 +99,8 @@ def git_authority_findings(root: Path, code: CodeDef) -> list[Finding]:
             family=code.family,
             severity=code.severity,
             path="model/AGENTS.common.md",
-            target="explicit-git-authorization user-owned",
-            message="common model git authority is not explicit",
+            target="bounded-git-mv-authorization explicit-other-git-authorization user-owned",
+            message="common model Git authority is incomplete or over-broad",
         )
     )
     return findings

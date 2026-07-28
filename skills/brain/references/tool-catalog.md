@@ -77,4 +77,4 @@ Invoke `brain` (explicitly as `$brain` in Codex, or by a matching natural-langua
 - `brain init` on a brain with `_STAGING/` enters Initial mode and reads `WIP/STANDARDIZE_PROCESS.md` before any moves.
 - `brain maintain` (or any maintenance trigger) on a brain without `_STAGING/` runs `maintenance_scheduler.py` and presents due/review jobs before structural assessment.
 - Running `cleanup_empty_action_categories.py --skip-if-open-sessions` exits with code 2 and prints which session notes block cleanup when a daily has open sessions pending consolidation.
-- All file moves use `git mv` (no plain copy+delete) when the brain is a Git repo. Discardable items go to `QUARANTINE/TRASH/`, not deletion.
+- All justified brain-internal file moves use `git mv` under the bounded standing authorization in `_COMMON/AGENTS.common.md` (no plain copy+delete) when the brain is a Git repo. Discardable items go to `QUARANTINE/TRASH/`, not deletion.

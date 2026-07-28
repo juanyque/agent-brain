@@ -1,10 +1,1 @@
-{
-  "schema_version": "agent-brain-final-lane-commands/v1",
-  "commands": [
-    "python3 -m unittest tests.test_operating_model_ledger -v",
-    "python3 model/SCRIPTS/model_check.py --strict --only worktree-scope,whitespace --format json",
-    "python3 -m unittest tests.test_operating_model_ledger.TreeManifestTests tests.test_operating_model_ledger.BrainStateSnapshotTests tests.test_model_check.ModelCheckCliTests -v",
-    "python3 -m unittest tests.test_operating_model_ledger.OperatingModelLedgerTests tests.test_operating_model_ledger.BrainStateSnapshotTests tests.test_operating_model_ledger.WorktreeSnapshotTests -v",
-    "python3 model/SCRIPTS/model_check.py --strict --only worktree-scope,git-authority,ledger --format json"
-  ]
-}
+{"commands":["python3 -m unittest tests.test_operating_model_evidence -v","python3 model/SCRIPTS/model_check.py --strict --only worktree-scope,whitespace --format json","python3 -m unittest tests.test_operating_model_evidence.TreeManifestTests tests.test_operating_model_evidence.BrainStateSnapshotTests tests.test_model_check.ModelCheckCliTests -v","python3 -m unittest tests.test_operating_model_evidence.OperatingModelContractTests tests.test_operating_model_evidence.BrainStateSnapshotTests tests.test_operating_model_evidence.WorktreeSnapshotTests -v","python3 model/SCRIPTS/model_check.py --strict --only worktree-scope,git-authority --format json"],"schema_version":"agent-brain-final-lane-commands/v1"}
