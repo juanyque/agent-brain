@@ -34,6 +34,7 @@
 - `BACKLOG` = future work, ideas, and initiatives not active enough for WIP.
 - `ARCHIVED` = historical consolidated knowledge that is no longer active.
 - `REPORTS` = views, summaries, or derived outputs.
+- `OUTBOX` = generated deliverables awaiting user collection or external delivery.
 - Avoid mixing these layers unless a local wrapper documents why.
 
 ## Operational Top-Level Directories
@@ -51,6 +52,7 @@
 - `BACKLOG/` holds non-active future initiatives and ideas.
 - `ARCHIVED/` preserves no-longer-active knowledge that should remain available as historical reference.
 - `REPORTS/` holds generated or curated views that depend on existing notes, plugins, or queries.
+- `OUTBOX/` is one-way egress and remains visible to Git. Nothing is ingested or promoted from it; material returning from outside always re-enters through `INBOX/`.
 - `QUARANTINE/` holds material that needs human disposition before a final home is chosen.
 
 ## WIP Relationships

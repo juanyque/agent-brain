@@ -39,7 +39,9 @@ Load the narrow rule payload before acting when a trigger matches:
 
 ## Safety rules
 
-- Scripts must never overwrite existing brain-local files.
+- Scripts must never overwrite existing brain-local files unless a routed
+  workflow defines an explicit replacement flag after a read-only preflight
+  and the user has authorized that replacement.
 - Never delete content during brain standardization — move to `QUARANTINE/TRASH/`.
 - `.obsidian/` is out of scope unless explicitly requested.
 - All destructive operations require `--apply` flag.

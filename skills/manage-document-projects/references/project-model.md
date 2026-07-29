@@ -62,6 +62,12 @@ outputs in separate directories. Generated documents must record the
 input-data revision, template version, output profile, and generation
 timestamp.
 
+For a project stored in a brain, keep each concrete Markdown document in the
+project instance and write printable or shareable derivatives to the
+brain-root `OUTBOX/`. Treat that directory as one-way egress. A document that
+returns from an external workflow must enter through `INBOX/` and be ingested
+normally; never promote or ingest it from `OUTBOX/`.
+
 ## Project-type package contract
 
 Keep reusable package assets below `assets/project-types/<type-id>/`:
@@ -267,6 +273,10 @@ draft -> reviewed -> approved -> signed -> superseded
 
 Never regenerate over `signed` or `superseded` evidence. Produce a new derived
 artifact and retain the relationship to the prior document.
+
+Use stable filenames for revisions of the same draft and let Git preserve
+their history. A new signed agreement, addendum, or superseding legal act is a
+new document identity, not a `_v2` filename.
 
 ## Sensitive data
 

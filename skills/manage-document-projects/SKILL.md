@@ -32,8 +32,10 @@ moving the skill.
 5. Reject unresolved variables and invalid data before conversion.
 6. Select an output profile using
    [references/output-formats.md](references/output-formats.md).
-7. Generate into a derived-output directory. Never overwrite signed or
-   externally reviewed documents.
+7. In a brain, keep the concrete Markdown document in its project and place
+   printable or shareable derivatives in the brain-root `OUTBOX/`.
+   Never ingest from `OUTBOX/` or overwrite signed or externally reviewed
+   documents.
 8. Open the result in its real viewer and inspect pagination, headings,
    tables, images, signatures, and missing placeholders.
 
@@ -225,7 +227,8 @@ date:
 ```bash
 uv run scripts/release_document.py \
   releases/lease-release.yaml \
-  generated/lease-reviewed.pdf
+  /path/to/brain/OUTBOX/project-id/lease-reviewed.pdf \
+  --brain-root /path/to/brain
 ```
 
 Publication fails before writing outputs unless both OpenSSH signatures are
@@ -243,7 +246,9 @@ Use the bundled renderer after the doctor reports `CSS_PDF=yes`:
 uv run scripts/render_document.py \
   templates/contract.md.j2 \
   data/document.yaml \
-  generated/contract.pdf
+  /path/to/brain/OUTBOX/project-id/contract.pdf \
+  --brain-root /path/to/brain \
+  --markdown-output /path/to/brain/WIP/project-id/documents/contract.md
 ```
 
 The renderer:
@@ -259,16 +264,25 @@ The renderer:
   project-type package;
 - renders Jinja in a sandbox with strict undefined variables;
 - exposes `es_date`, `es_money`, `es_number`, and `es_iban` filters;
-- writes `generated/contract.md` as the canonical rendered intermediate;
-- writes `generated/contract.provenance.yaml` with timestamp and hashes for the
+- writes the requested persistent Markdown path, or a sibling Markdown
+  intermediate when `--markdown-output` is omitted;
+- writes a sibling provenance file with timestamp and hashes for the
   template, data, defaults profile, local override, selection, output profile,
   Markdown, PDF, and governed inputs;
 - converts that Markdown to an A4 PDF through Pandoc and WeasyPrint;
 - uses the bundled CSS profile and resolves images relative to the template;
-- refuses to overwrite an existing PDF.
+- refuses to write printable brain outputs outside `OUTBOX/` or into an
+  `OUTBOX/` ignored by Git;
+- reports whether an existing artifact is committed, modified, untracked,
+  ignored, or outside version control;
+- replaces the stable output set only with `--replace`, after the user has
+  authorized that replacement.
 
-Render only into a derived-output directory. Choose a new output path when a
-prior artifact must be retained.
+Use stable document names and Git history instead of `_v1`, `_v2`, or similar
+suffixes. Run without `--replace` first. If the preflight reports an existing
+untracked or modified artifact, ask before rerunning with `--replace`.
+Do not add `OUTBOX/` contents to Git automatically. If an externally handled
+document returns, ingest it from `INBOX/`, never from `OUTBOX/`.
 
 ## Choose the output format
 
@@ -306,6 +320,8 @@ format-specific mechanisms are intentionally different.
 - Present legal content as pending professional review when that review has not
   occurred.
 - Preserve originals and signed outputs as immutable evidence.
+- Treat brain-root `OUTBOX/` as a one-way delivery queue, never as an
+  ingestion source or attachment store.
 - Make installation and project mutations dry-run-first.
 
 ## Dependencies

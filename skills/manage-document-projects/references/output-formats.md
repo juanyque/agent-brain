@@ -48,11 +48,21 @@ For the standard Jinja to Markdown to PDF circuit, use the skill renderer:
 uv run scripts/render_document.py \
   template.md.j2 \
   document.yaml \
-  generated/document.pdf
+  /path/to/brain/OUTBOX/project-id/document.pdf \
+  --brain-root /path/to/brain \
+  --markdown-output /path/to/brain/WIP/project-id/documents/document.md
 ```
 
-The rendered Markdown is kept beside the PDF. Missing Jinja variables fail
-before either output is written, and an existing PDF is never overwritten.
+The concrete Markdown can remain in the brain project while its printable PDF
+and sidecars go to the brain-root `OUTBOX/`. Without `--markdown-output`, the
+Markdown remains beside the PDF. Missing Jinja variables fail before either
+output is written. Existing artifacts require a preflight followed by
+`--replace`; keep the filename stable and use Git for revision history.
+
+Do not ignore `OUTBOX/` in Git. Its untracked or modified entries are the
+visible queue of pending deliveries, but the skill must never stage or commit
+them automatically. Nothing returns from `OUTBOX/` into the brain; returned
+documents enter through `INBOX/`.
 
 Start from `assets/profiles/css-pdf/document.css`. Copy it into the project so
 the project's output profile is versioned with its templates.

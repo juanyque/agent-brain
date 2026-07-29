@@ -25,15 +25,39 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from document_renderer import RenderRequest, render_document
 from selection_inputs import SelectionProjectError
 
 
-def main(template: Path, data: Path, output: Path) -> None:
+def main(
+    template: Path,
+    data: Path,
+    output: Path,
+    brain_root: Annotated[
+        Path | None,
+        typer.Option("--brain-root"),
+    ] = None,
+    markdown_output: Annotated[
+        Path | None,
+        typer.Option("--markdown-output"),
+    ] = None,
+    replace: Annotated[
+        bool,
+        typer.Option("--replace"),
+    ] = False,
+) -> None:
     """Render TEMPLATE with DATA into OUTPUT and a sibling Markdown file."""
-    request = RenderRequest(template=template, data=data, pdf=output)
+    request = RenderRequest(
+        template=template,
+        data=data,
+        pdf=output,
+        markdown_output=markdown_output,
+        brain_root=brain_root,
+        replace=replace,
+    )
     try:
         selection = render_document(request)
     except SelectionProjectError as error:

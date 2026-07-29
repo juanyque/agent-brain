@@ -12,6 +12,11 @@ from document_provenance import (
     build_provenance,
     provenance_yaml,
 )
+from document_output import (
+    OutputExistsError,
+    existing_output,
+    require_visible_outbox,
+)
 from document_publication import PublicationSpec, governed_selection
 from document_template import render_markdown
 from project_defaults import DefaultsResolution, require_publication_ready
@@ -31,10 +36,17 @@ class RenderRequest:
     data: Path
     pdf: Path
     publication: PublicationSpec | None = None
+    markdown_output: Path | None = None
+    brain_root: Path | None = None
+    replace: bool = False
 
     @property
     def markdown(self) -> Path:
-        return self.pdf.with_suffix(".md")
+        return (
+            self.markdown_output
+            if self.markdown_output is not None
+            else self.pdf.with_suffix(".md")
+        )
 
     @property
     def selection(self) -> Path:
@@ -51,15 +63,6 @@ class _RenderInputs:
     selection: ClauseSelection | None
     fragment_paths: tuple[str, ...] = ()
     defaults: DefaultsResolution | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class OutputExistsError(SelectionProjectError):
-    path: Path
-
-    @override
-    def __str__(self) -> str:
-        return f"output already exists: {self.path}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,21 +126,19 @@ def _prepare_inputs(request: RenderRequest) -> _RenderInputs:
 
 def render_document(request: RenderRequest) -> Path | None:
     """Create canonical Markdown, governance sidecar, and CSS-styled PDF."""
-    existing = next(
+    if request.brain_root is not None:
+        require_visible_outbox(request.pdf, request.brain_root)
+    existing = existing_output(
         (
-            path
-            for path in (
-                request.pdf,
-                request.markdown,
-                request.selection,
-                request.provenance,
-            )
-            if path.exists()
+            request.pdf,
+            request.markdown,
+            request.selection,
+            request.provenance,
         ),
-        None,
+        request.brain_root or request.pdf.parent,
     )
-    if existing is not None:
-        raise OutputExistsError(path=existing)
+    if existing is not None and not request.replace:
+        raise OutputExistsError(output=existing)
 
     inputs = _prepare_inputs(request)
     status = (
@@ -152,6 +153,7 @@ def render_document(request: RenderRequest) -> Path | None:
         fragment_paths=inputs.fragment_paths,
     )
     _ = request.pdf.parent.mkdir(parents=True, exist_ok=True)
+    _ = request.markdown.parent.mkdir(parents=True, exist_ok=True)
     _ = request.markdown.write_text(markdown, encoding="utf-8")
     if inputs.selection is not None:
         _ = request.selection.write_text(

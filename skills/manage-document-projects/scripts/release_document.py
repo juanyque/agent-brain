@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 
 import typer
 from document_renderer import PublicationSpec, RenderRequest, render_document
@@ -45,7 +45,11 @@ class _ReleaseRequestFile(BaseModel):
     release_date: date
 
 
-def _release(request_path: Path, output: Path) -> Path:
+def _release(
+    request_path: Path,
+    output: Path,
+    brain_root: Path | None = None,
+) -> Path:
     request = load_yaml(request_path, _ReleaseRequestFile)
     base = request_path.parent
     _ = render_document(
@@ -53,6 +57,7 @@ def _release(request_path: Path, output: Path) -> Path:
             template=resolve(request.template, base),
             data=resolve(request.data, base),
             pdf=output,
+            brain_root=brain_root,
             publication=PublicationSpec(
                 approval=resolve(request.approval, base),
                 approval_signature=resolve(request.approval_signature, base),
@@ -70,10 +75,17 @@ def _release(request_path: Path, output: Path) -> Path:
     return output.with_suffix(".selection.yaml")
 
 
-def main(request: Path, output: Path) -> None:
+def main(
+    request: Path,
+    output: Path,
+    brain_root: Annotated[
+        Path | None,
+        typer.Option("--brain-root"),
+    ] = None,
+) -> None:
     """Publish a reviewed document described by RELEASE into OUTPUT."""
     try:
-        selection = _release(request, output)
+        selection = _release(request, output, brain_root)
     except SelectionProjectError as error:
         raise typer.BadParameter(str(error)) from None
     typer.echo(f"Markdown: {output.with_suffix('.md')}")
