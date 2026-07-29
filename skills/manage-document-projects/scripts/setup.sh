@@ -3,64 +3,128 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$SKILL_DIR/../.." && pwd)"
 DOCTOR="$SCRIPT_DIR/doctor.sh"
-LINK_SCRIPT="$REPO_ROOT/model/SCRIPTS/skill_link.sh"
+CONFIGURATOR="$SCRIPT_DIR/configure_workspace.py"
+LINK_SCRIPT="$SCRIPT_DIR/skill_link.sh"
 PROBE_PATH="${DOCUMENT_PROJECT_PROBE_PATH:-$PATH}"
+source "$SCRIPT_DIR/setup_tools.sh"
 APPLY=0
 INTERACTIVE=1
-WEASYPRINT_CHOICE="ask"
-LIBREOFFICE_CHOICE="ask"
-OPENSSH_CHOICE="ask"
+PROFILE="${DOCUMENT_PROJECT_PROFILE:-}"
+WORKSPACE_ROOT="${DOCUMENT_PROJECT_WORKSPACE_ROOT:-}"
+PROJECTS_DIR="${DOCUMENT_PROJECT_PROJECTS_DIR:-}"
+DELIVERABLES_DIR="${DOCUMENT_PROJECT_DELIVERABLES_DIR:-}"
+INCOMING_DIR="${DOCUMENT_PROJECT_INCOMING_DIR:-}"
+GIT_VISIBILITY="${DOCUMENT_PROJECT_GIT_VISIBILITY:-}"
+WEASYPRINT_CHOICE="${DOCUMENT_PROJECT_WEASYPRINT_CHOICE:-}"
+LIBREOFFICE_CHOICE="${DOCUMENT_PROJECT_LIBREOFFICE_CHOICE:-}"
+OPENSSH_CHOICE="${DOCUMENT_PROJECT_OPENSSH_CHOICE:-}"
 
 print_usage() {
   printf '%s\n' \
     'Usage:' \
     '  setup.sh [options]' \
     '' \
-    'Options:' \
-    '  --apply                 install selected tools and link the skill' \
-    '  --with-weasyprint       install CSS-to-PDF support' \
-    '  --without-weasyprint    decline CSS-to-PDF support' \
-    '  --with-libreoffice      install Office editing and conversion support' \
-    '  --without-libreoffice   decline Office support' \
-    '  --with-openssh          install SSH signature support' \
-    '  --without-openssh       decline SSH signature support' \
-    '  --with-all-optional     install every missing optional tool' \
-    '  --non-interactive       decline unspecified optional tools'
+    'Workspace options:' \
+    '  --profile NAME            configure NAME; default is the active profile' \
+    '  --workspace-root PATH     absolute workspace root' \
+    '  --projects-dir PATH       project sources below the workspace root' \
+    '  --deliverables-dir PATH   printable outputs below the workspace root' \
+    '  --incoming-dir PATH       incoming documents below the workspace root' \
+    '  --git-visibility POLICY   required or unrestricted' \
+    '' \
+    'Tool options:' \
+    '  --with-weasyprint         install CSS-to-PDF support' \
+    '  --without-weasyprint      persistently decline CSS-to-PDF support' \
+    '  --with-libreoffice        install Office editing and conversion support' \
+    '  --without-libreoffice     persistently decline Office support' \
+    '  --with-openssh            install governed-release signature support' \
+    '  --without-openssh         persistently decline signature support' \
+    '  --with-all-optional       install every optional tool' \
+    '' \
+    'Execution options:' \
+    '  --apply                   converge tools, configuration, and skill links' \
+    '  --non-interactive         require values instead of prompting'
+}
+
+require_value() {
+  local option="$1"
+  local value="${2:-}"
+  if [[ -z "$value" ]]; then
+    printf 'ERROR: %s requires a value\n' "$option" >&2
+    exit 2
+  fi
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply)
       APPLY=1
-      ;;
-    --with-weasyprint)
-      WEASYPRINT_CHOICE="yes"
-      ;;
-    --without-weasyprint)
-      WEASYPRINT_CHOICE="no"
-      ;;
-    --with-libreoffice)
-      LIBREOFFICE_CHOICE="yes"
-      ;;
-    --without-libreoffice)
-      LIBREOFFICE_CHOICE="no"
-      ;;
-    --with-openssh)
-      OPENSSH_CHOICE="yes"
-      ;;
-    --without-openssh)
-      OPENSSH_CHOICE="no"
-      ;;
-    --with-all-optional)
-      WEASYPRINT_CHOICE="yes"
-      LIBREOFFICE_CHOICE="yes"
-      OPENSSH_CHOICE="yes"
+      shift
       ;;
     --non-interactive)
       INTERACTIVE=0
+      shift
+      ;;
+    --profile)
+      require_value "$1" "${2:-}"
+      PROFILE="$2"
+      shift 2
+      ;;
+    --workspace-root)
+      require_value "$1" "${2:-}"
+      WORKSPACE_ROOT="$2"
+      shift 2
+      ;;
+    --projects-dir)
+      require_value "$1" "${2:-}"
+      PROJECTS_DIR="$2"
+      shift 2
+      ;;
+    --deliverables-dir)
+      require_value "$1" "${2:-}"
+      DELIVERABLES_DIR="$2"
+      shift 2
+      ;;
+    --incoming-dir)
+      require_value "$1" "${2:-}"
+      INCOMING_DIR="$2"
+      shift 2
+      ;;
+    --git-visibility)
+      require_value "$1" "${2:-}"
+      GIT_VISIBILITY="$2"
+      shift 2
+      ;;
+    --with-weasyprint)
+      WEASYPRINT_CHOICE="install"
+      shift
+      ;;
+    --without-weasyprint)
+      WEASYPRINT_CHOICE="decline"
+      shift
+      ;;
+    --with-libreoffice)
+      LIBREOFFICE_CHOICE="install"
+      shift
+      ;;
+    --without-libreoffice)
+      LIBREOFFICE_CHOICE="decline"
+      shift
+      ;;
+    --with-openssh)
+      OPENSSH_CHOICE="install"
+      shift
+      ;;
+    --without-openssh)
+      OPENSSH_CHOICE="decline"
+      shift
+      ;;
+    --with-all-optional)
+      WEASYPRINT_CHOICE="install"
+      LIBREOFFICE_CHOICE="install"
+      OPENSSH_CHOICE="install"
+      shift
       ;;
     -h|--help)
       print_usage
@@ -71,31 +135,14 @@ while [[ $# -gt 0 ]]; do
       exit 2
       ;;
   esac
-  shift
 done
 
-has_tool() {
-  PATH="$PROBE_PATH" command -v "$1" >/dev/null 2>&1
-}
-
-has_libreoffice() {
-  has_tool soffice || has_tool libreoffice
-}
-
-ask_optional() {
+export_override() {
   local name="$1"
-  local purpose="$2"
-  local answer
-  printf 'Install %s? %s [y/N] ' "$name" "$purpose"
-  read -r answer || answer=""
-  case "$answer" in
-    y|Y|yes|YES)
-      OPTIONAL_ANSWER="yes"
-      ;;
-    *)
-      OPTIONAL_ANSWER="no"
-      ;;
-  esac
+  local value="$2"
+  if [[ -n "$value" ]]; then
+    export "$name=$value"
+  fi
 }
 
 printf 'manage-document-projects setup\n'
@@ -110,117 +157,53 @@ bash "$DOCTOR"
 doctor_status=$?
 set -e
 
-core_packages=()
-if ! has_tool python3; then
-  core_packages+=("python")
-fi
-if ! has_tool uv; then
-  core_packages+=("uv")
-fi
-if ! has_tool pandoc; then
-  core_packages+=("pandoc")
-fi
+reconcile_core_tools
 
-if [[ $APPLY -eq 1 && $INTERACTIVE -eq 1 ]]; then
-  if ! has_tool weasyprint && [[ "$WEASYPRINT_CHOICE" == "ask" ]]; then
-    ask_optional "WeasyPrint" "Useful for PDF generated from HTML and CSS."
-    WEASYPRINT_CHOICE="$OPTIONAL_ANSWER"
-  fi
-  if ! has_libreoffice && [[ "$LIBREOFFICE_CHOICE" == "ask" ]]; then
-    ask_optional "LibreOffice" "Useful for editing reference files and Office-to-PDF conversion."
-    LIBREOFFICE_CHOICE="$OPTIONAL_ANSWER"
-  fi
-  if ! has_tool ssh-keygen && [[ "$OPENSSH_CHOICE" == "ask" ]]; then
-    ask_optional "OpenSSH" "Required to sign and verify governed releases."
-    OPENSSH_CHOICE="$OPTIONAL_ANSWER"
-  fi
-elif [[ $APPLY -eq 1 ]]; then
-  if [[ "$WEASYPRINT_CHOICE" == "ask" ]]; then
-    WEASYPRINT_CHOICE="no"
-  fi
-  if [[ "$LIBREOFFICE_CHOICE" == "ask" ]]; then
-    LIBREOFFICE_CHOICE="no"
-  fi
-  if [[ "$OPENSSH_CHOICE" == "ask" ]]; then
-    OPENSSH_CHOICE="no"
-  fi
-fi
+export_override DOCUMENT_PROJECT_PROFILE "$PROFILE"
+export_override DOCUMENT_PROJECT_WORKSPACE_ROOT "$WORKSPACE_ROOT"
+export_override DOCUMENT_PROJECT_PROJECTS_DIR "$PROJECTS_DIR"
+export_override DOCUMENT_PROJECT_DELIVERABLES_DIR "$DELIVERABLES_DIR"
+export_override DOCUMENT_PROJECT_INCOMING_DIR "$INCOMING_DIR"
+export_override DOCUMENT_PROJECT_GIT_VISIBILITY "$GIT_VISIBILITY"
+export_override DOCUMENT_PROJECT_WEASYPRINT_CHOICE "$WEASYPRINT_CHOICE"
+export_override DOCUMENT_PROJECT_LIBREOFFICE_CHOICE "$LIBREOFFICE_CHOICE"
+export_override DOCUMENT_PROJECT_OPENSSH_CHOICE "$OPENSSH_CHOICE"
 
-formula_packages=()
-if [[ ${#core_packages[@]} -gt 0 ]]; then
-  formula_packages=("${core_packages[@]}")
-fi
-if has_tool weasyprint; then
-  if [[ "$WEASYPRINT_CHOICE" == "yes" ]]; then
-    printf '\nSKIP    weasyprint already installed\n'
-  fi
-elif [[ "$WEASYPRINT_CHOICE" == "yes" ]]; then
-  formula_packages+=("weasyprint")
-elif [[ "$WEASYPRINT_CHOICE" == "ask" ]]; then
-  printf '\nOPTION  weasyprint: HTML and CSS to paginated PDF. Use --with-weasyprint.\n'
+runtime_uv="$(PATH="$PROBE_PATH" command -v uv 2>/dev/null || command -v uv 2>/dev/null || true)"
+if [[ -z "$runtime_uv" ]]; then
+  printf 'PLAN    configure workspace after uv is installed\n'
 else
-  printf '\nSKIP    weasyprint not selected\n'
-fi
-if has_tool ssh-keygen; then
-  if [[ "$OPENSSH_CHOICE" == "yes" ]]; then
-    printf 'SKIP    openssh already installed\n'
+  config_log="$(mktemp)"
+  trap 'rm -f "$config_log"' EXIT
+  configure_command=("$runtime_uv" run --script "$CONFIGURATOR")
+  if [[ $APPLY -eq 1 ]]; then
+    configure_command+=("--apply")
   fi
-elif [[ "$OPENSSH_CHOICE" == "yes" ]]; then
-  formula_packages+=("openssh")
-elif [[ "$OPENSSH_CHOICE" == "ask" ]]; then
-  printf 'OPTION  openssh: sign and verify governed releases. Use --with-openssh.\n'
-else
-  printf 'SKIP    openssh not selected\n'
-fi
-
-install_libreoffice=0
-if has_libreoffice; then
-  if [[ "$LIBREOFFICE_CHOICE" == "yes" ]]; then
-    printf 'SKIP    libreoffice already installed\n'
+  if [[ $INTERACTIVE -eq 0 ]]; then
+    configure_command+=("--non-interactive")
   fi
-elif [[ "$LIBREOFFICE_CHOICE" == "yes" ]]; then
-  install_libreoffice=1
-elif [[ "$LIBREOFFICE_CHOICE" == "ask" ]]; then
-  printf 'OPTION  libreoffice: edit reference files and convert Office documents to PDF. Use --with-libreoffice.\n'
-else
-  printf 'SKIP    libreoffice not selected\n'
+  "${configure_command[@]}" | tee "$config_log"
+  optional_line="$(grep '^OPTIONAL_TOOLS ' "$config_log" | tail -1)"
+  read -r _ weasyprint_setting libreoffice_setting openssh_setting <<< "$optional_line"
+  WEASYPRINT_CHOICE="${weasyprint_setting#*=}"
+  LIBREOFFICE_CHOICE="${libreoffice_setting#*=}"
+  OPENSSH_CHOICE="${openssh_setting#*=}"
 fi
 
-if [[ ${#formula_packages[@]} -gt 0 || $install_libreoffice -eq 1 ]]; then
-  brew_path="$(PATH="$PROBE_PATH" command -v brew 2>/dev/null || true)"
-  if [[ -z "$brew_path" ]]; then
-    printf '\nERROR: automatic setup currently requires Homebrew.\n' >&2
-    printf 'Install the missing tools manually, then run doctor.sh again.\n' >&2
-    exit 2
-  fi
-
-  if [[ ${#formula_packages[@]} -gt 0 && $APPLY -eq 1 ]]; then
-    printf '\nINSTALL %s install %s\n' "$brew_path" "${formula_packages[*]}"
-    "$brew_path" install "${formula_packages[@]}"
-  elif [[ ${#formula_packages[@]} -gt 0 ]]; then
-    printf '\nPLAN    brew install %s\n' "${formula_packages[*]}"
-  fi
-  if [[ $install_libreoffice -eq 1 && $APPLY -eq 1 ]]; then
-    printf 'INSTALL %s install --cask libreoffice\n' "$brew_path"
-    "$brew_path" install --cask libreoffice
-  elif [[ $install_libreoffice -eq 1 ]]; then
-    printf 'PLAN    brew install --cask libreoffice\n'
-  fi
-fi
-
-if [[ ${#core_packages[@]} -eq 0 ]]; then
-  printf '\nCORE    required tools already installed\n'
-fi
+reconcile_optional_tools \
+  "$WEASYPRINT_CHOICE" \
+  "$LIBREOFFICE_CHOICE" \
+  "$OPENSSH_CHOICE"
 
 printf '\n'
 if [[ $APPLY -eq 1 ]]; then
-  bash "$LINK_SCRIPT" "$SKILL_DIR" --apply
+  bash "$LINK_SCRIPT" --apply
   printf '\nPost-install doctor\n'
   bash "$DOCTOR"
   exit $?
 fi
 
-bash "$LINK_SCRIPT" "$SKILL_DIR"
+bash "$LINK_SCRIPT"
 printf '\nNo changes made. Re-run with --apply to execute the plan.\n'
 if [[ $doctor_status -eq 0 ]]; then
   printf 'Core environment is already ready.\n'

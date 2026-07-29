@@ -32,7 +32,7 @@ governance:
   signed_documents: immutable-revisions
   private_keys: external-to-project
 references:
-  brain_ref: brain://wip/stable-project-id
+  workspace_ref: workspace://projects/stable-project-id
 data_store:
   status: unselected
   store_id: stable-project-id-secure
@@ -62,11 +62,11 @@ outputs in separate directories. Generated documents must record the
 input-data revision, template version, output profile, and generation
 timestamp.
 
-For a project stored in a brain, keep each concrete Markdown document in the
-project instance and write printable or shareable derivatives to the
-brain-root `OUTBOX/`. Treat that directory as one-way egress. A document that
-returns from an external workflow must enter through `INBOX/` and be ingested
-normally; never promote or ingest it from `OUTBOX/`.
+Keep each concrete Markdown document in the project instance and write
+printable or shareable derivatives to the configured deliverables location.
+Treat that directory as one-way egress. A document that returns from an
+external workflow must enter through the configured incoming location and be
+ingested normally; never promote or ingest it from deliverables.
 
 ## Project-type package contract
 
@@ -117,8 +117,8 @@ opts in through `project.defaults_profile`. The engine merges, in order:
 Derived values such as a one-month deposit, a one-month additional guarantee,
 annual-period dates, and first-rent proration are calculated after this merge.
 The resolver uses `Decimal` and `ROUND_HALF_UP` for money. The local override
-remains brain-owned, is never discovered or overwritten by skill setup, and is
-hashed into generated-document provenance.
+remains project-owned, is never discovered or overwritten by skill setup, and
+is hashed into generated-document provenance.
 
 Use JSON Schema Draft 2020-12 for instance data. Reject unknown fields so a
 schema-version change is explicit. Keep legal prose in a versioned clause

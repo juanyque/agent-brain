@@ -30,15 +30,16 @@ from typing import Annotated
 import typer
 from document_renderer import RenderRequest, render_document
 from selection_inputs import SelectionProjectError
+from workspace_bootstrap import ensure_workspace
 
 
 def main(
     template: Path,
     data: Path,
     output: Path,
-    brain_root: Annotated[
-        Path | None,
-        typer.Option("--brain-root"),
+    profile: Annotated[
+        str | None,
+        typer.Option("--profile"),
     ] = None,
     markdown_output: Annotated[
         Path | None,
@@ -50,15 +51,15 @@ def main(
     ] = False,
 ) -> None:
     """Render TEMPLATE with DATA into OUTPUT and a sibling Markdown file."""
-    request = RenderRequest(
-        template=template,
-        data=data,
-        pdf=output,
-        markdown_output=markdown_output,
-        brain_root=brain_root,
-        replace=replace,
-    )
     try:
+        request = RenderRequest(
+            template=template,
+            data=data,
+            pdf=output,
+            workspace=ensure_workspace(profile),
+            markdown_output=markdown_output,
+            replace=replace,
+        )
         selection = render_document(request)
     except SelectionProjectError as error:
         raise typer.BadParameter(str(error)) from None

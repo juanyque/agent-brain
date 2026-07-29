@@ -4,9 +4,10 @@ import subprocess
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import override
+from typing import assert_never, override
 
 from selection_inputs import SelectionProjectError
+from workspace_config import GitVisibility, ResolvedWorkspace
 
 
 class OutputState(StrEnum):
@@ -36,22 +37,22 @@ class OutputExistsError(SelectionProjectError):
 
 
 @dataclass(frozen=True, slots=True)
-class OutboxLocationError(SelectionProjectError):
+class DeliverableLocationError(SelectionProjectError):
     path: Path
-    outbox: Path
+    deliverables_root: Path
 
     @override
     def __str__(self) -> str:
-        return f"printable brain output must be inside {self.outbox}: {self.path}"
+        return f"printable output must be inside {self.deliverables_root}: {self.path}"
 
 
 @dataclass(frozen=True, slots=True)
-class IgnoredOutboxError(SelectionProjectError):
+class IgnoredDeliverableError(SelectionProjectError):
     path: Path
 
     @override
     def __str__(self) -> str:
-        return f"OUTBOX output is ignored by Git and would be invisible: {self.path}"
+        return f"deliverable is ignored by Git and would be invisible: {self.path}"
 
 
 def _git(
@@ -111,15 +112,23 @@ def output_state(path: Path, repository_hint: Path) -> OutputState:
     return OutputState.UNVERSIONED
 
 
-def require_visible_outbox(path: Path, brain_root: Path) -> None:
-    outbox = brain_root.resolve() / "OUTBOX"
+def require_deliverable(path: Path, workspace: ResolvedWorkspace) -> None:
     resolved = path.resolve(strict=False)
     try:
-        _ = resolved.relative_to(outbox)
+        _ = resolved.relative_to(workspace.deliverables_root)
     except ValueError as error:
-        raise OutboxLocationError(path=resolved, outbox=outbox) from error
-    if output_state(resolved, brain_root) is OutputState.IGNORED:
-        raise IgnoredOutboxError(path=resolved)
+        raise DeliverableLocationError(
+            path=resolved,
+            deliverables_root=workspace.deliverables_root,
+        ) from error
+    match workspace.policies.deliverables_git_visibility:
+        case GitVisibility.REQUIRED:
+            if output_state(resolved, workspace.workspace_root) is OutputState.IGNORED:
+                raise IgnoredDeliverableError(path=resolved)
+        case GitVisibility.UNRESTRICTED:
+            return
+        case unreachable:
+            assert_never(unreachable)
 
 
 def existing_output(

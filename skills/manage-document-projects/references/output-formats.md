@@ -48,21 +48,22 @@ For the standard Jinja to Markdown to PDF circuit, use the skill renderer:
 uv run scripts/render_document.py \
   template.md.j2 \
   document.yaml \
-  /path/to/brain/OUTBOX/project-id/document.pdf \
-  --brain-root /path/to/brain \
-  --markdown-output /path/to/brain/WIP/project-id/documents/document.md
+  /path/to/workspace/exports/project-id/document.pdf \
+  --markdown-output /path/to/workspace/projects/project-id/documents/document.md
 ```
 
-The concrete Markdown can remain in the brain project while its printable PDF
-and sidecars go to the brain-root `OUTBOX/`. Without `--markdown-output`, the
-Markdown remains beside the PDF. Missing Jinja variables fail before either
-output is written. Existing artifacts require a preflight followed by
-`--replace`; keep the filename stable and use Git for revision history.
+The concrete Markdown can remain in the configured project location while its
+printable PDF and sidecars go to the configured deliverables location. Without
+`--markdown-output`, the Markdown remains beside the PDF. Missing Jinja
+variables fail before either output is written. Existing artifacts require a
+preflight followed by `--replace`; keep the filename stable and use Git for
+revision history.
 
-Do not ignore `OUTBOX/` in Git. Its untracked or modified entries are the
-visible queue of pending deliveries, but the skill must never stage or commit
-them automatically. Nothing returns from `OUTBOX/` into the brain; returned
-documents enter through `INBOX/`.
+When the active profile sets `deliverables_git_visibility: required`, do not
+ignore its deliverables directory in Git. Untracked or modified entries form a
+visible queue, but the skill never stages or commits them automatically.
+Nothing returns from deliverables into the workspace; returned documents enter
+through the configured incoming directory.
 
 Start from `assets/profiles/css-pdf/document.css`. Copy it into the project so
 the project's output profile is versioned with its templates.

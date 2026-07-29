@@ -14,7 +14,7 @@ governance:
   signed_documents: immutable-revisions
   private_keys: external-to-project
 references:
-  brain_ref: brain://wip/example-residential-lease
+  workspace_ref: workspace://projects/example-residential-lease
 data_store:
   status: unselected
   store_id: example-residential-lease-secure

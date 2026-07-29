@@ -6,16 +6,16 @@ from pathlib import Path
 from typing import override
 
 from clause_selection import ClauseSelection, DocumentData
+from document_output import (
+    OutputExistsError,
+    existing_output,
+    require_deliverable,
+)
 from document_provenance import (
     GovernancePaths,
     ProvenanceRequest,
     build_provenance,
     provenance_yaml,
-)
-from document_output import (
-    OutputExistsError,
-    existing_output,
-    require_visible_outbox,
 )
 from document_publication import PublicationSpec, governed_selection
 from document_template import render_markdown
@@ -28,6 +28,7 @@ from selection_project import (
     request_for_template,
     selection_yaml,
 )
+from workspace_config import ResolvedWorkspace
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,9 +36,9 @@ class RenderRequest:
     template: Path
     data: Path
     pdf: Path
+    workspace: ResolvedWorkspace
     publication: PublicationSpec | None = None
     markdown_output: Path | None = None
-    brain_root: Path | None = None
     replace: bool = False
 
     @property
@@ -126,8 +127,7 @@ def _prepare_inputs(request: RenderRequest) -> _RenderInputs:
 
 def render_document(request: RenderRequest) -> Path | None:
     """Create canonical Markdown, governance sidecar, and CSS-styled PDF."""
-    if request.brain_root is not None:
-        require_visible_outbox(request.pdf, request.brain_root)
+    require_deliverable(request.pdf, request.workspace)
     existing = existing_output(
         (
             request.pdf,
@@ -135,7 +135,7 @@ def render_document(request: RenderRequest) -> Path | None:
             request.selection,
             request.provenance,
         ),
-        request.brain_root or request.pdf.parent,
+        request.workspace.workspace_root,
     )
     if existing is not None and not request.replace:
         raise OutputExistsError(output=existing)

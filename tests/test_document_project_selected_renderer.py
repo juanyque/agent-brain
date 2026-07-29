@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import yaml
+from document_project_workspace import workspace_environment
 from pydantic import BaseModel, ConfigDict
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +40,7 @@ class SelectedDocumentRendererTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             workspace = Path(raw)
             output = workspace / "lease.pdf"
+            environment = workspace_environment(workspace)
 
             # When
             result = subprocess.run(
@@ -55,6 +57,7 @@ class SelectedDocumentRendererTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=60,
+                env=environment,
             )
 
             # Then
@@ -91,12 +94,11 @@ class SelectedDocumentRendererTests(unittest.TestCase):
             workspace = Path(raw)
             data = workspace / "no-rent-update.yaml"
             output = workspace / "lease.pdf"
+            environment = workspace_environment(workspace)
             _ = data.write_text(
                 COMPLETE_DATA.read_text(encoding="utf-8").replace(
                     "    monthly_rent: 9999\n",
-                    "    monthly_rent: 9999\n"
-                    "    rent_update:\n"
-                    "      enabled: false\n",
+                    "    monthly_rent: 9999\n    rent_update:\n      enabled: false\n",
                     1,
                 ),
                 encoding="utf-8",
@@ -117,6 +119,7 @@ class SelectedDocumentRendererTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=60,
+                env=environment,
             )
 
             # Then
@@ -130,9 +133,7 @@ class SelectedDocumentRendererTests(unittest.TestCase):
                 ),
             )
             assert "lease.rent-update@0.1.0" not in selection.candidate_clauses
-            assert selection.not_applicable_clauses == (
-                "lease.rent-update@0.1.0",
-            )
+            assert selection.not_applicable_clauses == ("lease.rent-update@0.1.0",)
             assert "<!-- clause: lease.rent-update@0.1.0 -->" not in rendered
 
 

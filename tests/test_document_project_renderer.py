@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from document_project_workspace import workspace_environment
+
 ROOT = Path(__file__).resolve().parents[1]
 RENDERER = (
     ROOT / "skills" / "manage-document-projects" / "scripts" / "render_document.py"
@@ -28,6 +30,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
             template = RESIDENTIAL_LEASE / "templates" / "reservation.md.j2"
             data = RESIDENTIAL_LEASE / "examples" / "minimal-project.yaml"
             output = workspace / "reservation.pdf"
+            environment = workspace_environment(workspace)
 
             # When
             result = subprocess.run(
@@ -44,6 +47,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=60,
+                env=environment,
             )
 
             # Then
@@ -77,6 +81,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             workspace = Path(raw)
             data = RESIDENTIAL_LEASE / "examples" / "minimal-project.yaml"
+            environment = workspace_environment(workspace)
 
             # When
             results = tuple(
@@ -96,6 +101,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
                     capture_output=True,
                     text=True,
                     timeout=60,
+                    env=environment,
                 )
                 for document_type in RESIDENTIAL_DOCUMENT_TYPES
             )
@@ -126,6 +132,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
             source_data = RESIDENTIAL_LEASE / "examples" / "minimal-project.yaml"
             invalid_data = workspace / "invalid-project.yaml"
             output = workspace / "reservation.pdf"
+            environment = workspace_environment(workspace)
             _ = invalid_data.write_text(
                 source_data.read_text(encoding="utf-8").replace(
                     "id: synthetic-residential-lease",
@@ -150,6 +157,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=60,
+                env=environment,
             )
 
             # Then
@@ -167,6 +175,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
             template = workspace / "reserva.md.j2"
             data = workspace / "datos.yaml"
             output = workspace / "reserva.pdf"
+            environment = workspace_environment(workspace)
             _ = template.write_text(
                 "# Contrato de {{ contrato.tipo }}\n\n"
                 "Fecha: {{ contrato.fecha }}.\n\n"
@@ -197,6 +206,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=60,
+                env=environment,
             )
 
             # Then
@@ -218,6 +228,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
             template = workspace / "alquiler.md.j2"
             data = workspace / "datos.yaml"
             output = workspace / "alquiler.pdf"
+            environment = workspace_environment(workspace)
             _ = template.write_text(
                 "# Contrato\n\nIBAN: {{ arrendador.iban }}\n",
                 encoding="utf-8",
@@ -242,6 +253,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=60,
+                env=environment,
             )
 
             # Then
@@ -257,6 +269,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
             template = workspace / "reserva.md.j2"
             data = workspace / "datos.yaml"
             output = workspace / "reserva.pdf"
+            environment = workspace_environment(workspace)
             _ = template.write_text("# {{ titulo }}\n", encoding="utf-8")
             _ = data.write_text("titulo: Documento nuevo\n", encoding="utf-8")
             _ = output.write_bytes(b"%PDF-existing")
@@ -276,6 +289,7 @@ class DocumentProjectRendererTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=60,
+                env=environment,
             )
 
             # Then

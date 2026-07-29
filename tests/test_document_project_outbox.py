@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from document_project_workspace import workspace_environment
 
 ROOT = Path(__file__).resolve().parents[1]
 RENDERER = (
@@ -28,14 +29,17 @@ def _run_renderer(
             str(template),
             str(data),
             str(output),
-            "--brain-root",
-            str(brain),
             *options,
         ],
         check=False,
         capture_output=True,
         text=True,
         timeout=60,
+        env=workspace_environment(
+            brain,
+            deliverables=Path("OUTBOX"),
+            git_visibility="required",
+        ),
     )
 
 

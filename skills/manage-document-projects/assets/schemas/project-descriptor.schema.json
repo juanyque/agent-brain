@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-brain.local/manage-document-projects/project-descriptor-0.2.0.schema.json",
+  "$id": "urn:manage-document-projects:schema:project-descriptor:0.2.0",
   "title": "Document project descriptor",
   "type": "object",
   "additionalProperties": false,
@@ -81,7 +81,7 @@
         "personal_data_location": {
           "enum": [
             "secure-store-only",
-            "private-brain-plaintext"
+            "private-workspace-plaintext"
           ]
         },
         "signed_documents": {
@@ -96,16 +96,16 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "brain_ref"
+        "workspace_ref"
       ],
       "properties": {
-        "brain_ref": {
+        "workspace_ref": {
           "type": "string",
-          "pattern": "^brain://[a-z0-9]+(?:[./-][a-z0-9]+)*$"
+          "pattern": "^workspace://[a-z0-9]+(?:[./-][a-z0-9]+)*$"
         },
         "data_ref": {
           "type": "string",
-          "pattern": "^brain://[a-z0-9]+(?:[./-][a-z0-9]+)*$"
+          "pattern": "^workspace://[a-z0-9]+(?:[./-][a-z0-9]+)*$"
         }
       }
     },
@@ -211,11 +211,11 @@
           "$ref": "#/$defs/storeId"
         },
         "backend": {
-          "const": "private-brain-plaintext"
+          "const": "private-workspace-plaintext"
         },
         "root_ref": {
           "type": "string",
-          "pattern": "^brain://[a-z0-9]+(?:[./-][a-z0-9]+)*$"
+          "pattern": "^workspace://[a-z0-9]+(?:[./-][a-z0-9]+)*$"
         },
         "version_control": {
           "const": "git"

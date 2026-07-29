@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 from document_governance_fixtures import DATA, RELEASER, TEMPLATE
+from document_project_workspace import workspace_environment
 
 
 def run_release(
@@ -47,5 +48,6 @@ def run_release(
         capture_output=True,
         text=True,
         timeout=60,
+        env=workspace_environment(workspace),
     )
     return result, output

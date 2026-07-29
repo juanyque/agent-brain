@@ -10,12 +10,12 @@ data canonical; treat PDF, DOCX, ODT, and HTML as generated artifacts.
 
 ## Start safely
 
-1. Run `bash scripts/doctor.sh`.
-2. If required tools are missing, run `bash scripts/setup.sh` and review the
-   dry-run.
-3. Run `bash scripts/setup.sh --apply` only with explicit authorization to
-   install packages and link the skill.
-4. Run the doctor again after any toolchain or output-profile change.
+1. Run `bash scripts/setup.sh` and review the dry-run.
+2. Run `bash scripts/setup.sh --apply` only with explicit authorization to
+   install packages, create or update the fixed workspace configuration, and
+   link the skill.
+3. Run the setup again whenever the workspace or optional-tool choices change.
+   It is idempotent and verifies the resulting environment.
 
 Read [references/setup.md](references/setup.md) when installing, repairing, or
 moving the skill.
@@ -32,9 +32,9 @@ moving the skill.
 5. Reject unresolved variables and invalid data before conversion.
 6. Select an output profile using
    [references/output-formats.md](references/output-formats.md).
-7. In a brain, keep the concrete Markdown document in its project and place
-   printable or shareable derivatives in the brain-root `OUTBOX/`.
-   Never ingest from `OUTBOX/` or overwrite signed or externally reviewed
+7. Keep concrete Markdown under the configured project location and printable
+   or shareable derivatives under the configured deliverables location.
+   Never ingest from deliverables or overwrite signed or externally reviewed
    documents.
 8. Open the result in its real viewer and inspect pagination, headings,
    tables, images, signatures, and missing placeholders.
@@ -51,12 +51,12 @@ uvx check-jsonschema \
 ```
 
 Start from `assets/examples/minimal-project-descriptor.yaml`. Keep only opaque
-project, property, package, brain, and data-store references in this
-descriptor. For an explicitly personal prototype in a private brain, the user
-may choose `private-brain-plaintext`: set the gate to `prototype`, record the
-risk acceptance, and keep future hardening visible. Use `blocked` until all
-required storage decisions exist in other contexts; use `ready` only when
-every declared check has passed.
+project, property, package, workspace, and data-store references in this
+descriptor. For an explicitly personal prototype in a private repository, the
+user may choose `private-workspace-plaintext`: set the gate to `prototype`,
+record the risk acceptance, and keep future hardening visible. Use `blocked`
+until all required storage decisions exist in other contexts; use `ready` only
+when every declared check has passed.
 
 The bundled draft residential package lives at
 `assets/project-types/residential-lease/`. Validate its example against its
@@ -67,7 +67,7 @@ clauses as pending professional review. Read its `clauses/catalog.yaml` and
 selected jurisdiction layer before adapting a contract; do not render clauses
 whose required facts remain blocked.
 
-Initialize a brain-local customization file without copying skill defaults:
+Initialize a project-local customization file without copying skill defaults:
 
 ```bash
 uv run scripts/init_document_project.py /path/to/project
@@ -77,7 +77,7 @@ uv run scripts/init_document_project.py /path/to/project --apply
 The command creates `data/defaults.override.yaml` only when explicitly applied
 and never overwrites an existing file. A project opts in with
 `project.defaults_profile`. Resolution order is the versioned skill profile,
-then the sibling brain-local override, then instance data. The provenance
+then the sibling project-local override, then instance data. The provenance
 sidecar records the profile and override hashes.
 
 ## Preserve legal source snapshots
@@ -227,8 +227,7 @@ date:
 ```bash
 uv run scripts/release_document.py \
   releases/lease-release.yaml \
-  /path/to/brain/OUTBOX/project-id/lease-reviewed.pdf \
-  --brain-root /path/to/brain
+  /path/to/workspace/exports/project-id/lease-reviewed.pdf
 ```
 
 Publication fails before writing outputs unless both OpenSSH signatures are
@@ -246,10 +245,15 @@ Use the bundled renderer after the doctor reports `CSS_PDF=yes`:
 uv run scripts/render_document.py \
   templates/contract.md.j2 \
   data/document.yaml \
-  /path/to/brain/OUTBOX/project-id/contract.pdf \
-  --brain-root /path/to/brain \
-  --markdown-output /path/to/brain/WIP/project-id/documents/contract.md
+  /path/to/workspace/exports/project-id/contract.pdf \
+  --markdown-output /path/to/workspace/projects/project-id/documents/contract.md
 ```
+
+Both commands load the fixed configuration and use its `default_profile`.
+Pass `--profile NAME` only to select another configured profile. If the
+configuration is missing, they launch `setup.sh --apply`; automation must
+supply the non-interactive setup variables described in
+[references/setup.md](references/setup.md).
 
 The renderer:
 
@@ -271,8 +275,9 @@ The renderer:
   Markdown, PDF, and governed inputs;
 - converts that Markdown to an A4 PDF through Pandoc and WeasyPrint;
 - uses the bundled CSS profile and resolves images relative to the template;
-- refuses to write printable brain outputs outside `OUTBOX/` or into an
-  `OUTBOX/` ignored by Git;
+- refuses to write printable outputs outside the configured deliverables
+  location or into a Git-ignored deliverables location when the profile
+  requires Git visibility;
 - reports whether an existing artifact is committed, modified, untracked,
   ignored, or outside version control;
 - replaces the stable output set only with `--replace`, after the user has
@@ -281,8 +286,9 @@ The renderer:
 Use stable document names and Git history instead of `_v1`, `_v2`, or similar
 suffixes. Run without `--replace` first. If the preflight reports an existing
 untracked or modified artifact, ask before rerunning with `--replace`.
-Do not add `OUTBOX/` contents to Git automatically. If an externally handled
-document returns, ingest it from `INBOX/`, never from `OUTBOX/`.
+Do not add deliverables to Git automatically. If an externally handled
+document returns, ingest it from the configured incoming location, never from
+the deliverables location.
 
 ## Choose the output format
 
@@ -320,8 +326,8 @@ format-specific mechanisms are intentionally different.
 - Present legal content as pending professional review when that review has not
   occurred.
 - Preserve originals and signed outputs as immutable evidence.
-- Treat brain-root `OUTBOX/` as a one-way delivery queue, never as an
-  ingestion source or attachment store.
+- Treat the configured deliverables location as a one-way delivery queue,
+  never as an ingestion source or attachment store.
 - Make installation and project mutations dry-run-first.
 
 ## Dependencies

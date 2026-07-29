@@ -25,9 +25,12 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Literal
 
 import typer
-from document_renderer import PublicationSpec, RenderRequest, render_document
+from document_publication import PublicationSpec
+from document_renderer import RenderRequest, render_document
 from pydantic import BaseModel, ConfigDict
 from selection_inputs import SelectionProjectError, load_yaml, resolve
+from workspace_bootstrap import ensure_workspace
+from workspace_config import ResolvedWorkspace
 
 
 class _ReleaseRequestFile(BaseModel):
@@ -48,7 +51,7 @@ class _ReleaseRequestFile(BaseModel):
 def _release(
     request_path: Path,
     output: Path,
-    brain_root: Path | None = None,
+    workspace: ResolvedWorkspace,
 ) -> Path:
     request = load_yaml(request_path, _ReleaseRequestFile)
     base = request_path.parent
@@ -57,7 +60,7 @@ def _release(
             template=resolve(request.template, base),
             data=resolve(request.data, base),
             pdf=output,
-            brain_root=brain_root,
+            workspace=workspace,
             publication=PublicationSpec(
                 approval=resolve(request.approval, base),
                 approval_signature=resolve(request.approval_signature, base),
@@ -78,14 +81,14 @@ def _release(
 def main(
     request: Path,
     output: Path,
-    brain_root: Annotated[
-        Path | None,
-        typer.Option("--brain-root"),
+    profile: Annotated[
+        str | None,
+        typer.Option("--profile"),
     ] = None,
 ) -> None:
     """Publish a reviewed document described by RELEASE into OUTPUT."""
     try:
-        selection = _release(request, output, brain_root)
+        selection = _release(request, output, ensure_workspace(profile))
     except SelectionProjectError as error:
         raise typer.BadParameter(str(error)) from None
     typer.echo(f"Markdown: {output.with_suffix('.md')}")
