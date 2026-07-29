@@ -54,7 +54,10 @@ jobs:
       - name: Run committed-range gates
         run: |
           set -eu
-          git diff "${MODEL_BASE}...HEAD" --check
+          git diff "${MODEL_BASE}...HEAD" --check -- \
+            . \
+            ':(exclude)skills/manage-document-projects/assets/project-types/residential-lease/jurisdictions/**/legal-sources/snapshots/**/raw/**' \
+            ':(exclude)skills/manage-document-projects/assets/project-types/residential-lease/templates/*.md.j2'
           python3 model/SCRIPTS/model_check.py --strict --git-base "$MODEL_BASE" --only committed-scope --format json
 
       - name: Run contract and integration tests

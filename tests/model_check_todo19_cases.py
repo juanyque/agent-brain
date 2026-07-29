@@ -260,6 +260,16 @@ class WorkflowContractTests(unittest.TestCase):
         worktree = job.step_named("Run worktree gates")
 
         self.assertIn('git diff "${MODEL_BASE}...HEAD" --check', committed)
+        self.assertIn(
+            ":(exclude)skills/manage-document-projects/assets/project-types/"
+            "residential-lease/jurisdictions/**/legal-sources/snapshots/**/raw/**",
+            committed,
+        )
+        self.assertIn(
+            ":(exclude)skills/manage-document-projects/assets/project-types/"
+            "residential-lease/templates/*.md.j2",
+            committed,
+        )
         self.assertIn("--git-base", committed)
         self.assertIn("committed-scope", committed)
         self.assertIn("git diff HEAD --check", worktree)

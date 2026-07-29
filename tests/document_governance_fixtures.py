@@ -198,4 +198,3 @@ def write_signed_governance(
         allowed_signers,
         checks,
     )
-
