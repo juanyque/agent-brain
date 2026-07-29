@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import ClassVar, Literal, override
 
 from clause_selection import DocumentData
+from document_preflight import (
+    DocumentPreflightRequest,
+    require_document_data,
+    required_paths,
+)
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from rental_calculations import calculate_initial_payment
 from selection_inputs import (
@@ -214,11 +219,20 @@ def _derive(
 def resolve_project_data(
     manifest_path: Path,
     data_path: Path,
+    document: str | None = None,
 ) -> ResolvedProjectData:
     manifest = load_yaml(manifest_path, ProjectTypeManifest)
     instance = load_yaml(data_path, DocumentData)
     project = ProjectEnvelope.model_validate(instance.root).project
     if project.defaults_profile is None:
+        require_document_data(
+            DocumentPreflightRequest(
+                root=instance.root,
+                document=document or "project",
+                data_path=data_path,
+                required_paths=required_paths(manifest, document),
+            ),
+        )
         return ResolvedProjectData(data=instance, defaults=None)
     try:
         profile_ref = manifest.defaults_profiles[project.defaults_profile]
@@ -235,6 +249,14 @@ def resolve_project_data(
         merged = _merge(package.data, override.data)
         merged = _merge(merged, instance.root)
         override_sha256 = digest(override_path)
+    require_document_data(
+        DocumentPreflightRequest(
+            root=merged,
+            document=document or "project",
+            data_path=data_path,
+            required_paths=required_paths(manifest, document),
+        ),
+    )
     return ResolvedProjectData(
         data=DocumentData.model_validate(_derive(merged, package.rules)),
         defaults=DefaultsResolution(

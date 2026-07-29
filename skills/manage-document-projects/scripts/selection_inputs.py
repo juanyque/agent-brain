@@ -48,6 +48,7 @@ class DocumentDefinition(BaseModel):
 
     status: str
     template: Path | None = None
+    required_data: tuple[str, ...] = ()
 
 
 class ProjectTypeManifest(BaseModel):

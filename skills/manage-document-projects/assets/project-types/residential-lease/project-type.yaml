@@ -28,18 +28,73 @@ documents:
     status: template-ready
     template: templates/reservation.md.j2
     data_requirement: operation.reservation
+    required_data:
+      - project.effective_date
+      - property.address.full_text
+      - property.address.postal_code
+      - property.address.municipality
+      - property.address.province
+      - parties.landlords
+      - parties.tenants
+      - operation.reservation.agreement_date
+      - operation.reservation.payment_deadline
+      - operation.reservation.contract_deadline
+      - operation.reservation.amount
+      - operation.reservation.application
+      - operation.reservation.insurance.status
+      - operation.lease.signature_date
+      - operation.lease.start_date
+      - operation.lease.monthly_rent
+      - operation.payment.iban
   lease:
     status: template-ready
     template: templates/lease.md.j2
     data_requirement: operation.lease
+    required_data:
+      - project.effective_date
+      - property.address.full_text
+      - property.address.postal_code
+      - property.address.municipality
+      - parties.landlords
+      - parties.tenants
+      - operation.lease.signature_date
+      - operation.lease.start_date
+      - operation.lease.monthly_rent
+      - operation.payment.iban
   inventory:
     status: template-ready
     template: templates/inventory.md.j2
     data_requirement: inventory
+    required_data:
+      - project.effective_date
+      - property.address.full_text
+      - parties.landlords
+      - parties.tenants
+      - operation.lease.signature_date
+      - operation.lease.start_date
+      - operation.lease.monthly_rent
+      - inventory.event_date
+      - inventory.rooms
+      - inventory.keys
+      - inventory.meter_readings
   access-license:
     status: template-ready
     template: templates/access-license.md.j2
     data_requirement: operation.lease.early_access
+    required_data:
+      - project.effective_date
+      - property.address.full_text
+      - property.address.postal_code
+      - property.address.municipality
+      - parties.landlords
+      - parties.tenants
+      - operation.lease.signature_date
+      - operation.lease.start_date
+      - operation.lease.monthly_rent
+      - operation.lease.early_access.signature_date
+      - operation.lease.early_access.access_from
+      - operation.lease.early_access.access_until
+      - operation.lease.early_access.keys_delivered_on
   termination:
     status: planned
 

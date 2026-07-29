@@ -260,8 +260,7 @@ The renderer:
 - parses YAML data into JSON-compatible values;
 - discovers the closest `project-type.yaml` and validates the data against its
   referenced JSON Schema before rendering;
-- calculates the package clause selection and writes
-  `generated/contract.selection.yaml` beside package outputs;
+- calculates the package clause selection in memory;
 - exposes only candidate `fragment-ready` paths to the package template in
   catalog order;
 - preserves standalone rendering when the template does not belong to a
@@ -270,9 +269,10 @@ The renderer:
 - exposes `es_date`, `es_money`, `es_number`, and `es_iban` filters;
 - writes the requested persistent Markdown path, or a sibling Markdown
   intermediate when `--markdown-output` is omitted;
-- writes a sibling provenance file with timestamp and hashes for the
-  template, data, defaults profile, local override, selection, output profile,
-  Markdown, PDF, and governed inputs;
+- writes only Markdown and PDF for ordinary draft rendering;
+- writes sibling selection and provenance YAML files when `--keep-sidecars`
+  is supplied, including hashes for the inputs and outputs;
+- always preserves those technical sidecars for a governed publication;
 - converts that Markdown to an A4 PDF through Pandoc and WeasyPrint;
 - uses the bundled CSS profile and resolves images relative to the template;
 - refuses to write printable outputs outside the configured deliverables
@@ -281,7 +281,8 @@ The renderer:
 - reports whether an existing artifact is committed, modified, untracked,
   ignored, or outside version control;
 - replaces the stable output set only with `--replace`, after the user has
-  authorized that replacement.
+  authorized that replacement, and removes stale sidecars unless
+  `--keep-sidecars` is also supplied.
 
 Use stable document names and Git history instead of `_v1`, `_v2`, or similar
 suffixes. Run without `--replace` first. If the preflight reports an existing
@@ -289,6 +290,18 @@ untracked or modified artifact, ask before rerunning with `--replace`.
 Do not add deliverables to Git automatically. If an externally handled
 document returns, ingest it from the configured incoming location, never from
 the deliverables location.
+
+Use `--keep-sidecars` only when debugging, testing, or performing a technical
+audit of a draft. These YAML files are regenerable trace data, not a legal
+guarantee or part of the contract itself.
+
+If the renderer emits a `report_version: 0.1.0` missing-data report, do not
+retry or invent values. Group the listed `user-required` paths into concise
+questions, obtain the user's answers, persist only confirmed values in the
+canonical project-data file, and run the renderer again. Values already
+inherited from defaults or calculated by the package do not appear in this
+report. A command-line user can follow the same report manually; the renderer
+does not prompt because rendering must remain deterministic.
 
 ## Choose the output format
 
@@ -316,7 +329,8 @@ format-specific mechanisms are intentionally different.
 - Treat `fragment-ready` as a technical state, never as legal approval.
 - Treat `selector-ready` as resolved data and applicability metadata, never as
   renderable or legally approved wording.
-- Preserve the selection sidecar with every generated package document.
+- Preserve selection and provenance sidecars only when explicitly requested
+  for a draft or automatically required by a governed publication.
 - Preserve approval and jurisdiction-resolution artifacts with every reviewed
   release.
 - Do not infer legal approval from a fragment appearing in a draft render.

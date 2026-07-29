@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from document_preflight import MissingDocumentDataError, missing_data_yaml
 from document_renderer import RenderRequest, render_document
 from selection_inputs import SelectionProjectError
 from workspace_bootstrap import ensure_workspace
@@ -49,6 +50,10 @@ def main(
         bool,
         typer.Option("--replace"),
     ] = False,
+    keep_sidecars: Annotated[
+        bool,
+        typer.Option("--keep-sidecars"),
+    ] = False,
 ) -> None:
     """Render TEMPLATE with DATA into OUTPUT and a sibling Markdown file."""
     try:
@@ -59,14 +64,19 @@ def main(
             workspace=ensure_workspace(profile),
             markdown_output=markdown_output,
             replace=replace,
+            keep_sidecars=keep_sidecars,
         )
         selection = render_document(request)
+    except MissingDocumentDataError as error:
+        typer.echo(missing_data_yaml(error), err=True)
+        raise typer.Exit(code=2) from None
     except SelectionProjectError as error:
         raise typer.BadParameter(str(error)) from None
     typer.echo(f"Markdown: {request.markdown}")
     if selection is not None:
         typer.echo(f"Selection: {selection}")
-    typer.echo(f"Provenance: {request.provenance}")
+    if request.preserve_sidecars:
+        typer.echo(f"Provenance: {request.provenance}")
     typer.echo(f"PDF: {request.pdf}")
 
 

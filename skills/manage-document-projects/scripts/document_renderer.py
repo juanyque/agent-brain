@@ -19,7 +19,11 @@ from document_provenance import (
 )
 from document_publication import PublicationSpec, governed_selection
 from document_template import render_markdown
-from project_defaults import DefaultsResolution, require_publication_ready
+from project_defaults import (
+    DefaultsResolution,
+    require_publication_ready,
+    resolve_project_data,
+)
 from selection_inputs import SelectionProjectError, load_yaml
 from selection_project import (
     PreparedSelection,
@@ -40,6 +44,7 @@ class RenderRequest:
     publication: PublicationSpec | None = None
     markdown_output: Path | None = None
     replace: bool = False
+    keep_sidecars: bool = False
 
     @property
     def markdown(self) -> Path:
@@ -56,6 +61,10 @@ class RenderRequest:
     @property
     def provenance(self) -> Path:
         return self.pdf.with_suffix(".provenance.yaml")
+
+    @property
+    def preserve_sidecars(self) -> bool:
+        return self.keep_sidecars or self.publication is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,13 +102,17 @@ def _prepare_inputs(request: RenderRequest) -> _RenderInputs:
             selection=None,
         )
 
-    prepared = build_selection(
-        request_for_template(
-            manifest_path=manifest_path,
-            data_path=request.data,
-            template_path=request.template,
-        ),
+    selection_request = request_for_template(
+        manifest_path=manifest_path,
+        data_path=request.data,
+        template_path=request.template,
     )
+    _ = resolve_project_data(
+        manifest_path,
+        request.data,
+        document=selection_request.document,
+    )
+    prepared = build_selection(selection_request)
     if request.publication is not None:
         require_publication_ready(prepared.data, prepared.selection.document)
     selection = (
@@ -126,8 +139,9 @@ def _prepare_inputs(request: RenderRequest) -> _RenderInputs:
 
 
 def render_document(request: RenderRequest) -> Path | None:
-    """Create canonical Markdown, governance sidecar, and CSS-styled PDF."""
+    """Create canonical Markdown and CSS-styled PDF with optional sidecars."""
     require_deliverable(request.pdf, request.workspace)
+    inputs = _prepare_inputs(request)
     existing = existing_output(
         (
             request.pdf,
@@ -140,7 +154,6 @@ def render_document(request: RenderRequest) -> Path | None:
     if existing is not None and not request.replace:
         raise OutputExistsError(output=existing)
 
-    inputs = _prepare_inputs(request)
     status = (
         inputs.selection.status
         if inputs.selection is not None
@@ -155,7 +168,7 @@ def render_document(request: RenderRequest) -> Path | None:
     _ = request.pdf.parent.mkdir(parents=True, exist_ok=True)
     _ = request.markdown.parent.mkdir(parents=True, exist_ok=True)
     _ = request.markdown.write_text(markdown, encoding="utf-8")
-    if inputs.selection is not None:
+    if inputs.selection is not None and request.preserve_sidecars:
         _ = request.selection.write_text(
             selection_yaml(inputs.selection),
             encoding="utf-8",
@@ -176,36 +189,44 @@ def render_document(request: RenderRequest) -> Path | None:
         ],
         check=True,
     )
-    governance_paths = (
-        None
-        if request.publication is None
-        else GovernancePaths(
-            approval=request.publication.approval,
-            approval_signature=request.publication.approval_signature,
-            approval_ledger=request.publication.approval_ledger,
-            approval_ledger_signature=request.publication.approval_ledger_signature,
-            allowed_signers=request.publication.allowed_signers,
-            jurisdiction_checks=request.publication.jurisdiction_checks,
+    if request.preserve_sidecars:
+        governance_paths = (
+            None
+            if request.publication is None
+            else GovernancePaths(
+                approval=request.publication.approval,
+                approval_signature=request.publication.approval_signature,
+                approval_ledger=request.publication.approval_ledger,
+                approval_ledger_signature=request.publication.approval_ledger_signature,
+                allowed_signers=request.publication.allowed_signers,
+                jurisdiction_checks=request.publication.jurisdiction_checks,
+            )
         )
-    )
-    _ = request.provenance.write_text(
-        provenance_yaml(
-            build_provenance(
-                ProvenanceRequest(
-                    template=request.template,
-                    data=request.data,
-                    selection=(
-                        request.selection if inputs.selection is not None else None
+        _ = request.provenance.write_text(
+            provenance_yaml(
+                build_provenance(
+                    ProvenanceRequest(
+                        template=request.template,
+                        data=request.data,
+                        selection=(
+                            request.selection if inputs.selection is not None else None
+                        ),
+                        profile=css,
+                        markdown=request.markdown,
+                        pdf=request.pdf,
+                        document_status=status,
+                        governance=governance_paths,
+                        defaults=inputs.defaults,
                     ),
-                    profile=css,
-                    markdown=request.markdown,
-                    pdf=request.pdf,
-                    document_status=status,
-                    governance=governance_paths,
-                    defaults=inputs.defaults,
                 ),
             ),
-        ),
-        encoding="utf-8",
+            encoding="utf-8",
+        )
+    if request.replace and not request.preserve_sidecars:
+        request.selection.unlink(missing_ok=True)
+        request.provenance.unlink(missing_ok=True)
+    return (
+        request.selection
+        if inputs.selection is not None and request.preserve_sidecars
+        else None
     )
-    return request.selection if inputs.selection is not None else None
