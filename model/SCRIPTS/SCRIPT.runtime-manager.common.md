@@ -30,6 +30,9 @@ python3 runtime_manager.py --brain <path> [--common <model_path>] [--apply] [--r
 
 When the local runtime has config but the brain doesn't:
 1. Copy local config files → `_AGENTS/<RT>/` (using the mapping table).
+   If a local entry is a symlink, copy its resolved contents so the brain stores
+   a regular file or directory; remove only the local symlink and leave its
+   external target untouched.
 2. `git add` the new files in the brain only with explicit user authorization for the Git operation.
 3. Remove local originals.
 4. Create symlinks local → brain (Direction B).

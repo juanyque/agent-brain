@@ -370,20 +370,22 @@ def ingest_local_to_brain(
             continue
         local_path = local_dir / local_target
         brain_path = agents_dir / brain_source
-        if not local_path.exists() and not local_path.is_symlink():
+        if not local_path.exists():
             reporter.write(f"    SKIP {local_target} (not found locally)")
             continue
-        if local_path.is_symlink():
-            reporter.write(f"    SKIP {local_target} (already a symlink — likely managed)")
-            continue
+        local_is_symlink = local_path.is_symlink()
         ingested_sources.add(brain_source)
         removed_targets.add(local_target)
-        reporter.write(f"    MOVE {local_target} -> _AGENTS/{config['agents_subdir']}/{brain_source}")
+        action = "COPY" if local_is_symlink else "MOVE"
+        reporter.write(f"    {action} {local_target} -> _AGENTS/{config['agents_subdir']}/{brain_source}")
         if not dry_run:
             if local_path.is_dir():
                 import shutil
                 shutil.copytree(local_path, brain_path)
-                shutil.rmtree(local_path)
+                if local_is_symlink:
+                    local_path.unlink()
+                else:
+                    shutil.rmtree(local_path)
             else:
                 import shutil
                 shutil.copy2(local_path, brain_path)
@@ -521,10 +523,10 @@ def process_runtime(
                 reporter.write(f"  OK    {local_target} already linked")
         elif local_present and not local_path.is_symlink():
             ingest_targets.add(local_target)
+        elif local_path.is_symlink() and local_path.exists():
+            ingest_targets.add(local_target)
         elif local_path.is_symlink():
-            reporter.write(
-                f"  WARNING {local_target} is a symlink but brain source is missing: {brain_path}"
-            )
+            reporter.write(f"  WARNING {local_target} is a broken symlink")
 
     ingested_sources: set[str] = set()
     removed_targets: set[str] = set()

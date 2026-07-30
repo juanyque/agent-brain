@@ -102,6 +102,29 @@ class RuntimeManagerTests(unittest.TestCase):
         self.assertEqual(unrelated.read_text(), '{"theme":"dark"}\n')
         self.assertFalse(list((self.home / ".codex").glob("*.backup-*")))
 
+    def test_direction_a_materializes_chained_runtime_config_symlink(self) -> None:
+        external_config = self.root / "dropbox" / "runtime-instructions.md"
+        external_config.parent.mkdir()
+        external_config.write_text("# Shared instructions\n", encoding="utf-8")
+        claude_config = self.home / ".claude" / "CLAUDE.md"
+        claude_config.parent.mkdir(parents=True)
+        claude_config.symlink_to(os.path.relpath(external_config, claude_config.parent))
+        local_config = self.home / ".codex" / "AGENTS.md"
+        local_config.parent.mkdir(parents=True)
+        local_config.symlink_to(os.path.relpath(claude_config, local_config.parent))
+
+        self.process_codex()
+
+        brain_config = self.brain / "_AGENTS" / "CODEX" / "AGENTS.runtime.codex.md"
+        self.assertTrue(brain_config.is_file())
+        self.assertFalse(brain_config.is_symlink())
+        self.assertEqual(brain_config.read_text(), "# Shared instructions\n")
+        self.assertEqual(external_config.read_text(), "# Shared instructions\n")
+        self.assertTrue(claude_config.is_symlink())
+        self.assertEqual(claude_config.resolve(), external_config.resolve())
+        self.assertTrue(local_config.is_symlink())
+        self.assertEqual(local_config.resolve(), brain_config.resolve())
+
     def test_direction_b_implants_brain_config(self) -> None:
         brain_config = self.brain / "_AGENTS" / "CODEX" / "config.toml"
         brain_config.parent.mkdir(parents=True)
