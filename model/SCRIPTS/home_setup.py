@@ -20,6 +20,7 @@ from home_setup_content import (  # noqa: E402  (lives next to this script)
     is_current_template_symlink,
     managed_content_errors,
     preflight_managed_content,
+    report_content_directories,
     via_common_symlink_target,
 )
 from home_setup_filesystem import (  # noqa: E402  (lives next to this script)
@@ -90,6 +91,8 @@ def print_plan(
     reporter.write(f"brain: {brain_root}")
     reporter.write(f"common: {common}")
     report_common_status(brain_root, common, link_st, desired, reporter)
+
+    report_content_directories(brain_root, reporter)
 
     if link_st == "missing" and not skip_full_reorder:
         stg_status, stg_count = staging_status(brain_root)

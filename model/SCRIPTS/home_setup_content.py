@@ -19,6 +19,28 @@ TEMPLATE_SYMLINKS = {
     "TEMPLATES/Issue Template.md": "TEMPLATES/TEMPLATE.issue.common.md",
 }
 
+SCAFFOLD_DIRECTORIES = (
+    "INBOX",
+    "WIP",
+    "WIP/SESSIONS",
+    "JOURNAL",
+    "MEMORY",
+    "BACKLOG",
+    "ARCHIVED",
+    "REPORTS",
+    "OUTBOX",
+    "QUARANTINE",
+    "QUARANTINE/TRASH",
+    "QUARANTINE/ATTACHMENTS",
+)
+
+
+def report_content_directories(brain_root: Path, reporter: Reporter) -> None:
+    reporter.write("scaffold directories:")
+    for directory in SCAFFOLD_DIRECTORIES:
+        status = "current" if (brain_root / directory).is_dir() else "missing, can create"
+        reporter.write(f"  {directory}/: {status}")
+
 
 def wrapper_text(local_name: str, common_name: str) -> str:
     title = Path(local_name).stem
@@ -152,6 +174,8 @@ def apply_managed_content(
 ) -> None:
     wrappers = discover_wrappers(common)
     preflight_managed_paths(brain_root, common, wrappers)
+    for directory in SCAFFOLD_DIRECTORIES:
+        (brain_root / directory).mkdir(parents=True, exist_ok=True)
     for local_name, common_name in wrappers.items():
         local_path = brain_root / local_name
         common_path = common / common_name

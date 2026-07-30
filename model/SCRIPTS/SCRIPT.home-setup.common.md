@@ -2,15 +2,21 @@
 
 ## Purpose
 
-Attach a brain to the agent-brain model — **structure only** (D21). Creates the `_COMMON` symlink, wrapper files, and template symlinks. Handles staging for virgin brains. All runtime logic is in `runtime_manager.py`.
+Attach a brain to the agent-brain model — **structure only** (D21). Creates the
+content directories, `_COMMON` symlink, wrapper files, and template symlinks. Handles
+staging for virgin brains. All runtime logic is in `runtime_manager.py`.
 
 ## What it does
 
 1. **Pre-cleanup** — removes `.DS_Store` files and recursively-empty directories (so state detection is accurate).
 2. **Staging** (virgin brains only) — moves all non-hidden content into `_STAGING/` for later standardization.
 3. **`_COMMON` attachment** — creates the `_COMMON` symlink pointing to the model root. Handles conflicts per D25 (see below).
-4. **Wrappers** — creates missing local wrapper files (`AGENTS.md`, `BRAIN.md`, `JOBS.md`, `RULES-*.md`) that point to their `.common.md` sources in `_COMMON/`. Existing files are never overwritten.
-5. **Template symlinks** — creates missing `TEMPLATES/` symlinks to daily-note, WIP, and issue templates. Existing managed symlinks are validated against the selected model and stale or broken targets are relinked through `_COMMON`; regular local template files are preserved.
+4. **Content directories** — creates every missing top-level content layer:
+   `INBOX/`, `WIP/`, `JOURNAL/`, `MEMORY/`, `BACKLOG/`, `ARCHIVED/`, `REPORTS/`,
+   `OUTBOX/`, and `QUARANTINE/`. It also creates the operational destinations
+   `WIP/SESSIONS/`, `QUARANTINE/TRASH/`, and `QUARANTINE/ATTACHMENTS/`.
+5. **Wrappers** — creates missing local wrapper files (`AGENTS.md`, `BRAIN.md`, `JOBS.md`, `RULES-*.md`) that point to their `.common.md` sources in `_COMMON/`. Existing files are never overwritten.
+6. **Template symlinks** — creates missing `TEMPLATES/` symlinks to daily-note, WIP, and issue templates. Existing managed symlinks are validated against the selected model and stale or broken targets are relinked through `_COMMON`; regular local template files are preserved.
 
 ## What it does NOT do
 
