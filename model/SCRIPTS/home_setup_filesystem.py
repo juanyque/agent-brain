@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import shutil
 import subprocess
 import sys
@@ -11,6 +12,7 @@ from brain_state import OPERATIONAL_TOP_LEVEL_DIRS, STAGING_DIR_NAME, staging_st
 from home_setup_content import SCAFFOLD_DIRECTORIES, TEMPLATE_SYMLINKS
 
 SymlinkPolicy = Literal["copy", "keep"]
+SymlinkTargetStatus = Literal["available", "missing", "cycle"]
 CANONICAL_TOP_LEVEL_DIRS: Final = frozenset(
     Path(directory).parts[0]
     for directory in (*SCAFFOLD_DIRECTORIES, *TEMPLATE_SYMLINKS, "TASK_TYPES")
@@ -112,12 +114,18 @@ def collect_movable_items(brain_root: Path) -> list[Path]:
     )
 
 
-def symlink_target_is_missing(path: Path) -> bool:
+def symlink_target_status(path: Path) -> SymlinkTargetStatus:
     try:
         path.resolve(strict=True)
     except FileNotFoundError:
-        return True
-    return False
+        return "missing"
+    except RuntimeError:
+        return "cycle"
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            return "cycle"
+        raise
+    return "available"
 
 
 def move_to_staging(
@@ -139,11 +147,28 @@ def move_to_staging(
         return
 
     symlinks = [item for item in items if item.is_symlink()]
-    missing_targets = [item for item in symlinks if symlink_target_is_missing(item)]
+    target_statuses = {item: symlink_target_status(item) for item in symlinks}
+    missing_targets = [
+        item for item, status in target_statuses.items() if status == "missing"
+    ]
+    cyclic_targets = [
+        item for item, status in target_statuses.items() if status == "cycle"
+    ]
     if symlinks:
         reporter.write("  top-level symlinks:")
         for item in symlinks:
-            copy_status = "blocked-missing-target" if item in missing_targets else "allowed"
+            match target_statuses[item]:
+                case "available":
+                    copy_status = "allowed"
+                    resolved = item.resolve(strict=False)
+                case "missing":
+                    copy_status = "blocked-missing-target"
+                    resolved = item.resolve(strict=False)
+                case "cycle":
+                    copy_status = "blocked-cycle"
+                    resolved = "cycle"
+                case unreachable:
+                    assert_never(unreachable)
             keep_status = (
                 "blocked-canonical"
                 if item.name in CANONICAL_TOP_LEVEL_DIRS
@@ -151,14 +176,19 @@ def move_to_staging(
             )
             reporter.write(
                 f"    symlink: {item.name} -> {item.readlink()} "
-                f"(resolves: {item.resolve(strict=False)}; copy: {copy_status}; "
+                f"(resolves: {resolved}; copy: {copy_status}; "
                 f"keep: {keep_status})"
             )
         reporter.write(
             "  symlink_policy: "
             + (symlink_policy if symlink_policy is not None else "required")
         )
-        recommendation = "repair-target-then-copy" if missing_targets else "copy"
+        if cyclic_targets:
+            recommendation = "repair-cycle-then-copy"
+        elif missing_targets:
+            recommendation = "repair-target-then-copy"
+        else:
+            recommendation = "copy"
         reporter.write(f"  recommended_symlink_policy: {recommendation}")
 
     if symlinks and not dry_run and symlink_policy is None:
@@ -166,6 +196,14 @@ def move_to_staging(
         raise SystemExit(
             f"Symlink policy required for: {names}. "
             "Re-run with --symlink-policy copy (recommended) or keep."
+        )
+
+    if cyclic_targets and not dry_run and symlink_policy == "copy":
+        names = ", ".join(item.name for item in cyclic_targets)
+        raise SystemExit(
+            f"Cannot copy cyclic symlinks: {names}. "
+            "Repair or replace the links, or use --symlink-policy keep for "
+            "non-canonical links."
         )
 
     if missing_targets and not dry_run and symlink_policy == "copy":
