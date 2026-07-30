@@ -112,6 +112,14 @@ def collect_movable_items(brain_root: Path) -> list[Path]:
     )
 
 
+def symlink_target_is_missing(path: Path) -> bool:
+    try:
+        path.resolve(strict=True)
+    except FileNotFoundError:
+        return True
+    return False
+
+
 def move_to_staging(
     brain_root: Path,
     reporter: Reporter,
@@ -131,9 +139,11 @@ def move_to_staging(
         return
 
     symlinks = [item for item in items if item.is_symlink()]
+    missing_targets = [item for item in symlinks if symlink_target_is_missing(item)]
     if symlinks:
         reporter.write("  top-level symlinks:")
         for item in symlinks:
+            copy_status = "blocked-missing-target" if item in missing_targets else "allowed"
             keep_status = (
                 "blocked-canonical"
                 if item.name in CANONICAL_TOP_LEVEL_DIRS
@@ -141,13 +151,15 @@ def move_to_staging(
             )
             reporter.write(
                 f"    symlink: {item.name} -> {item.readlink()} "
-                f"(resolves: {item.resolve(strict=False)}; keep: {keep_status})"
+                f"(resolves: {item.resolve(strict=False)}; copy: {copy_status}; "
+                f"keep: {keep_status})"
             )
         reporter.write(
             "  symlink_policy: "
             + (symlink_policy if symlink_policy is not None else "required")
         )
-        reporter.write("  recommended_symlink_policy: copy")
+        recommendation = "repair-target-then-copy" if missing_targets else "copy"
+        reporter.write(f"  recommended_symlink_policy: {recommendation}")
 
     if symlinks and not dry_run and symlink_policy is None:
         names = ", ".join(item.name for item in symlinks)
@@ -156,11 +168,16 @@ def move_to_staging(
             "Re-run with --symlink-policy copy (recommended) or keep."
         )
 
+    if missing_targets and not dry_run and symlink_policy == "copy":
+        names = ", ".join(item.name for item in missing_targets)
+        raise SystemExit(
+            f"Cannot copy symlinks with missing targets: {names}. "
+            "Repair the targets, or use --symlink-policy keep for non-canonical links."
+        )
+
     match symlink_policy:
         case "keep":
-            blocked = [
-                item for item in symlinks if item.name in CANONICAL_TOP_LEVEL_DIRS
-            ]
+            blocked = [item for item in symlinks if item.name in CANONICAL_TOP_LEVEL_DIRS]
             if blocked:
                 names = ", ".join(item.name for item in blocked)
                 raise SystemExit(
