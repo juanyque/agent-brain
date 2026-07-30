@@ -26,6 +26,7 @@ from home_setup_content import (  # noqa: E402  (lives next to this script)
 from home_setup_filesystem import (  # noqa: E402  (lives next to this script)
     cleanup_empty_dirs_recursively,
     collect_movable_items,
+    SymlinkPolicy,
     move_to_staging,
     run_cleanup_ds_store,
 )
@@ -151,7 +152,7 @@ def apply(
     common: Path,
     skip_full_reorder: bool,
     switch_model: bool,
-    reporter: Reporter,
+    reporter: Reporter, symlink_policy: SymlinkPolicy | None = None,
 ) -> None:
     from datetime import datetime, timezone
 
@@ -160,7 +161,7 @@ def apply(
         preflight_managed_content(brain_root, common)
 
     if status == "missing" and not skip_full_reorder:
-        move_to_staging(brain_root, reporter, dry_run=False)
+        move_to_staging(brain_root, reporter, False, symlink_policy)
 
     link_path = brain_root / COMMON_LINK_NAME
 
@@ -210,6 +211,7 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true", help="Apply changes. Default is dry-run.")
     parser.add_argument("--skip-full-reorder", action="store_true", help="Skip staging sweep. Only attach _COMMON + wrappers.")
     parser.add_argument("--switch-model", action="store_true", help="Repoint _COMMON if it conflicts (D25). A .backup-<ts> is created.")
+    parser.add_argument("--symlink-policy", choices=("copy", "keep"), help="Top-level symlink handling during staging: copy (recommended) or keep non-canonical links.")
     args = parser.parse_args()
     reporter = Reporter(script_log_path(Path(__file__)))
     command_string = build_command_string()
@@ -251,7 +253,7 @@ def main() -> int:
                     )
             elif link_st != "ok" and not args.skip_full_reorder:
                 reporter.write("")
-                move_to_staging(brain_root, reporter, dry_run=True)
+                move_to_staging(brain_root, reporter, True, args.symlink_policy)
             reporter.write("Dry run only. Re-run with --apply to create missing safe items.")
             reporter.flush()
             return 0
@@ -261,7 +263,7 @@ def main() -> int:
             common,
             skip_full_reorder=args.skip_full_reorder,
             switch_model=args.switch_model,
-            reporter=reporter,
+            reporter=reporter, symlink_policy=args.symlink_policy,
         )
         errors = validate(brain_root, common)
         if errors:

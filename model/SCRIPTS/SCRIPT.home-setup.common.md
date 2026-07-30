@@ -9,7 +9,15 @@ staging for virgin brains. All runtime logic is in `runtime_manager.py`.
 ## What it does
 
 1. **Pre-cleanup** — removes `.DS_Store` files and recursively-empty directories (so state detection is accurate).
-2. **Staging** (virgin brains only) — moves all non-hidden content into `_STAGING/` for later standardization.
+2. **Staging** (virgin brains only) — moves all non-hidden content into `_STAGING/`
+   for later standardization. When top-level symlinks are present, apply mode
+   requires `--symlink-policy`:
+   - `copy` (recommended) materializes each valid link as a regular file or
+     directory in `_STAGING/`; only the original link is removed and its external
+     target is preserved.
+   - `keep` leaves links at the brain root for the user to manage and stages the
+     remaining content. It is rejected when a link occupies a canonical scaffold
+     directory such as `JOURNAL/` or `WIP/`.
 3. **`_COMMON` attachment** — creates the `_COMMON` symlink pointing to the model root. Handles conflicts per D25 (see below).
 4. **Content directories** — creates every missing top-level content layer:
    `INBOX/`, `WIP/`, `JOURNAL/`, `MEMORY/`, `BACKLOG/`, `ARCHIVED/`, `REPORTS/`,
@@ -46,7 +54,7 @@ directories are identified as non-symlink entries instead of being described as 
 ## Usage
 
 ```bash
-python3 home_setup.py --brain <path> [--common <model_path>] [--apply] [--switch-model] [--skip-full-reorder]
+python3 home_setup.py --brain <path> [--common <model_path>] [--apply] [--switch-model] [--skip-full-reorder] [--symlink-policy copy|keep]
 ```
 
 - `--brain` (required): path to the brain root.
@@ -54,6 +62,9 @@ python3 home_setup.py --brain <path> [--common <model_path>] [--apply] [--switch
 - `--apply`: execute (default: dry-run).
 - `--switch-model`: repoint `_COMMON` on conflict (D25).
 - `--skip-full-reorder`: skip the staging sweep (only attach `_COMMON` + wrappers).
+- `--symlink-policy`: required in apply mode when the staging sweep finds
+  top-level symlinks. `copy` ingests their content; `keep` leaves only
+  non-canonical links at the brain root.
 
 ## States (via brain_state.py)
 

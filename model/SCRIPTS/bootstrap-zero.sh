@@ -7,11 +7,14 @@
 # Does NOT create _COMMON, _STAGING, or symlinks itself.
 #
 # Usage:
-#   bootstrap-zero.sh --home <brain_path> [--apply] [--update] [--runtime claude,opencode,agents,codex]
+#   bootstrap-zero.sh --home <brain_path> [--apply] [--update] [--runtime claude,opencode,agents,codex] [--symlink-policy copy|keep]
 #     --home      the brain path (if omitted, prompts interactively)
 #     --apply     execute (default: dry-run plan only)
 #     --update    git-pull the agent-brain repo before wiring
 #     --runtime   restrict to a comma-separated subset of runtimes
+#     --symlink-policy
+#                 copy top-level link content into the brain (recommended), or
+#                 keep non-canonical links at the brain root
 
 set -euo pipefail
 
@@ -19,11 +22,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MODEL_DIR="$REPO_ROOT/model"
 FIND_HOME="$REPO_ROOT/skills/brain/scripts/find_home.py"
+PUBLIC_BOOTSTRAP_URL="https://raw.githubusercontent.com/juanyque/agent-brain/main/bootstrap-zero.sh"
 
 BRAIN_PATH=""
 APPLY=0
 UPDATE=0
 RUNTIME_FILTER=""
+SYMLINK_POLICY=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -32,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     --apply) APPLY=1; shift ;;
     --update) UPDATE=1; shift ;;
     --runtime) RUNTIME_FILTER="${2:-}"; shift 2 ;;
+    --symlink-policy) SYMLINK_POLICY="${2:-}"; shift 2 ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "ERROR: unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -39,6 +45,18 @@ done
 
 run() { if [[ $APPLY -eq 1 ]]; then "$@"; else printf '  (dry-run) %s\n' "$*"; fi; }
 mode() { [[ $APPLY -eq 1 ]] && echo "apply" || echo "dry-run (pass --apply to execute)"; }
+print_public_apply_command() {
+  local apply_args=(--brain "$BRAIN_PATH")
+  [[ -n "$RUNTIME_FILTER" ]] && apply_args+=(--runtime "$RUNTIME_FILTER")
+  [[ -n "$SYMLINK_POLICY" ]] && apply_args+=(--symlink-policy "$SYMLINK_POLICY")
+  apply_args+=(--apply)
+
+  echo "Next command:"
+  printf 'curl -fsSL %s \\\n' "$PUBLIC_BOOTSTRAP_URL"
+  printf '  | bash -s --'
+  printf ' %q' "${apply_args[@]}"
+  printf '\n'
+}
 prompt_from_tty() {
   local prompt="$1"
   local target_var="$2"
@@ -135,6 +153,9 @@ echo
 echo "== home_setup (structure) =="
 HOME_SETUP_ARGS=(--brain "$BRAIN_PATH" --common "$MODEL_DIR" --switch-model)
 [[ $APPLY -eq 1 ]] && HOME_SETUP_ARGS+=(--apply)
+if [[ -n "$SYMLINK_POLICY" ]]; then
+  HOME_SETUP_ARGS+=(--symlink-policy "$SYMLINK_POLICY")
+fi
 python3 "$SCRIPT_DIR/home_setup.py" "${HOME_SETUP_ARGS[@]}"
 echo
 
@@ -186,5 +207,9 @@ else
     exit 6
   fi
 fi
-[[ $APPLY -eq 0 ]] && echo "(dry-run — re-run with --apply to execute)"
+if [[ $APPLY -eq 0 ]]; then
+  echo "(dry-run — re-run with --apply to execute)"
+  echo
+  print_public_apply_command
+fi
 exit 0

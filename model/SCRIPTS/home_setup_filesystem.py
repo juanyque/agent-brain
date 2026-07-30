@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Final, Literal, assert_never
 
 from _common import Reporter
 from brain_state import OPERATIONAL_TOP_LEVEL_DIRS, STAGING_DIR_NAME, staging_status
+from home_setup_content import SCAFFOLD_DIRECTORIES, TEMPLATE_SYMLINKS
+
+SymlinkPolicy = Literal["copy", "keep"]
+CANONICAL_TOP_LEVEL_DIRS: Final = frozenset(
+    Path(directory).parts[0]
+    for directory in (*SCAFFOLD_DIRECTORIES, *TEMPLATE_SYMLINKS, "TASK_TYPES")
+)
 
 
 def cleanup_ds_store_command(
@@ -107,6 +116,7 @@ def move_to_staging(
     brain_root: Path,
     reporter: Reporter,
     dry_run: bool,
+    symlink_policy: SymlinkPolicy | None = None,
 ) -> None:
     staging = brain_root / STAGING_DIR_NAME
     status, _count = staging_status(brain_root)
@@ -120,6 +130,56 @@ def move_to_staging(
         reporter.write(f"  {STAGING_DIR_NAME}: brain root is empty, nothing to move")
         return
 
+    symlinks = [item for item in items if item.is_symlink()]
+    if symlinks:
+        reporter.write("  top-level symlinks:")
+        for item in symlinks:
+            keep_status = (
+                "blocked-canonical"
+                if item.name in CANONICAL_TOP_LEVEL_DIRS
+                else "allowed"
+            )
+            reporter.write(
+                f"    symlink: {item.name} -> {item.readlink()} "
+                f"(resolves: {item.resolve(strict=False)}; keep: {keep_status})"
+            )
+        reporter.write(
+            "  symlink_policy: "
+            + (symlink_policy if symlink_policy is not None else "required")
+        )
+        reporter.write("  recommended_symlink_policy: copy")
+
+    if symlinks and not dry_run and symlink_policy is None:
+        names = ", ".join(item.name for item in symlinks)
+        raise SystemExit(
+            f"Symlink policy required for: {names}. "
+            "Re-run with --symlink-policy copy (recommended) or keep."
+        )
+
+    match symlink_policy:
+        case "keep":
+            blocked = [
+                item for item in symlinks if item.name in CANONICAL_TOP_LEVEL_DIRS
+            ]
+            if blocked:
+                names = ", ".join(item.name for item in blocked)
+                raise SystemExit(
+                    "Cannot keep symlinks that occupy canonical model directories: "
+                    f"{names}. Re-run with --symlink-policy copy."
+                )
+            items_to_move = [item for item in items if not item.is_symlink()]
+            reporter.write("  external symlinks kept at brain root:")
+            for item in symlinks:
+                reporter.write(f"    {item.name}")
+        case "copy" | None:
+            items_to_move = items
+        case unreachable:
+            assert_never(unreachable)
+
+    if not items_to_move:
+        reporter.write(f"  {STAGING_DIR_NAME}: no content selected to move")
+        return
+
     if status == "missing":
         if dry_run:
             reporter.write(f"  will create: {STAGING_DIR_NAME}/")
@@ -127,11 +187,19 @@ def move_to_staging(
             staging.mkdir()
 
     reporter.write(f"  items to move into {STAGING_DIR_NAME}/:")
-    for item in items:
+    for item in items_to_move:
         reporter.write(f"    {item.name}")
         if not dry_run:
+            destination = staging / item.name
             try:
-                item.rename(staging / item.name)
+                if item.is_symlink():
+                    if item.is_dir():
+                        shutil.copytree(item, destination)
+                    else:
+                        shutil.copy2(item, destination, follow_symlinks=True)
+                    item.unlink()
+                else:
+                    item.rename(destination)
             except OSError as exc:
                 reporter.write(f"    WARNING: filesystem move failed: {exc}")
     if dry_run:

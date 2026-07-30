@@ -27,7 +27,8 @@ curl -fsSL https://raw.githubusercontent.com/juanyque/agent-brain/main/bootstrap
 
 This clones agent-brain to `~/.local/share/agent-brain` and runs the orchestrator, which
 will ask for your brain path (an Obsidian vault, a notes folder, or a new empty dir). It
-dry-runs by default — review the plan, then apply:
+dry-runs by default. After reviewing the plan, use the exact public apply command printed
+at the end; it preserves the selected brain, runtime filter, and symlink policy:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/juanyque/agent-brain/main/bootstrap-zero.sh \
@@ -46,6 +47,7 @@ If your brain already has a `_COMMON` symlink pointing to a different model (e.g
 | `--apply` | Execute (default: dry-run) |
 | `--update` | `git pull --ff-only` the repo before wiring |
 | `--runtime claude,opencode,agents,codex` | Restrict to a comma-separated runtime subset (default: all detected) |
+| `--symlink-policy copy\|keep` | Ingest top-level symlink content, or leave eligible non-canonical links at the brain root |
 
 ## How it works
 
