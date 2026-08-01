@@ -6,6 +6,17 @@ from tests.model_check_todo19_cases import ROOT, stdlib_contracts_job
 
 
 class CiWorkflowContractTests(unittest.TestCase):
+    def test_macos_ci_provisions_ripgrep_for_stale_scan(self) -> None:
+        # Given: the workflow job that executes the canonical stale scan.
+        job = stdlib_contracts_job()
+
+        # When: its ripgrep provisioning step is inspected.
+        install = job.step_named("Install ripgrep")
+
+        # Then: only macOS receives the dependency missing from its runner image.
+        self.assertIn("runner.os == 'macOS'", install)
+        self.assertIn("brew install ripgrep", install)
+
     def test_operating_model_evidence_is_host_independent(self) -> None:
         # Given: the tests executed on both macOS and Linux runners.
         source = (ROOT / "tests" / "test_operating_model_evidence.py").read_text(
