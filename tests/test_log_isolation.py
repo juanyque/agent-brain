@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,14 +17,30 @@ PRODUCT_LOGS = (
 )
 
 
-def product_log_snapshot() -> dict[str, str]:
-    return {
-        str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in PRODUCT_LOGS
-    }
+def product_log_snapshot() -> dict[str, str | None]:
+    snapshot: dict[str, str | None] = {}
+    for path in PRODUCT_LOGS:
+        try:
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        except FileNotFoundError:
+            digest = None
+        snapshot[str(path.relative_to(ROOT))] = digest
+    return snapshot
 
 
 class BootstrapLogIsolationTests(unittest.TestCase):
+    def test_product_log_snapshot_records_disappearing_logs_as_absent(self) -> None:
+        # Given: ignored product logs that disappear before their bytes are read.
+        missing = FileNotFoundError("simulated disappearance")
+
+        # When: the product-tree snapshot is captured.
+        with mock.patch.object(Path, "read_bytes", side_effect=missing):
+            snapshot = product_log_snapshot()
+
+        # Then: absence is snapshot state instead of an exception.
+        expected = {str(path.relative_to(ROOT)): None for path in PRODUCT_LOGS}
+        self.assertEqual(snapshot, expected)
+
     def test_bootstrap_writes_delegated_logs_outside_product_tree(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             base = Path(raw)
