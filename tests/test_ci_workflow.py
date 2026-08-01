@@ -2,10 +2,27 @@ from __future__ import annotations
 
 import unittest
 
-from tests.model_check_todo19_cases import stdlib_contracts_job
+from tests.model_check_todo19_cases import ROOT, stdlib_contracts_job
 
 
 class CiWorkflowContractTests(unittest.TestCase):
+    def test_operating_model_evidence_is_host_independent(self) -> None:
+        # Given: the tests executed on both macOS and Linux runners.
+        source = (ROOT / "tests" / "test_operating_model_evidence.py").read_text(
+            encoding="utf-8"
+        )
+
+        # When: their source is checked for a developer-specific macOS home.
+        maintainer_home = "/" + "Users/"
+        absolute_home_lines = [
+            line_number
+            for line_number, line in enumerate(source.splitlines(), start=1)
+            if maintainer_home in line
+        ]
+
+        # Then: every fixture can be created inside the test sandbox.
+        self.assertEqual(absolute_home_lines, [])
+
     def test_ci_provisions_document_project_test_runtime(self) -> None:
         # Given: the workflow job that discovers every repository test.
         job = stdlib_contracts_job()

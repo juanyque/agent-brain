@@ -199,6 +199,11 @@ class EvidenceAdversarialCases:
                     "--output", str(seal))
             self.assertEqual(cli(*args).returncode, 0)
             sealed = seal.read_bytes()
+            verified = cli(
+                "verify-plan-review", "--seal", str(seal),
+                "--evidence-root", str(evidence),
+            )
+            self.assertEqual(verified.returncode, 0)
             self.assertEqual(cli(*args).returncode, 2)
             self.assertEqual(seal.read_bytes(), sealed)
             receipts["momus"].write_text(receipts["momus"].read_text() + "changed\n")

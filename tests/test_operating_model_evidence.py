@@ -659,20 +659,7 @@ class WorktreeSnapshotTests(unittest.TestCase):
 
 
 class EvidenceReceiptTests(EvidenceAdversarialCases, unittest.TestCase):
-    def test_plan_review_verifies_existing_and_rejects_overwrite(self) -> None:
-        evidence = Path("/Users/juan.garcia/.local/state/agent-brain/reviews/agent-brain-operating-model")
-        seal = evidence / "plan-review" / "review.json"
-        verified = run_cli("verify-plan-review", "--seal", str(seal),
-                           "--evidence-root", str(evidence))
-        repeated = run_cli(
-            "plan-review", "--plan", str(ROOT / ".omo/plans/agent-brain-operating-model.md"),
-            "--draft", str(ROOT / ".omo/drafts/agent-brain-operating-model.md"),
-            "--momus-receipt", str(evidence / "plan-review/momus.txt"),
-            "--independent-receipt", str(evidence / "plan-review/independent.txt"),
-            "--output", str(seal),
-        )
-        self.assertEqual(verified.returncode, 0)
-        self.assertEqual(repeated.returncode, 2)
+    pass
 
 
 class BaselineTestIdTests(unittest.TestCase):
