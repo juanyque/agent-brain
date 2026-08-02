@@ -24,9 +24,10 @@ _FSTAT_ATTEMPTS: Final = 3
 _QUARANTINE_PREFIX: Final = ".__agent-brain-quarantine-"
 
 
-@dataclass(frozen=True, slots=True)
 class ContractError(Exception):
-    message: str
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
 
     def __str__(self) -> str:
         return self.message
