@@ -315,7 +315,9 @@ def open_directory_no_follow(path: Path) -> int:
         os.close(parent_fd)
 
 
-def _create_pinned_bytes(output: _PinnedOutput, data: bytes, mode: int) -> _FileIdentity:
+def _create_pinned_bytes(
+    output: _PinnedOutput, data: bytes, mode: int
+) -> tuple[_FileIdentity, int]:
     try:
         descriptor = os.open(output.leaf, _CREATE_FLAGS, mode, dir_fd=output.parent_fd)
     except OSError as error:
@@ -325,7 +327,7 @@ def _create_pinned_bytes(output: _PinnedOutput, data: bytes, mode: int) -> _File
         created = _fstat_identity(descriptor, output.path)
         _write_all(descriptor, data)
         os.fsync(descriptor)
-        return created
+        return created, os.dup(descriptor)
     except (OSError, ContractError) as error:
         if created is None:
             _quarantine_unverified_output(output)
@@ -444,7 +446,8 @@ def create_bytes(path: Path, data: bytes, mode: int = 0o600) -> None:
     """Create one output with no-follow parents, absent leaf, and exclusive open."""
     output = _prepare_create_destination(path)
     try:
-        _create_pinned_bytes(output, data, mode)
+        _, identity_pin = _create_pinned_bytes(output, data, mode)
+        os.close(identity_pin)
     finally:
         _close_outputs((output,))
 
@@ -463,12 +466,19 @@ def create_bytes_pair(first: BytesOutput, second: BytesOutput, mode: int = 0o600
     second_spec = _parse_output_path(second_path)
     first_output, second_output = _prepare_pair_outputs(first_spec, second_spec)
     try:
-        first_identity = _create_pinned_bytes(first_output, first_data, mode)
+        first_identity, first_identity_pin = _create_pinned_bytes(
+            first_output, first_data, mode
+        )
         try:
-            _create_pinned_bytes(second_output, second_data, mode)
+            _, second_identity_pin = _create_pinned_bytes(
+                second_output, second_data, mode
+            )
+            os.close(second_identity_pin)
         except ContractError:
             _rollback_created_output(first_output, first_identity)
             raise
+        finally:
+            os.close(first_identity_pin)
     finally:
         _close_outputs((first_output, second_output))
 
