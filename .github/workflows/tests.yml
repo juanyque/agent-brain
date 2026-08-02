@@ -68,7 +68,12 @@ jobs:
           python3 model/SCRIPTS/model_check.py --strict --git-base "$MODEL_BASE" --only committed-scope --format json
 
       - name: Run contract and integration tests
-        run: uv run --with 'pydantic>=2.10,<3' --with 'pyyaml>=6.0.2,<7' python3 -m unittest discover -s tests -v
+        run: >-
+          uv run
+          --with 'jsonschema>=4.25,<5'
+          --with 'pydantic>=2.10,<3'
+          --with 'pyyaml>=6.0.2,<7'
+          python3 -m unittest discover -s tests -v
 
       - name: Run immutable baseline tests
         run: python3 tests/support/run_baseline_tests.py --root . --git-ref 993247b2850ac86993c7c6dd18e6c4fd9ec6df7c --expected-ids tests/fixtures/baseline-test-ids.txt

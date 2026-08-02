@@ -47,6 +47,7 @@ class CiWorkflowContractTests(unittest.TestCase):
         self.assertIn('python-version: "3.12"', python)
         self.assertIn("astral-sh/setup-uv@", uv)
         self.assertIn("uv run", tests)
+        self.assertIn("jsonschema>=4.25,<5", tests.lower())
         self.assertIn("pydantic>=2.10,<3", tests.lower())
         self.assertIn("pyyaml>=6.0.2,<7", tests.lower())
 
