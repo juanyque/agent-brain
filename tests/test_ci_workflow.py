@@ -17,6 +17,17 @@ class CiWorkflowContractTests(unittest.TestCase):
         self.assertIn("runner.os == 'macOS'", install)
         self.assertIn("brew install ripgrep", install)
 
+    def test_macos_ci_provisions_pandoc_for_document_rendering(self) -> None:
+        # Given: the workflow job that runs document rendering tests.
+        job = stdlib_contracts_job()
+
+        # When: its Pandoc provisioning step is inspected.
+        install = job.step_named("Install pandoc")
+
+        # Then: macOS receives the core renderer missing from its runner image.
+        self.assertIn("runner.os == 'macOS'", install)
+        self.assertIn("brew install pandoc", install)
+
     def test_operating_model_evidence_is_host_independent(self) -> None:
         # Given: the tests executed on both macOS and Linux runners.
         source = (ROOT / "tests" / "test_operating_model_evidence.py").read_text(
