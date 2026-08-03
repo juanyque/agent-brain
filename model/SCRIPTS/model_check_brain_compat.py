@@ -16,6 +16,10 @@ from model_check_contract import (
     text_lines_from_json,
 )
 from model_check_brain_compat_paths import first_absolute_common_markdown_path
+from model_check_brain_compat_symlinks import (
+    template_findings,
+    unmanaged_external_symlink_findings,
+)
 from model_check_no_follow import lstat_entry, readlink_text, symlinked_parent, walk_no_follow
 from model_check_reports import stable_json
 
@@ -24,12 +28,6 @@ WRAPPERS = {
     "AGENTS.md": "AGENTS.common.md",
     "BRAIN.md": "BRAIN.common.md",
     "JOBS.md": "JOBS.common.md",
-}
-MANAGED_TEMPLATES = {
-    "TEMPLATES/WIP Template.md": "TEMPLATES/TEMPLATE.wip.common.md",
-    "TEMPLATES/WIP Session Template.md": "TEMPLATES/TEMPLATE.wip-session.common.md",
-    "TEMPLATES/Daily Note Template.md": "TEMPLATES/TEMPLATE.daily-note.common.md",
-    "TEMPLATES/Issue Template.md": "TEMPLATES/TEMPLATE.issue.common.md",
 }
 SECTION_REF = re.compile(r'^#{2,6}\s+(?:Adds to|Overrides in|Replaces)\s+"([^"]+)"\s*$')
 
@@ -77,17 +75,6 @@ def discover_wrappers(common: Path) -> dict[str, str]:
             local = source.stem.removesuffix(".common") + ".md"
             wrappers[f"TASK_TYPES/{local}"] = f"TASK_TYPES/{source.name}"
     return wrappers
-
-
-def conditional_templates(common: Path) -> dict[str, str]:
-    templates: dict[str, str] = {}
-    for source in sorted((common / "TEMPLATES").glob("TEMPLATE.*.common.md")):
-        common_rel = f"TEMPLATES/{source.name}"
-        if common_rel in MANAGED_TEMPLATES.values():
-            continue
-        name = source.name.removeprefix("TEMPLATE.").removesuffix(".common.md")
-        templates[f"TEMPLATES/{name} Template.md"] = common_rel
-    return templates
 
 
 def add(
@@ -165,43 +152,11 @@ def wrapper_findings(
     return findings
 
 
-def template_findings(
-    brain: Path,
-    common: Path,
-    severities: dict[str, str],
-) -> list[Finding]:
-    findings: list[Finding] = []
-    for local_rel, common_rel in MANAGED_TEMPLATES.items():
-        local_path = brain / local_rel
-        escaped_parent = symlinked_parent(brain, local_path)
-        if escaped_parent is not None:
-            add(findings, severities, "brain-managed-path-escape", local_rel, str(escaped_parent), "managed template parent is a symlink")
-            continue
-        entry = lstat_entry(local_path)
-        if not entry.exists:
-            add(findings, severities, "brain-template-broken", local_rel, common_rel, "managed template symlink is missing")
-            continue
-        if not entry.is_symlink:
-            add(findings, severities, "brain-template-wrong-model", local_rel, common_rel, "managed template is not a symlink to this model")
-            continue
-        try:
-            resolved = local_path.resolve(strict=True)
-        except (OSError, RuntimeError):
-            add(findings, severities, "brain-template-broken", local_rel, readlink_text(local_path), "managed template symlink target is missing")
-            continue
-        expected = (common / common_rel).resolve()
-        if resolved != expected:
-            add(findings, severities, "brain-template-wrong-model", local_rel, common_rel, "managed template resolves outside this model")
-    for local_rel, common_rel in conditional_templates(common).items():
-        if not lstat_entry(brain / local_rel).exists:
-            add(findings, severities, "brain-conditional-template-absent", local_rel, common_rel, "conditional template is not linked in this brain")
-    return findings
-
-
 def scan_brain_compatibility(brain: Path, common: Path, model_path: Path) -> list[Finding]:
     severities = severity_by_code(model_path)
     findings = wrapper_findings(brain, common, severities)
     findings.extend(template_findings(brain, common, severities))
+    findings.extend(unmanaged_external_symlink_findings(brain, severities))
     return sorted_findings(findings)
 
 

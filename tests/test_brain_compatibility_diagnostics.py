@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import assert_never
 
 from tests import model_check_brain_compat_cases as cases
+from model_check_contract import JsonValue  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,7 +82,7 @@ def _materialize_legacy_fixture(root: Path) -> tuple[Path, Path]:
     return brain, common
 
 
-def _count_codes(rows: list[dict[str, object]]) -> dict[str, int]:
+def _count_codes(rows: list[dict[str, JsonValue]]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for row in rows:
         code = row["code"]
@@ -92,6 +93,47 @@ def _count_codes(rows: list[dict[str, object]]) -> dict[str, int]:
 
 
 class Task18BrainCompatibilityDiagnosticsTests(unittest.TestCase):
+    def test_reports_only_unmanaged_symlinks_that_leave_the_brain(self) -> None:
+        # Given: a generated brain with one internal and one external unmanaged symlink.
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            common = cases.write_common(root)
+            brain = root / "brain"
+            brain.mkdir()
+            reporter = cases.Reporter(root / "home-setup.log")
+            cases.apply(brain, common, skip_full_reorder=True, switch_model=True, reporter=reporter)
+            memory = brain / "MEMORY"
+            memory.mkdir(exist_ok=True)
+            internal_target = memory / "local.md"
+            internal_target.write_text("# Local\n", encoding="utf-8")
+            (memory / "internal-link.md").symlink_to(internal_target)
+            external_target = root / "external.md"
+            external_target.write_text("# External\n", encoding="utf-8")
+            (memory / "external-link.md").symlink_to(external_target)
+            before = cases.manifest(brain)
+
+            # When: strict read-only compatibility diagnostics scan the brain.
+            exit_code, payload = cases.compatibility_report(
+                brain,
+                common,
+                ROOT / "model" / "OPERATING-MODEL.json",
+                strict=True,
+            )
+            after = cases.manifest(brain)
+
+        # Then: only the unmanaged external link is warned about and nothing changes.
+        findings = [
+            row
+            for row in payload["findings"]
+            if row["code"] == "brain-unmanaged-external-symlink"
+        ]
+        self.assertEqual(before, after)
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["severity"], "warning")
+        self.assertEqual(findings[0]["path"], "MEMORY/external-link.md")
+        self.assertEqual(findings[0]["target"], str(external_target.resolve()))
+
     def test_legacy_fixture_has_one_vault_three_wrong_model_and_guidance_only(self) -> None:
         # Given: an immutable task-18 recipe materialized into a temporary legacy brain.
         with tempfile.TemporaryDirectory() as raw:

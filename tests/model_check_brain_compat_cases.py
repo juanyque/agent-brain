@@ -138,6 +138,7 @@ class BrainCompatibilityCaseTests(unittest.TestCase):
                 "brain-managed-path-escape": 1,
                 "brain-template-broken": 1,
                 "brain-template-wrong-model": 1,
+                "brain-unmanaged-external-symlink": 1,
                 "brain-wrapper-customized": 1,
                 "brain-wrapper-legacy-vault": 1,
                 "brain-wrapper-missing": 1,
@@ -146,7 +147,7 @@ class BrainCompatibilityCaseTests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            {"error": 7, "info": 2, "warning": 1},
+            {"error": 7, "info": 2, "warning": 2},
             {level: sum(1 for item in findings if item.severity == level) for level in ("error", "info", "warning")},
         )
 
