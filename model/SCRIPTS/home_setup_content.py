@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Final
 
 from _common import Reporter
 from brain_state import COMMON_LINK_NAME
@@ -17,6 +18,17 @@ TEMPLATE_SYMLINKS = {
     "TEMPLATES/WIP Session Template.md": "TEMPLATES/TEMPLATE.wip-session.common.md",
     "TEMPLATES/Daily Note Template.md": "TEMPLATES/TEMPLATE.daily-note.common.md",
     "TEMPLATES/Issue Template.md": "TEMPLATES/TEMPLATE.issue.common.md",
+}
+
+LOCAL_STATE_FILES: Final = {
+    "JOBS_LOGS.md": (
+        "# JOBS_LOGS\n\n"
+        "## Daily (Day change)\n\n"
+        "## Session consolidation\n\n"
+        "## Weekly\n\n"
+        "## Monthly\n\n"
+        "## Yearly\n"
+    ),
 }
 
 SCAFFOLD_DIRECTORIES = (
@@ -40,6 +52,10 @@ def report_content_directories(brain_root: Path, reporter: Reporter) -> None:
     for directory in SCAFFOLD_DIRECTORIES:
         status = "current" if (brain_root / directory).is_dir() else "missing, can create"
         reporter.write(f"  {directory}/: {status}")
+    reporter.write("local state:")
+    for local_name in LOCAL_STATE_FILES:
+        status = "exists, will not overwrite" if entry_exists_no_follow(brain_root / local_name) else "missing, can create"
+        reporter.write(f"  {local_name}: {status}")
 
 
 def wrapper_text(local_name: str, common_name: str) -> str:
@@ -176,6 +192,12 @@ def apply_managed_content(
     preflight_managed_paths(brain_root, common, wrappers)
     for directory in SCAFFOLD_DIRECTORIES:
         (brain_root / directory).mkdir(parents=True, exist_ok=True)
+    for local_name, content in LOCAL_STATE_FILES.items():
+        local_path = brain_root / local_name
+        if entry_exists_no_follow(local_path):
+            continue
+        reject_symlinked_parent(brain_root, local_path)
+        local_path.write_text(content, encoding="utf-8")
     for local_name, common_name in wrappers.items():
         local_path = brain_root / local_name
         common_path = common / common_name

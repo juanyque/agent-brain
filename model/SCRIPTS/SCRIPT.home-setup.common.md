@@ -3,8 +3,9 @@
 ## Purpose
 
 Attach a brain to the agent-brain model — **structure only** (D21). Creates the
-content directories, `_COMMON` symlink, wrapper files, and template symlinks. Handles
-staging for virgin brains. All runtime logic is in `runtime_manager.py`.
+content directories, `_COMMON` symlink, local maintenance state, wrapper files, and
+template symlinks. Handles staging for virgin brains. All runtime logic is in
+`runtime_manager.py`.
 
 ## What it does
 
@@ -23,8 +24,9 @@ staging for virgin brains. All runtime logic is in `runtime_manager.py`.
    `INBOX/`, `WIP/`, `JOURNAL/`, `MEMORY/`, `BACKLOG/`, `ARCHIVED/`, `REPORTS/`,
    `OUTBOX/`, and `QUARANTINE/`. It also creates the operational destinations
    `WIP/SESSIONS/`, `QUARANTINE/TRASH/`, and `QUARANTINE/ATTACHMENTS/`.
-5. **Wrappers** — creates missing local wrapper files (`AGENTS.md`, `BRAIN.md`, `JOBS.md`, `RULES-*.md`) that point to their `.common.md` sources in `_COMMON/`. Existing files are never overwritten.
-6. **Template symlinks** — creates missing `TEMPLATES/` symlinks to daily-note, WIP, and issue templates. Existing managed symlinks are validated against the selected model and stale or broken targets are relinked through `_COMMON`; regular local template files are preserved.
+5. **Local maintenance state**: creates a missing `JOBS_LOGS.md` with empty sections for every scheduler job. It remains brain-local, is never linked to `_COMMON`, and an existing entry is never overwritten.
+6. **Wrappers** — creates missing local wrapper files (`AGENTS.md`, `BRAIN.md`, `JOBS.md`, `RULES-*.md`) that point to their `.common.md` sources in `_COMMON/`. Existing files are never overwritten.
+7. **Template symlinks** — creates missing `TEMPLATES/` symlinks to daily-note, WIP, and issue templates. Existing managed symlinks are validated against the selected model and stale or broken targets are relinked through `_COMMON`; regular local template files are preserved.
 
 ## What it does NOT do
 
