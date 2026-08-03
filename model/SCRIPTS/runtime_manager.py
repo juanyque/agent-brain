@@ -526,7 +526,12 @@ def process_runtime(
         elif local_path.is_symlink() and local_path.exists():
             ingest_targets.add(local_target)
         elif local_path.is_symlink():
-            reporter.write(f"  WARNING {local_target} is a broken symlink")
+            if dry_run:
+                reporter.write(f"  WARNING {local_target} is a broken symlink")
+            else:
+                raise SystemExit(
+                    f"{rt_name} runtime config is a broken symlink: {local_target}"
+                )
 
     ingested_sources: set[str] = set()
     removed_targets: set[str] = set()
