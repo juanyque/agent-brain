@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import io
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -166,6 +167,49 @@ class RuntimeManagerTests(unittest.TestCase):
         self.assertEqual(tree_snapshot(self.home), before_home)
         self.assertTrue(local_config.is_symlink())
         self.assertTrue(cycle_peer.is_symlink())
+
+    def test_cli_reports_unreadable_symlink_target_without_traceback(self) -> None:
+        # Given a managed config symlink whose existing target cannot be read.
+        external_config = self.root / "external-config.toml"
+        external_config.write_text("model = 'external'\n", encoding="utf-8")
+        local_config = self.home / ".codex" / "config.toml"
+        local_config.parent.mkdir(parents=True)
+        local_config.symlink_to(external_config)
+        env = os.environ.copy()
+        env["HOME"] = str(self.home)
+        external_config.chmod(0)
+        if os.access(external_config, os.R_OK):
+            external_config.chmod(0o600)
+            self.skipTest("current user can read mode-000 files")
+
+        # When the real CLI applies runtime wiring, then it reports a controlled error.
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(runtime_manager.__file__),
+                    "--brain",
+                    str(self.brain),
+                    "--runtime",
+                    "codex",
+                    "--apply",
+                ],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        finally:
+            external_config.chmod(0o600)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("ERROR:", result.stdout)
+        self.assertEqual(result.stderr, "")
+        self.assertTrue(local_config.is_symlink())
+        self.assertFalse(
+            (self.brain / "_AGENTS" / "CODEX" / "config.toml").exists()
+        )
+        self.assertEqual(external_config.read_text(), "model = 'external'\n")
 
     def test_direction_b_implants_brain_config(self) -> None:
         brain_config = self.brain / "_AGENTS" / "CODEX" / "config.toml"

@@ -630,10 +630,10 @@ def main() -> int:
         reporter.write("Runtime manager completed." if args.apply else "Dry run only. Re-run with --apply to execute.")
         reporter.flush()
         return 0
-    except SystemExit as exc:
+    except (OSError, SystemExit) as exc:
         reporter.write(f"ERROR: {exc}")
         reporter.flush()
-        raise
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":
