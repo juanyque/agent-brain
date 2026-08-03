@@ -34,11 +34,11 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ripgrep
 
-      - name: Install document renderers (Ubuntu)
+      - name: Install Ubuntu test dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y pandoc weasyprint
+          sudo apt-get install -y pandoc ripgrep weasyprint
 
       - name: Install document renderers (macOS)
         if: runner.os == 'macOS'

@@ -6,28 +6,31 @@ from tests.model_check_todo19_cases import ROOT, stdlib_contracts_job
 
 
 class CiWorkflowContractTests(unittest.TestCase):
-    def test_macos_ci_provisions_ripgrep_for_stale_scan(self) -> None:
+    def test_ci_provisions_ripgrep_on_both_platforms(self) -> None:
         # Given: the workflow job that executes the canonical stale scan.
         job = stdlib_contracts_job()
 
-        # When: its ripgrep provisioning step is inspected.
-        install = job.step_named("Install ripgrep")
+        # When: its platform-specific dependency steps are inspected.
+        ubuntu = job.step_named("Install Ubuntu test dependencies")
+        macos = job.step_named("Install ripgrep")
 
-        # Then: only macOS receives the dependency missing from its runner image.
-        self.assertIn("runner.os == 'macOS'", install)
-        self.assertIn("brew install ripgrep", install)
+        # Then: both runners receive the executable used by the stale scan.
+        self.assertIn("runner.os == 'Linux'", ubuntu)
+        self.assertIn("apt-get install -y pandoc ripgrep weasyprint", ubuntu)
+        self.assertIn("runner.os == 'macOS'", macos)
+        self.assertIn("brew install ripgrep", macos)
 
     def test_ci_provisions_document_renderers_on_both_platforms(self) -> None:
         # Given: the workflow job that runs document rendering tests.
         job = stdlib_contracts_job()
 
         # When: its platform-specific renderer provisioning steps are inspected.
-        ubuntu = job.step_named("Install document renderers (Ubuntu)")
+        ubuntu = job.step_named("Install Ubuntu test dependencies")
         macos = job.step_named("Install document renderers (macOS)")
 
         # Then: both runners receive Pandoc and its configured PDF engine.
         self.assertIn("runner.os == 'Linux'", ubuntu)
-        self.assertIn("apt-get install -y pandoc weasyprint", ubuntu)
+        self.assertIn("apt-get install -y pandoc ripgrep weasyprint", ubuntu)
         self.assertIn("runner.os == 'macOS'", macos)
         self.assertIn("brew install pandoc weasyprint", macos)
 
