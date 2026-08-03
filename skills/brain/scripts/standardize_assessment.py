@@ -7,23 +7,29 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Final
 
 from _common import build_command_string
 
 
 DATE_RE = re.compile(r"^(\d{4})-\d{2}-\d{2}\.md$")
 
-EXPECTED_ROOT_DIRS = {
+REQUIRED_ROOT_DIRS: Final = frozenset({
     "_COMMON",
+    "ARCHIVED",
     "BACKLOG",
     "INBOX",
     "JOURNAL",
     "MEMORY",
+    "OUTBOX",
     "QUARANTINE",
     "REPORTS",
+    "TASK_TYPES",
     "TEMPLATES",
     "WIP",
-}
+})
+OPTIONAL_ROOT_DIRS: Final = frozenset({"_AGENTS", "_STAGING"})
+ALLOWED_ROOT_DIRS: Final = REQUIRED_ROOT_DIRS | OPTIONAL_ROOT_DIRS
 
 EXPECTED_ROOT_FILES = {
     "AGENTS.md",
@@ -48,7 +54,7 @@ def build_sensitive_re(extra_terms: list[str]) -> re.Pattern[str]:
     return re.compile(pattern, re.IGNORECASE)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Finding:
     severity: str
     area: str
@@ -87,7 +93,7 @@ def count_md(path: Path) -> int:
 
 def assess_root(brain_root: Path) -> list[Finding]:
     findings: list[Finding] = []
-    for required in sorted(EXPECTED_ROOT_DIRS):
+    for required in sorted(REQUIRED_ROOT_DIRS):
         if not (brain_root / required).exists():
             findings.append(Finding("warning", "root", f"Missing expected directory `{required}/`."))
     for required in sorted(EXPECTED_ROOT_FILES):
@@ -96,7 +102,7 @@ def assess_root(brain_root: Path) -> list[Finding]:
     for child in list_children(brain_root):
         if child.name.startswith("."):
             continue
-        if child.is_dir() and child.name not in EXPECTED_ROOT_DIRS:
+        if child.is_dir() and child.name not in ALLOWED_ROOT_DIRS:
             findings.append(Finding("review", "root", f"Unexpected top-level directory `{child.name}/`."))
         if child.is_file() and child.name not in EXPECTED_ROOT_FILES:
             findings.append(Finding("review", "root", f"Unexpected top-level file `{child.name}`."))
