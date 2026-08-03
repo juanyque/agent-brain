@@ -17,16 +17,19 @@ class CiWorkflowContractTests(unittest.TestCase):
         self.assertIn("runner.os == 'macOS'", install)
         self.assertIn("brew install ripgrep", install)
 
-    def test_macos_ci_provisions_pandoc_for_document_rendering(self) -> None:
+    def test_ci_provisions_document_renderers_on_both_platforms(self) -> None:
         # Given: the workflow job that runs document rendering tests.
         job = stdlib_contracts_job()
 
-        # When: its Pandoc provisioning step is inspected.
-        install = job.step_named("Install pandoc")
+        # When: its platform-specific renderer provisioning steps are inspected.
+        ubuntu = job.step_named("Install document renderers (Ubuntu)")
+        macos = job.step_named("Install document renderers (macOS)")
 
-        # Then: macOS receives the core renderer missing from its runner image.
-        self.assertIn("runner.os == 'macOS'", install)
-        self.assertIn("brew install pandoc", install)
+        # Then: both runners receive Pandoc and its configured PDF engine.
+        self.assertIn("runner.os == 'Linux'", ubuntu)
+        self.assertIn("apt-get install -y pandoc weasyprint", ubuntu)
+        self.assertIn("runner.os == 'macOS'", macos)
+        self.assertIn("brew install pandoc weasyprint", macos)
 
     def test_operating_model_evidence_is_host_independent(self) -> None:
         # Given: the tests executed on both macOS and Linux runners.
