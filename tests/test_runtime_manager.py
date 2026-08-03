@@ -145,6 +145,28 @@ class RuntimeManagerTests(unittest.TestCase):
         self.assertTrue(local_config.is_symlink())
         self.assertFalse(local_config.exists())
 
+    def test_cyclic_runtime_config_symlink_aborts_before_mutation(self) -> None:
+        # Given a managed config participating in a two-link cycle.
+        local_config = self.home / ".codex" / "config.toml"
+        cycle_peer = self.home / ".codex" / "cycle-peer.toml"
+        local_config.parent.mkdir(parents=True)
+        local_config.symlink_to(cycle_peer.name)
+        cycle_peer.symlink_to(local_config.name)
+        before_brain = tree_snapshot(self.brain)
+        before_home = tree_snapshot(self.home)
+
+        # When runtime wiring is applied, then the cycle is rejected atomically.
+        with self.assertRaisesRegex(
+            SystemExit,
+            r"codex.*broken symlink.*config\.toml",
+        ):
+            self.process_codex()
+
+        self.assertEqual(tree_snapshot(self.brain), before_brain)
+        self.assertEqual(tree_snapshot(self.home), before_home)
+        self.assertTrue(local_config.is_symlink())
+        self.assertTrue(cycle_peer.is_symlink())
+
     def test_direction_b_implants_brain_config(self) -> None:
         brain_config = self.brain / "_AGENTS" / "CODEX" / "config.toml"
         brain_config.parent.mkdir(parents=True)
