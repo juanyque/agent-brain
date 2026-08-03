@@ -46,6 +46,48 @@ def create_root_entries(root: Path, directories: set[str]) -> None:
 
 
 class StandardizeAssessmentRootTests(unittest.TestCase):
+    def test_reports_missing_wrapper_for_discovered_common_rule(self) -> None:
+        # Given: a canonical common rule without its brain-local wrapper.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            create_root_entries(
+                brain,
+                LEGACY_REQUIRED_ROOT_DIRS | NEW_REQUIRED_ROOT_DIRS,
+            )
+            (brain / "_COMMON" / "RULES-FUTURE.common.md").write_text(
+                "# Future rule\n",
+                encoding="utf-8",
+            )
+
+            # When: the root structure is assessed.
+            findings = assess_root(brain)
+
+        # Then: the discovered wrapper is reported as missing.
+        self.assertIn(
+            "Missing expected file `RULES-FUTURE.md`.",
+            {finding.message for finding in findings},
+        )
+
+    def test_accepts_wrapper_for_discovered_common_rule(self) -> None:
+        # Given: a canonical common rule and its matching brain-local wrapper.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            create_root_entries(
+                brain,
+                LEGACY_REQUIRED_ROOT_DIRS | NEW_REQUIRED_ROOT_DIRS,
+            )
+            (brain / "_COMMON" / "RULES-FUTURE.common.md").write_text(
+                "# Future rule\n",
+                encoding="utf-8",
+            )
+            (brain / "RULES-FUTURE.md").write_text("# Local wrapper\n", encoding="utf-8")
+
+            # When: the root structure is assessed.
+            findings = assess_root(brain)
+
+        # Then: the discovered wrapper is accepted as canonical.
+        self.assertEqual(findings, [])
+
     def test_accepts_required_and_optional_canonical_directories(self) -> None:
         # Given: a brain containing every required and optional canonical root directory.
         with tempfile.TemporaryDirectory() as raw:

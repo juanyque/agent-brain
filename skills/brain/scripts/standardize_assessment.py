@@ -31,16 +31,20 @@ REQUIRED_ROOT_DIRS: Final = frozenset({
 OPTIONAL_ROOT_DIRS: Final = frozenset({"_AGENTS", "_STAGING"})
 ALLOWED_ROOT_DIRS: Final = REQUIRED_ROOT_DIRS | OPTIONAL_ROOT_DIRS
 
-EXPECTED_ROOT_FILES = {
+EXPECTED_ROOT_FILES: Final = frozenset({
     "AGENTS.md",
     "BRAIN.md",
     "JOBS.md",
     "JOBS_LOGS.md",
+    "RULES-ATTACHMENTS.md",
     "RULES-DAILY-NOTES.md",
     "RULES-FILE-NAMING.md",
+    "RULES-ISSUE-DOCS.md",
     "RULES-LINKS.md",
+    "RULES-OPTIONAL-CAPABILITIES.md",
+    "RULES-REVIEW-EVIDENCE.md",
     "RULES-SESSION-LIFECYCLE.md",
-}
+})
 
 DEFAULT_SENSITIVE_TERMS = [
     "credential", "credentials", "password", "secret", "token", "access",
@@ -91,12 +95,21 @@ def count_md(path: Path) -> int:
     return sum(1 for _ in path.rglob("*.md"))
 
 
+def expected_root_files(brain_root: Path) -> frozenset[str]:
+    discovered_rules = frozenset(
+        source.name.removesuffix(".common.md") + ".md"
+        for source in (brain_root / "_COMMON").glob("RULES-*.common.md")
+    )
+    return EXPECTED_ROOT_FILES | discovered_rules
+
+
 def assess_root(brain_root: Path) -> list[Finding]:
     findings: list[Finding] = []
+    expected_files = expected_root_files(brain_root)
     for required in sorted(REQUIRED_ROOT_DIRS):
         if not (brain_root / required).exists():
             findings.append(Finding("warning", "root", f"Missing expected directory `{required}/`."))
-    for required in sorted(EXPECTED_ROOT_FILES):
+    for required in sorted(expected_files):
         if not (brain_root / required).exists():
             findings.append(Finding("warning", "root", f"Missing expected file `{required}`."))
     for child in list_children(brain_root):
@@ -104,7 +117,7 @@ def assess_root(brain_root: Path) -> list[Finding]:
             continue
         if child.is_dir() and child.name not in ALLOWED_ROOT_DIRS:
             findings.append(Finding("review", "root", f"Unexpected top-level directory `{child.name}/`."))
-        if child.is_file() and child.name not in EXPECTED_ROOT_FILES:
+        if child.is_file() and child.name not in expected_files:
             findings.append(Finding("review", "root", f"Unexpected top-level file `{child.name}`."))
     return findings
 
