@@ -53,6 +53,35 @@ def create_session_fixture(
 
 
 class BrainCheckTests(unittest.TestCase):
+    def test_antigravity_session_note_passes_session_check(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            session_id = "conversation-123"
+            command = f"cd /workspace/project && agy --conversation {session_id}"
+            create_session_fixture(
+                brain,
+                session_id,
+                brain / "WIP" / "SESSIONS",
+                command=command,
+                status="open",
+            )
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "--session-id",
+                session_id,
+                "--runtime",
+                "antigravity",
+                "--cwd",
+                "/workspace/project",
+                "--date",
+                "2026-07-21",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Brain postcondition check: OK", result.stdout)
+
     def test_archived_session_note_passes_session_check(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)

@@ -49,6 +49,12 @@ class SessionOpenContextMixin:
             "cd /workspace/project && codex resume session-123",
         )
 
+    def test_antigravity_resume_command_contains_original_cwd(self) -> None:
+        self.assertEqual(
+            resume_command("antigravity", "conversation-123", "/workspace/project"),
+            "cd /workspace/project && agy --conversation conversation-123",
+        )
+
     def test_resume_command_quotes_cwd(self) -> None:
         self.assertEqual(
             resume_command("claude", "session-123", "/workspace/my project"),

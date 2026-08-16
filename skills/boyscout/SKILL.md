@@ -22,6 +22,9 @@ allowed-tools:
 
 Apply the Boy Scout Rule: leave things better than you found them.
 
+Examples below use `/boyscout`, the explicit form in Antigravity CLI and Claude Code. In
+Codex CLI or the IDE extension, invoke the same skill as `$boyscout`.
+
 While working on a task, scan the surrounding context for improvement opportunities — flaky tests, broken scripts, missing coverage, dead code, interesting refactors, outdated docs, skill gaps, etc. New findings are silently archived to the backlog so the primary task is not interrupted. When the user explicitly invokes `/boyscout` (or `/boyscout clean` / `/boyscout deep`), present the accumulated findings and let them attack each in an isolated worktree (branched from an up-to-date base branch), route to a detailed ticket, or leave in the backlog for later.
 
 **Golden rule: default to silent archive — never auto-fix without explicit user opt-in.** New findings are added to the backlog without interrupting the primary task. Triage and fixes are opt-in: the user invokes `/boyscout` to see the selection form, or explicitly says "fix item N now" during the scan. When a finding is attacked from the backlog, success consumes the entry (deletes it).
@@ -119,7 +122,7 @@ the active runtime (the calling agent knows its runtime):
 python3 ~/.agents/skills/brain/scripts/profile_context.py \
   --brain-root "<brain-root>" \
   --cwd "$PWD" \
-  --runtime <claude|codex|opencode|generic> \
+  --runtime <antigravity|claude|codex|opencode|generic> \
   --include-policy \
   --capability issues.create \
   --capability issues.read \

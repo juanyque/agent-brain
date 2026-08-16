@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--session-id", help="Runtime session ID to verify.")
     parser.add_argument(
         "--runtime",
-        choices=["claude", "opencode", "codex", "generic"],
+        choices=["antigravity", "claude", "opencode", "codex", "generic"],
         help="Runtime used to build the expected recovery command.",
     )
     parser.add_argument("--cwd", default="", help="Original session working directory.")

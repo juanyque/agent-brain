@@ -23,6 +23,9 @@ Connect the current session to a notes brain, load its operating model, and docu
 
 ## Invocation routing
 
+For explicit invocation, Codex CLI and the IDE extension use `$brain`; Antigravity CLI and
+Claude Code use `/brain`. Natural-language requests can still activate the skill implicitly.
+
 - No arguments, `session`, `nueva sesión`, `new session`, `inicio sesión`, `connect`, or `start` → run the session-start protocol: resolve the brain, run `session_open.py` (see "After brain resolution"), consume the compact digest, and follow Flow 2 (`new session`) for the detected scenario. Flow 2 creates today's daily note when it is missing — first consolidating the durable work of clearly-finished previous sessions (State-driven rollover), then closing the previous day. Starting the day is part of session start and does **not** require an explicit `nuevo día` instruction.
 - `new-day`, `nuevo día`, `cambio de día`, `cambia de día`, or `we changed day` → run the day-rollover protocol. Resolve the brain, run `session_open.py` (day_rollover_detected will be `yes`), load `RULES-SESSION-LIFECYCLE.md`, and follow Flow 1 (`day change / same session continues`). Do not create a new session note in this flow.
 - `close session`, `cerrar sesión`, `cerramos la sesión`, `wrap up`, `end session`, `consolidate`, or `consolidar` → run the session-close protocol: resolve the brain, load `RULES-SESSION-LIFECYCLE.md` (Closing gate + Consolidation rules), then run `session_close.py`. Use the canonical apply form `session_close.py --brain-root <brain> --apply handoff <session-id>` for a handoff. For full consolidation, use `session_close.py --brain-root <brain> --apply consolidate <session-id> --archive` when the closing gate passes and the session note is Git-tracked; the brain-internal move has standing user authorization and needs no separate Git confirmation. If the note is untracked, omit `--archive` and report why it remains in place. The CLI also accepts a trailing `--apply` so equivalent natural invocations do not fail. Objectives review is required before consolidation (see `RULES-DAILY-NOTES.md`).
@@ -81,7 +84,7 @@ Resolve the real session id and runtime before invoking the script. Never pass a
 python3 ~/.agents/skills/brain/scripts/session_open.py \
   --brain-root "<brain_path>" \
   --session-id "<REAL session id>" \
-  --runtime <claude|opencode|codex|generic> \
+  --runtime <antigravity|claude|opencode|codex|generic> \
   --session-label '<label, or empty>' \
   --cwd "$(pwd)"
 ```

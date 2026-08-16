@@ -3,6 +3,15 @@ from __future__ import annotations
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
+
+
+RESUME_COMMAND_TEMPLATES: Final = {
+    "antigravity": "agy --conversation {session_id}",
+    "claude": "claude --resume {session_id}",
+    "codex": "codex resume {session_id}",
+    "opencode": "opencode -s {session_id}",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,14 +73,10 @@ def normalize_cwd(cwd: str) -> str:
 
 def resume_command(runtime: str, session_id: str, cwd: str = "") -> str:
     r = (runtime or "").strip().lower()
-    if r == "claude":
-        command = f"claude --resume {session_id}"
-    elif r == "opencode":
-        command = f"opencode -s {session_id}"
-    elif r == "codex":
-        command = f"codex resume {session_id}"
-    else:
+    template = RESUME_COMMAND_TEMPLATES.get(r)
+    if template is None:
         return session_id
+    command = template.format(session_id=session_id)
     if cwd:
         return f"cd {shlex.quote(normalize_cwd(cwd))} && {command}"
     return command

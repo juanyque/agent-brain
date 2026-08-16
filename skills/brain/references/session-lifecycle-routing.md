@@ -29,6 +29,7 @@ entrypoint.
 
 | Runtime | Resolve session id | Pass `--runtime` |
 |---|---|---|
+| Antigravity CLI | read the current workspace entry from `~/.gemini/antigravity-cli/cache/last_conversations.json`; if it is absent, use `/resume` and ask rather than guessing | `--runtime antigravity` |
 | Claude Code | read `$CLAUDE_CODE_SESSION_ID` | `--runtime claude` (or omit; auto-detected via env) |
 | OpenCode | run `opencode session list`, pick the active session | `--runtime opencode` (**required** — no env var) |
 | Codex | read `$CODEX_THREAD_ID` (runtime-provided; not a public API) | `--runtime codex` |
@@ -40,12 +41,12 @@ If you cannot resolve the real id, **stop and ask the user** rather than inventi
 python3 ~/.agents/skills/brain/scripts/session_open.py \
   --brain-root "<brain_path>" \
   --session-id "<REAL session id from your runtime>" \
-  --runtime <claude|opencode|codex> \
+  --runtime <antigravity|claude|opencode|codex> \
   --session-label '<label from /rename, or empty>' \
   --cwd "$(pwd)"
 ```
 
-The `--runtime` flag controls the resume-command format emitted in the session note and the daily `# Sessions` entry (`opencode -s <id>`, `claude --resume <id>`, `codex resume <id>`, etc.). The supplied `--cwd` is recorded and prefixed as `cd <cwd> && ...`, because runtime configuration and project guidance are resolved from the launch directory. If `--runtime` is omitted, the script falls back to `detect_runtime()` (Claude only, via env); any unknown runtime emits a bare session id so a wrong runtime is never silently claimed.
+The `--runtime` flag controls the resume-command format emitted in the session note and the daily `# Sessions` entry (`agy --conversation <id>`, `opencode -s <id>`, `claude --resume <id>`, `codex resume <id>`, etc.). The supplied `--cwd` is recorded and prefixed as `cd <cwd> && ...`, because runtime configuration and project guidance are resolved from the launch directory. If `--runtime` is omitted, the script falls back to `detect_runtime()` (Claude only, via env); any unknown runtime emits a bare session id so a wrong runtime is never silently claimed.
 
 The script emits a compact digest (~20-30 lines): brain state, today's daily info, open sessions list, WIP items filtered by cwd, TASK_TYPES one-liners, and any warnings. The digest is a state trace, not a prose snapshot: it records operational-file presence and selected one-liners, but never includes `AGENTS.md`, `BRAIN.md`, rule, task, or reference bodies. **Do not additionally read `AGENTS.md`, `BRAIN.md`, `WIP/WIP.md`, or `TASK_TYPES/TASK_TYPES.md` — the digest is the only brain context the main agent needs.**
 
@@ -57,7 +58,7 @@ After the user acknowledges the digest (or when the session open is routine), pa
 python3 ~/.agents/skills/brain/scripts/session_open.py \
   --brain-root "<brain_path>" \
   --session-id "<REAL session id>" \
-  --runtime <claude|opencode|codex> \
+  --runtime <antigravity|claude|opencode|codex> \
   --session-label '<label>' \
   --cwd "$(pwd)" \
   --apply

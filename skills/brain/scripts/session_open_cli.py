@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--runtime",
         default=None,
-        choices=["claude", "opencode", "codex", "generic"],
+        choices=["antigravity", "claude", "opencode", "codex", "generic"],
         help="Agent runtime. Controls the resume-command format emitted in the session note "
         "and the daily # Sessions entry. If omitted, falls back to detect_runtime() "
         "(Claude via $CLAUDE_CODE_SESSION_ID, else 'generic'). Non-Claude runtimes MUST "
