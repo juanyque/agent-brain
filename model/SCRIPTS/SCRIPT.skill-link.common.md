@@ -1,7 +1,8 @@
 # skill_link.sh
 
 ## Purpose
-- Symlink a skill into runtime skills directories (`~/.agents/skills/`, `~/.claude/skills/`, etc.).
+- Symlink a skill into detected user-skill stores: shared `~/.agents/skills/` for Codex/OpenCode,
+  `~/.claude/skills/` for Claude, and `~/.gemini/antigravity-cli/skills/` for Antigravity CLI.
 - Accept either an agent-brain skill name (`skills/<name>/`) or an explicit path to a skill owned by
   another repository.
 - For manual installation of non-brain skills (boyscout, etc.). The brain skill is installed automatically by `bootstrap-zero.sh`.
@@ -31,6 +32,8 @@ skill_link.sh boyscout ~/.agents --apply
 
 An explicit source directory must contain `SKILL.md`. Its directory basename becomes the installed
 skill name. The source remains owned by its project; runtime homes receive symlinks rather than copies.
+Automatic detection deduplicates Codex and OpenCode into the shared `~/.agents/skills/` store. It
+does not target `~/.codex/skills/`, `~/.config/opencode/skills/`, or the legacy Gemini CLI path.
 
 ## Compatibility
 

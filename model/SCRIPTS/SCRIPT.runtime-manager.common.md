@@ -6,7 +6,7 @@ All runtime wiring for a brain (D21/D26). Replaces the runtime logic previously 
 
 ## What it does
 
-1. **Discovery** — detects local runtimes (`~/.claude/`, `~/.config/opencode/`, `~/.codex/`) and brain-side config (`_AGENTS/<RT>/`).
+1. **Discovery** — detects local runtimes (`~/.claude/`, `~/.config/opencode/`, `~/.codex/`, `~/.gemini/antigravity-cli/`) and brain-side config (`_AGENTS/<RT>/`).
 2. **Decision matrix** per mapped file or directory:
 
    | Brain `_AGENTS/<RT>/` | Local `~/.<RT>/` | Action |
@@ -18,7 +18,7 @@ All runtime wiring for a brain (D21/D26). Replaces the runtime logic previously 
    | no | no | Skip |
 
 3. **Old-layout migration** — detects external symlinks pointing into the brain, moves targets to `_AGENTS/`, rewrites symlinks.
-4. **Skill link** — symlinks each runtime's user skill location to `agent-brain/skills/brain`. Codex uses the official user location `~/.agents/skills/brain`.
+4. **Skill link** — symlinks each runtime's user skill location to `agent-brain/skills/brain`. Codex and OpenCode share `~/.agents/skills/brain`; Antigravity CLI uses `~/.gemini/antigravity-cli/skills/brain`.
 
 ## Usage
 
@@ -47,11 +47,15 @@ When both sides have unmanaged config:
 
 ## Runtime configs
 
-| Runtime | Local dir | `_AGENTS/` subdir | Mappings |
+| Runtime | Local config dir | Skill destination | `_AGENTS/` mappings |
 |---|---|---|---|
-| claude | `~/.claude/` | `CLAUDE/` | `CLAUDE.runtime.claude.md→CLAUDE.md`, `settings.json`, `memory` |
-| opencode | `~/.config/opencode/` | `OPENCODE/` | `AGENTS.runtime.opencode.md→AGENTS.md`, `opencode.json`, `oh-my-openagent.json` |
-| codex | `~/.codex/` | `CODEX/` | `AGENTS.runtime.codex.md→AGENTS.md`, `config.toml`; skill at `~/.agents/skills/brain` |
+| claude | `~/.claude/` | `~/.claude/skills/brain` | `CLAUDE.runtime.claude.md→CLAUDE.md`, `settings.json`, `memory` |
+| opencode | `~/.config/opencode/` | `~/.agents/skills/brain` | `AGENTS.runtime.opencode.md→AGENTS.md`, `opencode.json`, `oh-my-openagent.json` |
+| agents | `~/.agents/` | `~/.agents/skills/brain` | `AGENTS.runtime.agents.md→AGENTS.md` |
+| codex | `~/.codex/` | `~/.agents/skills/brain` | `AGENTS.runtime.codex.md→AGENTS.md`, `config.toml` |
+| antigravity | `~/.gemini/antigravity-cli/` | `~/.gemini/antigravity-cli/skills/brain` | Skill-only; no config mappings |
+
+The catalog does not define a `gemini` runtime or install into the legacy `~/.gemini/skills/` path.
 
 If `_AGENTS/SHARED/memory/` exists, Codex also receives a read-only discovery link at
 `~/.agents/brain-memory`. The installer does not replace or relocate Codex's native,

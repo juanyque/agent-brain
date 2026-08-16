@@ -27,49 +27,11 @@ from brain_state import (  # noqa: E402
     link_status,
 )
 from _common import Reporter, build_command_string, script_log_path  # noqa: E402
-
-RUNTIME_CONFIGS = {
-    "claude": {
-        "local_dir": Path("~/.claude"),
-        "agents_subdir": "CLAUDE",
-        "mappings": [
-            ("CLAUDE.runtime.claude.md", "CLAUDE.md"),
-            ("settings.json", "settings.json"),
-            ("memory", "memory"),
-        ],
-    },
-    "opencode": {
-        "local_dir": Path("~/.config/opencode"),
-        "agents_subdir": "OPENCODE",
-        "mappings": [
-            ("AGENTS.runtime.opencode.md", "AGENTS.md"),
-            ("opencode.json", "opencode.json"),
-            ("oh-my-openagent.json", "oh-my-openagent.json"),
-        ],
-    },
-    "agents": {
-        "local_dir": Path("~/.agents"),
-        "agents_subdir": "AGENTS",
-        "mappings": [
-            ("AGENTS.runtime.agents.md", "AGENTS.md"),
-        ],
-    },
-    # Codex discovers user skills in ~/.agents/skills. Its private, user-level
-    # config is persisted by the brain without coupling it to the public model.
-    "codex": {
-        "local_dir": Path("~/.codex"),
-        "agents_subdir": "CODEX",
-        "mappings": [
-            ("AGENTS.runtime.codex.md", "AGENTS.md"),
-            ("config.toml", "config.toml"),
-        ],
-        "skills_dir": Path("~/.agents/skills"),
-        "private_targets": {"config.toml"},
-    },
-}
-
-RUNTIME_HOMES = [Path("~/.agents"), Path("~/.claude"), Path("~/.codex")]
-INBOX_RUNTIME_DIR_NAME = "INBOX/_RUNTIME"
+from runtime_catalog import (  # noqa: E402
+    INBOX_RUNTIME_DIR_NAME,
+    RUNTIME_CONFIGS,
+    RUNTIME_HOMES,
+)
 
 
 def resolve_repo_root() -> Path:

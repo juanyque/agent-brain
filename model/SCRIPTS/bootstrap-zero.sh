@@ -7,7 +7,7 @@
 # Does NOT create _COMMON, _STAGING, or symlinks itself.
 #
 # Usage:
-#   bootstrap-zero.sh --home <brain_path> [--apply] [--update] [--runtime claude,opencode,agents,codex] [--symlink-policy copy|keep]
+#   bootstrap-zero.sh --home <brain_path> [--apply] [--update] [--runtime claude,opencode,agents,codex,antigravity] [--symlink-policy copy|keep]
 #     --home      the brain path (if omitted, prompts interactively)
 #     --apply     execute (default: dry-run plan only)
 #     --update    git-pull the agent-brain repo before wiring

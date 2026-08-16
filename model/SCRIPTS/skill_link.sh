@@ -130,7 +130,12 @@ if [[ -n "$RUNTIME_HOME" ]]; then
   link_into "$RUNTIME_HOME"
 else
   found=0
-  for home in "$HOME/.agents" "$HOME/.claude" "$HOME/.codex" "$HOME/.config/opencode"; do
+  if [[ -d "$HOME/.agents" || -d "$HOME/.codex" || -d "$HOME/.config/opencode" ]]; then
+    found=1
+    say "-- runtime skills: $HOME/.agents (Agents, Codex, OpenCode) --"
+    link_into "$HOME/.agents"
+  fi
+  for home in "$HOME/.claude" "$HOME/.gemini/antigravity-cli"; do
     if [[ -d "$home" ]]; then
       found=1
       say "-- runtime: $home --"

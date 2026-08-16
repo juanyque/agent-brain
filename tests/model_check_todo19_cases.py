@@ -286,7 +286,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertLess(current_index, baseline_index)
         self.assertIn(
             "python3 tests/support/run_baseline_tests.py --root . --git-ref "
-            "993247b2850ac86993c7c6dd18e6c4fd9ec6df7c --expected-ids "
+            "2e420205d3dbc5b91e5188b90950043e44a4a054 --expected-ids "
             "tests/fixtures/baseline-test-ids.txt",
             baseline,
         )

@@ -23,7 +23,7 @@ Use the bootstrap in dry-run mode first:
 bash <agent-brain>/model/SCRIPTS/bootstrap-zero.sh --brain <brain_path>
 ```
 
-The bootstrap installs the skill for detected runtimes. Codex is detected through `~/.codex`, persists its user instructions and configuration at `_AGENTS/CODEX/AGENTS.runtime.codex.md` and `_AGENTS/CODEX/config.toml`, links them back to `~/.codex/AGENTS.md` and `~/.codex/config.toml`, and receives the user skill at `~/.agents/skills/brain`. If the private brain provides `_AGENTS/SHARED/memory/`, it is linked at `~/.agents/brain-memory` for lazy, indexed lookup. Codex's native `~/.codex/memories/` state is left untouched.
+The bootstrap installs the skill for detected runtimes. Codex is detected through `~/.codex`, persists its user instructions and configuration at `_AGENTS/CODEX/AGENTS.runtime.codex.md` and `_AGENTS/CODEX/config.toml`, links them back to `~/.codex/AGENTS.md` and `~/.codex/config.toml`, and shares the user skill at `~/.agents/skills/brain` with OpenCode. Claude uses `~/.claude/skills/brain`. Antigravity CLI is skill-only and uses `~/.gemini/antigravity-cli/skills/brain`. If the private brain provides `_AGENTS/SHARED/memory/`, it is linked at `~/.agents/brain-memory` for lazy, indexed lookup. Codex's native `~/.codex/memories/` state is left untouched.
 
 Only apply after the dry-run is safe:
 
@@ -64,7 +64,7 @@ If the dry-run reports rewritten symlinks, surface the `WIP/AGENTS_MIGRATION.<da
 
 ## Install or repair the runtime skill
 
-Use `skill_link.sh` in dry-run mode first. For Codex, use the official user-skill parent `~/.agents`:
+Use `skill_link.sh` in dry-run mode first. For Codex or OpenCode, use the shared user-skill parent `~/.agents`:
 
 ```bash
 bash <agent-brain>/model/SCRIPTS/skill_link.sh brain ~/.agents
@@ -76,7 +76,7 @@ Only apply after the dry-run is safe:
 bash <agent-brain>/model/SCRIPTS/skill_link.sh brain ~/.agents --apply
 ```
 
-The runtime should contain `~/.agents/skills/brain` as a symlink to `<agent-brain>/skills/brain`. Do not copy skill files when a symlink can be used.
+The selected store should contain its `skills/brain` entry as a symlink to `<agent-brain>/skills/brain`. Automatic detection targets the shared `~/.agents` store once, plus Claude and Antigravity CLI when present. It does not install into legacy Gemini CLI paths. Do not copy skill files when a symlink can be used.
 
 For a skill owned by another repository, pass its source directory instead of an agent-brain skill
 name. The same dry-run-first rule applies, and omitting `runtime_home` targets every detected runtime:

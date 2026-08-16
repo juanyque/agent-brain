@@ -86,7 +86,7 @@ jobs:
           python3 -m unittest discover -s tests -v
 
       - name: Run immutable baseline tests
-        run: python3 tests/support/run_baseline_tests.py --root . --git-ref 993247b2850ac86993c7c6dd18e6c4fd9ec6df7c --expected-ids tests/fixtures/baseline-test-ids.txt
+        run: python3 tests/support/run_baseline_tests.py --root . --git-ref 2e420205d3dbc5b91e5188b90950043e44a4a054 --expected-ids tests/fixtures/baseline-test-ids.txt
 
       - name: Check Python syntax
         run: python3 tests/support/compile_sources.py model/SCRIPTS skills tests

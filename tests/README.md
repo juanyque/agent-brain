@@ -39,6 +39,10 @@ Some negative-path tests intentionally print `FAIL` or `SKIP` diagnostics produc
 the code under test. The authoritative result is unittest's final `OK` / `FAILED`
 summary and process exit code.
 
+The immutable replay keeps a fixed inventory of 113 test IDs. Its pinned Git snapshot may advance
+when a retained ID deliberately changes contract; the old behavior is never skipped or removed
+silently, and the replacement snapshot must pass all 113 IDs before the pin is updated.
+
 ## Coverage by module
 
 | Module | Contract protected |

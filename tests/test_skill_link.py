@@ -34,31 +34,42 @@ class SkillLinkTests(unittest.TestCase):
             source = root / "project" / "skills" / "confold"
             source.mkdir(parents=True)
             (source / "SKILL.md").write_text("---\nname: confold\n---\n", encoding="utf-8")
-            runtime_homes = [
+            detected_homes = [
                 home / ".agents",
                 home / ".claude",
                 home / ".codex",
                 home / ".config" / "opencode",
+                home / ".gemini" / "antigravity-cli",
             ]
-            for runtime_home in runtime_homes:
+            for runtime_home in detected_homes:
                 runtime_home.mkdir(parents=True)
+            target_homes = [
+                home / ".agents",
+                home / ".claude",
+                home / ".gemini" / "antigravity-cli",
+            ]
 
             dry_run = self.run_link(source, home)
             self.assertEqual(dry_run.returncode, 0, dry_run.stderr)
-            self.assertEqual(dry_run.stdout.count("  LINK    "), len(runtime_homes))
-            for runtime_home in runtime_homes:
+            self.assertEqual(dry_run.stdout.count("  LINK    "), len(target_homes))
+            for runtime_home in target_homes:
                 self.assertFalse((runtime_home / "skills" / "confold").is_symlink())
 
             applied = self.run_link(source, home, "--apply")
             self.assertEqual(applied.returncode, 0, applied.stderr)
-            for runtime_home in runtime_homes:
+            for runtime_home in target_homes:
                 link = runtime_home / "skills" / "confold"
                 self.assertTrue(link.is_symlink())
                 self.assertEqual(link.resolve(), source.resolve())
+            self.assertFalse((home / ".codex" / "skills" / "confold").is_symlink())
+            self.assertFalse(
+                (home / ".config" / "opencode" / "skills" / "confold").is_symlink()
+            )
+            self.assertFalse((home / ".gemini" / "skills" / "confold").is_symlink())
 
             repeated = self.run_link(source, home, "--apply")
             self.assertEqual(repeated.returncode, 0, repeated.stderr)
-            self.assertEqual(repeated.stdout.count("  OK      "), len(runtime_homes))
+            self.assertEqual(repeated.stdout.count("  OK      "), len(target_homes))
             self.assertFalse(list(home.rglob("confold.backup-*")))
 
     def test_external_skill_requires_skill_md(self) -> None:

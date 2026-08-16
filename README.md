@@ -2,7 +2,7 @@
 
 **Notes-agnostic second-brain operating model + multi-runtime agent config/memory versioning.**
 
-agent-brain is a personal operating model for AI coding agents (Claude Code, OpenCode, Codex). It gives you:
+agent-brain is a personal operating model for AI coding agents (Claude Code, OpenCode, Codex, Antigravity CLI). It gives you:
 
 - A **second-brain** knowledge structure (journal, WIP, memory, tasks) that the model builds on top of any folder of notes — Obsidian is one option, not a requirement.
 - **Version-controlled runtime config & memory**: your `CLAUDE.md` / `AGENTS.md`, memory, and runtime settings live in a git-tracked *brain* and are symlinked into each runtime (`~/.claude`, `~/.config/opencode`, …), so your agent configuration and memory travel with you across machines.
@@ -18,6 +18,7 @@ agent-brain is a personal operating model for AI coding agents (Claude Code, Ope
   - [OpenCode](https://opencode.ai/) → `~/.config/opencode/`
   - Shared agents dir → `~/.agents/`
   - Codex CLI → `~/.codex/` (`AGENTS.md` and `config.toml` are persisted under the private brain's `_AGENTS/CODEX/`; the brain skill is installed at `~/.agents/skills/brain`)
+  - Antigravity CLI → `~/.gemini/antigravity-cli/` (skill-only integration)
 
 ## Install
 
@@ -46,7 +47,7 @@ If your brain already has a `_COMMON` symlink pointing to a different model (e.g
 | `--brain <path>` | Brain root path (skips interactive prompt) |
 | `--apply` | Execute (default: dry-run) |
 | `--update` | `git pull --ff-only` the repo before wiring |
-| `--runtime claude,opencode,agents,codex` | Restrict to a comma-separated runtime subset (default: all detected) |
+| `--runtime claude,opencode,agents,codex,antigravity` | Restrict to a comma-separated runtime subset (default: all detected) |
 | `--symlink-policy copy\|keep` | Ingest top-level symlink content, or leave eligible non-canonical links at the brain root |
 
 ## How it works
@@ -105,8 +106,9 @@ Two skills ship with agent-brain, but only the operating skill is installed auto
 | **brain** | `/brain` (Codex: `$brain`) | Automatic | Connect to the brain, manage session lifecycle, daily notes, and standardization |
 | **boyscout** | `/boyscout` (Codex: `$boyscout`) | Opt-in | Spot improvement opportunities and route them to an explicit remediation workflow or backlog |
 
-Skills live outside the brain and are symlinked to the repo. Codex discovers global user skills
-under `~/.agents/skills/`; other runtimes use their own user-skill directory. Skill files use
+Skills live outside the brain and are symlinked to the repo. Codex and OpenCode share
+`~/.agents/skills/`; Claude uses `~/.claude/skills/`; Antigravity CLI uses
+`~/.gemini/antigravity-cli/skills/`. The legacy Gemini CLI path is not managed. Skill files use
 normal names without the `.common.md` suffix.
 
 The brain skill's session-open apply is idempotent: it creates or updates one session note,
@@ -145,6 +147,7 @@ agent-brain/
 │   └── SCRIPTS/
 │       ├── brain_state.py       # state machine (shared)
 │       ├── home_setup.py        # structure (cleanup, staging, _COMMON, wrappers)
+│       ├── runtime_catalog.py   # runtime config homes and skill destinations
 │       ├── runtime_manager.py   # runtime config (Direction A/B, conflict, skill link)
 │       ├── runtime_health.py    # post-apply checks for all supported runtimes
 │       ├── profile_overlays.py  # optional private-resource projection
@@ -183,7 +186,7 @@ commands, and fixture rules.
 
 The canonical local gate is the todo19 QA-manifest alias `complete-local-gate`, executed only
 through `tests/support/evidence_cli.py run-todo`. It runs the current unittest suite, the
-immutable-baseline test replay, Python compilation, shell syntax checks, committed diff
+immutable 113-ID baseline replay, Python compilation, shell syntax checks, committed diff
 whitespace checks, worktree scope/whitespace checks, the strict operating-model checker, and a
 zero-`__pycache__` assertion.
 

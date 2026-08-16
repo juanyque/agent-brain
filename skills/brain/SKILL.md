@@ -34,9 +34,9 @@ Do not run broad brain maintenance, standardization, or semantic reorganization 
 - Python 3.x (stdlib only — scripts have no external dependencies).
 - `git` on PATH (used for `git mv` during brain reorganization).
 - A notes brain to connect to.
-- The `brain` skill installed by the agent-brain bootstrap. Codex discovers the user skill at `~/.agents/skills/brain`; Claude uses `~/.claude/skills/brain`.
+- The `brain` skill installed by the agent-brain bootstrap. Codex and OpenCode share `~/.agents/skills/brain`; Claude uses `~/.claude/skills/brain`; Antigravity CLI uses `~/.gemini/antigravity-cli/skills/brain`.
 
-> **Runtime path note:** command examples use `~/.agents/skills/brain/scripts/...`, the Codex user-skill location. In another runtime, use its installed `brain/scripts/` path, such as `~/.claude/skills/brain/scripts/`.
+> **Runtime path note:** command examples use `~/.agents/skills/brain/scripts/...`, shared by Codex and OpenCode. In another runtime, use its installed `brain/scripts/` path, such as `~/.claude/skills/brain/scripts/` or `~/.gemini/antigravity-cli/skills/brain/scripts/`.
 
 ## Brain resolution
 

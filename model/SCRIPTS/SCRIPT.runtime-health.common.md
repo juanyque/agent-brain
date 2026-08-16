@@ -3,7 +3,7 @@
 ## Purpose
 
 Read-only post-apply verification for runtime wiring. It imports `RUNTIME_CONFIGS` from
-`runtime_manager.py`, so the installer and health check use the same runtime mappings.
+`runtime_catalog.py`, so the installer and health check use the same runtime mappings.
 
 ## What it checks
 
@@ -18,8 +18,8 @@ For each selected active runtime:
   provides `_AGENTS/SHARED/environment.json`;
 - optional sanitized Codex MCP registry/auth readiness when `--live-providers codex` is used.
 
-Supported runtimes are Claude, OpenCode, Agents, and Codex. Inactive runtimes are reported as
-`SKIP`, not failures.
+Supported runtimes are Claude, OpenCode, Agents, Codex, and Antigravity CLI. Antigravity is
+skill-only. Inactive runtimes are reported as `SKIP`, not failures.
 
 ## Usage
 

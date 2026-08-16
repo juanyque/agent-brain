@@ -37,7 +37,7 @@ IDS = ROOT / "tests" / "fixtures" / "baseline-test-ids.txt"
 FINAL_LANE_COMMANDS = (
     ROOT / "tests" / "fixtures" / "operating-model-final-lane-commands.json"
 )
-BASELINE = "993247b2850ac86993c7c6dd18e6c4fd9ec6df7c"
+MODEL_BASELINE, TEST_BASELINE = "993247b2850ac86993c7c6dd18e6c4fd9ec6df7c", "2e420205d3dbc5b91e5188b90950043e44a4a054"
 ROOT_AGENTS = ROOT / "AGENTS.md"
 
 
@@ -735,7 +735,7 @@ class BaselineRunnerContractTests(unittest.TestCase):
     def run_runner(
         self,
         *,
-        git_ref: str = BASELINE,
+        git_ref: str = TEST_BASELINE,
         expected_ids: Path = IDS,
     ) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(
@@ -820,7 +820,7 @@ class BaselineRunnerContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             materialized = Path(raw) / "tests" / "test_home_setup.py"
             materialized.parent.mkdir()
-            expected = read_git_object(ROOT, BASELINE, home_setup.relative_path)
+            expected = read_git_object(ROOT, TEST_BASELINE, home_setup.relative_path)
             materialized.write_bytes(expected + b"# corrupt\n")
             with self.assertRaisesRegex(BaselineError, "materialized baseline test corrupted"):
                 verify_materialized_bytes(home_setup, expected, materialized)
@@ -828,7 +828,7 @@ class BaselineRunnerContractTests(unittest.TestCase):
         with self.assertRaisesRegex(BaselineError, "baseline test missing at ref"):
             read_git_object(ROOT, "missing-ref-for-baseline-tests", home_setup.relative_path)
         with self.assertRaisesRegex(BaselineError, "baseline test missing at ref"):
-            read_git_object(ROOT, BASELINE, Path("tests/test_missing_baseline_path.py"))
+            read_git_object(ROOT, TEST_BASELINE, Path("tests/test_missing_baseline_path.py"))
 
     def test_current_test_file_can_add_sentinel_without_affecting_materialized_hashes(self) -> None:
         from tests.support.baseline_materializer import (
@@ -840,11 +840,11 @@ class BaselineRunnerContractTests(unittest.TestCase):
         ids = IDS.read_text().splitlines()
         refs = module_refs_from_ids(ids)
         with tempfile.TemporaryDirectory() as raw:
-            modules = materialize_baseline_modules(ROOT, BASELINE, refs, Path(raw))
+            modules = materialize_baseline_modules(ROOT, TEST_BASELINE, refs, Path(raw))
 
         by_path = {module.relative_path: module for module in modules}
         path = Path("tests/test_home_setup.py")
-        pinned = hashlib.sha256(read_git_object(ROOT, BASELINE, path)).hexdigest()
+        pinned = hashlib.sha256(read_git_object(ROOT, TEST_BASELINE, path)).hexdigest()
         current_with_sentinel = hashlib.sha256(
             (ROOT / path).read_bytes() + b"\n    def test_sentinel_current_only(self): pass\n"
         ).hexdigest()
@@ -1080,7 +1080,7 @@ class RunTodoExpansionTests(unittest.TestCase):
                 "--plan",
                 str(self.plan_path(root)),
                 "--baseline-commit",
-                BASELINE,
+                MODEL_BASELINE,
                 "--impl-root",
                 str(root.resolve()),
                 "--source-baseline",
@@ -2165,7 +2165,7 @@ class RunTodoExpansionTests(unittest.TestCase):
                     "--plan",
                     str(self.plan_path(root)),
                     "--baseline-commit",
-                    BASELINE,
+                    MODEL_BASELINE,
                     "--impl-root",
                     str(root),
                     "--source-baseline",
@@ -3046,7 +3046,7 @@ class RunTodoExpansionTests(unittest.TestCase):
                 "--plan",
                 str(self.plan_path(root)),
                 "--baseline-commit",
-                BASELINE,
+                MODEL_BASELINE,
                 "--impl-root",
                 str(root),
                 "--source-baseline",
@@ -3099,7 +3099,7 @@ class RunTodoExpansionTests(unittest.TestCase):
                 "--plan",
                 str(self.plan_path(root)),
                 "--baseline-commit",
-                BASELINE,
+                MODEL_BASELINE,
                 "--impl-root",
                 str(root),
                 "--source-baseline",
@@ -3148,7 +3148,7 @@ class RunTodoExpansionTests(unittest.TestCase):
                         "--plan",
                         str(self.plan_path(root)),
                         "--baseline-commit",
-                        BASELINE,
+                        MODEL_BASELINE,
                         "--impl-root",
                         str(root),
                         "--source-baseline",
@@ -3188,7 +3188,7 @@ class RunTodoExpansionTests(unittest.TestCase):
                 "--plan",
                 str(self.plan_path(root)),
                 "--baseline-commit",
-                BASELINE,
+                MODEL_BASELINE,
                 "--impl-root",
                 str(root),
                 "--source-baseline",

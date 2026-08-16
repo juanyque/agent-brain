@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify brain-managed runtime wiring after bootstrap apply.
 
-The runtime matrix is imported from runtime_manager so installation and health
+The runtime matrix is imported from runtime_catalog so installation and health
 checks cannot silently drift apart. This script is read-only.
 """
 
@@ -18,21 +18,9 @@ from environment_profiles import (
     provider_statuses,
     resolve_profile,
 )
-from runtime_manager import (
-    RUNTIME_CONFIGS,
-    brain_agents_subdir,
-    local_dir_for,
-    resolve_repo_root,
-)
+from runtime_catalog import RUNTIME_CONFIGS, RUNTIME_LABELS
+from runtime_manager import brain_agents_subdir, local_dir_for, resolve_repo_root
 from runtime_provider_discovery import discover_mcp_servers
-
-
-RUNTIME_LABELS = {
-    "claude": "Claude",
-    "opencode": "OpenCode",
-    "agents": "Agents",
-    "codex": "Codex",
-}
 
 
 class HealthCheck:
