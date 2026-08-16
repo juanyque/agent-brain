@@ -75,7 +75,9 @@
 
 ## Attachments
 - Attachments are binary or external-support material associated with notes.
-- Local `ATTACHMENTS/` folders and `QUARANTINE/ATTACHMENTS/` are structural homes; ownership, movement, conflicts, and deletion constraints live in the attachment rule.
+- Information structure belongs in the brain's content directories. An `ATTACHMENTS/` directory is a flat, file-only companion to its parent content directory and must not contain project, topic, document, or other organizational subdirectories.
+- For example, attachments used by `WIP/project/documents/note.md` belong directly in `WIP/project/documents/ATTACHMENTS/`. They do not belong in `WIP/ATTACHMENTS/project/`.
+- Local `ATTACHMENTS/` folders and `QUARANTINE/ATTACHMENTS/` are structural homes; ownership, movement, conflicts, active-process holds, and deletion constraints live in the attachment rule.
 - Evidence-specific attachments are part of the review-evidence model and should remain connected to the evidence notes or reports they support.
 
 ## JOBS

@@ -73,10 +73,12 @@ If a ticket grows heavy supporting artefacts (diagrams, large dumps, local attac
 ```
 TICKET_ID - SHORT_DESCRIPTION/
 ├── TICKET_ID - SHORT_DESCRIPTION.md   (the main note)
-└── <attachments and supporting docs>
+├── <supporting notes and structured documents>
+└── ATTACHMENTS/
+    └── <flat attachment files; no subdirectories>
 ```
 
-The folder form is opt-in. By default, one ticket = one file.
+The folder form is opt-in. By default, one ticket = one file. Information structure remains beside the main note; binary or external-support files go directly in the local `ATTACHMENTS/` directory according to `RULES-ATTACHMENTS.common.md`.
 
 ## Avoiding Obsidian basename collisions
 

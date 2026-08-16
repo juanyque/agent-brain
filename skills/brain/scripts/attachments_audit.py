@@ -13,24 +13,22 @@ Design goals:
 from __future__ import annotations
 
 import argparse
-import subprocess
 import shutil
-from collections import defaultdict
+import subprocess
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from _common import Reporter, build_command_string
 
-@dataclass
+
+@dataclass(frozen=True, slots=True)
 class AttachmentReport:
     attachment: Path
     status: str
     references: list[Path]
     proposed_destination: Path | None
     note: str
-
-
-from _common import Reporter, build_command_string  # noqa: E402  (lives next to this script)
-
 
 def is_git_repo(brain_root: Path) -> bool:
     try:
@@ -39,6 +37,7 @@ def is_git_repo(brain_root: Path) -> bool:
             cwd=brain_root,
             capture_output=True,
             text=True,
+            check=False,
         )
     except FileNotFoundError:
         return False
@@ -106,16 +105,29 @@ def infer_destination(
 
 
 def audit_folder(brain_root: Path, attachment_dir: Path, quarantine_dir: Path, markdown_index: dict[str, list[Path]]) -> list[AttachmentReport]:
-    if not any(p.is_file() for p in attachment_dir.iterdir()):
+    attachments = sorted(path for path in attachment_dir.rglob("*") if path.is_file())
+    if not attachments:
         return []
+    basename_counts = Counter(attachment.name for attachment in attachments)
     reports: list[AttachmentReport] = []
-    for attachment in sorted(p for p in attachment_dir.iterdir() if p.is_file()):
+    for attachment in attachments:
         refs = sorted(set(markdown_index.get(attachment.name, [])))
+        if basename_counts[attachment.name] > 1:
+            reports.append(
+                AttachmentReport(
+                    attachment=attachment,
+                    status="CONFLICT_DUPLICATE_BASENAME",
+                    references=refs,
+                    proposed_destination=None,
+                    note="Multiple files under this ATTACHMENTS root share the same basename.",
+                )
+            )
+            continue
         status, destination, note = infer_destination(
             brain_root=brain_root,
             refs=refs,
             quarantine_dir=quarantine_dir,
-            current_attachment_dir=attachment_dir,
+            current_attachment_dir=attachment.parent,
             attachment_name=attachment.name,
         )
         reports.append(
@@ -132,12 +144,17 @@ def audit_folder(brain_root: Path, attachment_dir: Path, quarantine_dir: Path, m
 
 def find_attachment_dirs(scope_root: Path) -> list[Path]:
     dirs: set[Path] = set()
-    if scope_root.is_dir() and scope_root.name == "ATTACHMENTS":
+    inside_attachment_root = any(parent.name == "ATTACHMENTS" for parent in scope_root.parents)
+    if scope_root.is_dir() and (scope_root.name == "ATTACHMENTS" or inside_attachment_root):
         dirs.add(scope_root)
     for p in scope_root.rglob("ATTACHMENTS"):
         if p.is_dir():
             dirs.add(p)
-    return sorted(dirs)
+    return sorted(
+        attachment_dir
+        for attachment_dir in dirs
+        if not any(parent in dirs for parent in attachment_dir.parents)
+    )
 
 
 def move_file(src: Path, dst: Path, brain_root: Path, use_git_mv: bool) -> None:
@@ -163,7 +180,10 @@ def apply_reports(reports: list[AttachmentReport], brain_root: Path, use_git_mv:
             continue
         if report.proposed_destination is None:
             continue
-        touched_attachment_dirs.add(report.attachment.parent)
+        for parent in report.attachment.parents:
+            touched_attachment_dirs.add(parent)
+            if parent.name == "ATTACHMENTS":
+                break
         move_file(report.attachment, report.proposed_destination, brain_root, use_git_mv)
     cleanup_empty_attachment_dirs(touched_attachment_dirs)
 
@@ -201,7 +221,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--scope-root",
         default="JOURNAL",
-        help="Root path under which all ATTACHMENTS folders should be audited. If the path itself is an ATTACHMENTS folder, it is included too.",
+        help="Root path under which ATTACHMENTS folders are audited. A path inside an ATTACHMENTS folder is accepted as an exact narrow audit boundary.",
     )
     parser.add_argument(
         "--quarantine-dir",
