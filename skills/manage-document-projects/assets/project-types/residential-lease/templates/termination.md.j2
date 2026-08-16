@@ -8,7 +8,7 @@ lang: es
 ---
 
 {% import "partials/parties.md.j2" as party_macros -%}
-<p class="document-date">En {{ property.address.municipality }}, a {{ (settlement.agreement_date if settlement is defined and settlement.agreement_date is defined else project.effective_date)|es_date }}</p>
+<p class="document-date">En {{ property.address.municipality }}, a {% if settlement is defined and settlement.agreement_date is defined and settlement.agreement_date %}{{ settlement.agreement_date|es_date }}{% else %}______ de __________________ de 202___{% endif %}</p>
 
 {{ party_macros.party_list("Parte arrendadora", parties.landlords) }}
 
@@ -27,7 +27,7 @@ En consecuencia, las partes formalizan la resolución del arriendo con arreglo a
 ## ACUERDOS
 
 ### PRIMERO.- RESOLUCIÓN Y ENTREGA DE LLAVES
-Queda resuelto de pleno derecho y sin efecto alguno el contrato de arrendamiento formalizado el **{{ operation.lease.signature_date|es_date }}**, con efectos desde el **{{ (settlement.effective_date if settlement is defined and settlement.effective_date is defined else settlement.agreement_date)|es_date }}**. En este acto, la parte arrendataria hace entrega de la posesión y de las correspondientes llaves de la vivienda a la parte arrendadora, quien las declara recibidas a su entera satisfacción.
+Queda resuelto de pleno derecho y sin efecto alguno el contrato de arrendamiento formalizado el **{{ operation.lease.signature_date|es_date }}**, con efectos desde el **{% if settlement is defined and settlement.effective_date is defined and settlement.effective_date %}{{ settlement.effective_date|es_date }}{% else %}______ / ______ / 202___{% endif %}**. En este acto, la parte arrendataria hace entrega de la posesión y de las correspondientes llaves de la vivienda a la parte arrendadora, quien las declara recibidas a su entera satisfacción.
 
 ### SEGUNDO.- SUMINISTROS Y GASTOS PENDIENTES
 La parte arrendataria asume la liquidación de las partes proporcionales de las facturas de luz, agua, gas y demás suministros devengados hasta la fecha efectiva de resolución. La parte arrendadora procederá al cambio de titularidad de los suministros que estuviesen a nombre de los arrendatarios.
@@ -35,12 +35,15 @@ La parte arrendataria asume la liquidación de las partes proporcionales de las 
 ### TERCERO.- INDEMNIZACIÓN POR DESISTIMIENTO ANTICIPADO
 {% if settlement is defined and settlement.compensation_amount is defined and settlement.compensation_amount > 0 -%}
 En aplicación de la estipulación relativa a la duración y desistimiento del contrato original, la parte arrendataria indemniza a la parte arrendadora con la cantidad de **{{ settlement.compensation_amount|es_money }}**{% if settlement.compensation_reason is defined %} ({{ settlement.compensation_reason }}){% endif %}, acordando expresamente ambas partes que dicho importe sea deducido de la fianza y garantía adicional depositadas.
-{%- else -%}
+{%- elif settlement is defined and settlement.compensation_amount is defined and settlement.compensation_amount == 0 and settlement.compensation_reason is defined and settlement.compensation_reason != "blank-placeholder" -%}
 No se devenga indemnización alguna por la resolución de mutuo acuerdo del arriendo.
+{%- else -%}
+En concepto de indemnización por desistimiento o resolución anticipada, las partes acuerdan fijar la cantidad de **____________________ €** (motivo: __________________________________________________), a deducir de las garantías depositadas.
 {%- endif %}
 
 ### CUARTO.- LIQUIDACIÓN Y DEVOLUCIÓN DE GARANTÍAS
-La parte arrendadora, una vez comprobado el buen estado de conservación de la vivienda y la inexistencia de desperfectos o deudas pendientes por suministros, transferirá a la parte arrendataria el saldo resultante de la fianza y garantía adicional depositadas{% if settlement is defined and settlement.deposit_refund_amount is defined %} (ascendente a **{{ settlement.deposit_refund_amount|es_money }}**){% endif %}, deduciendo en su caso los importes debidamente justificados.
+La parte arrendadora, una vez comprobado el buen estado de conservación de la vivienda y la inexistencia de desperfectos o deudas pendientes por suministros, transferirá a la parte arrendataria el saldo resultante de la fianza y garantía adicional depositadas{% if settlement is defined and settlement.deposit_refund_amount is defined and settlement.deposit_refund_amount > 0 %} (ascendente a **{{ settlement.deposit_refund_amount|es_money }}**){% else %} (ascendente a **____________________ €**){% endif %}, deduciendo en su caso los importes debidamente justificados.
+
 
 ### QUINTO.- FINIQUITO Y RENUNCIA
 Leído lo que antecede y conformes las partes, declaran expresamente hallarse liquidadas en sus respectivas obligaciones derivadas del contrato extinguido, manifestando no tener nada más que reclamarse por ningún concepto relacionado con el arrendamiento que por este acto se resuelve.

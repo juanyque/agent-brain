@@ -344,6 +344,27 @@ format-specific mechanisms are intentionally different.
   never as an ingestion source or attachment store.
 - Make installation and project mutations dry-run-first.
 
+## Conversational Document Assistant
+
+When a user asks to start, manage, or generate documents for a project (e.g.
+*"Vamos a gestionar un nuevo arrendamiento..."* or *"Quiero generar el contrato
+de reserva"*), act as an interactive assistant:
+
+1. **Locate or Initialize**: Search for the project in active work directories
+   (e.g., `WIP/` or project root) or long-term archives (e.g., `MEMORY/`). If not
+   found, initialize clean project files or ask the user for the path.
+2. **Present Documents**: List the documents available for that project type
+   (`reservation`, `lease`, `inventory`, `access-license`, `termination`).
+3. **Interview for Missing Data**: Run the template preflight. If required data
+   is missing, group the paths into clear, human-friendly questions. Persist
+   confirmed answers into `data/project-data.yaml`.
+4. **Render & Deliver**: Compile the canonical Markdown and PDF into the
+   designated output area (e.g., `OUTBOX/` or `exports/`) and present the user
+   with clickable links.
+
+Read [references/conversational-assistant.md](references/conversational-assistant.md)
+for detailed interaction flows and templates.
+
 ## Dependencies
 
 | Resource | Read when |
@@ -351,3 +372,4 @@ format-specific mechanisms are intentionally different.
 | [references/setup.md](references/setup.md) | Installing or diagnosing dependencies |
 | [references/project-model.md](references/project-model.md) | Creating a type or project instance |
 | [references/output-formats.md](references/output-formats.md) | Selecting or modifying an output profile |
+| [references/conversational-assistant.md](references/conversational-assistant.md) | Operating the step-by-step interactive conversational flow |
