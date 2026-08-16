@@ -79,7 +79,7 @@ jobs:
 
       - name: Run contract and integration tests
         run: >-
-          uv run
+          uv run --python 3.12
           --with 'jsonschema>=4.25,<5'
           --with 'pydantic>=2.10,<3'
           --with 'pyyaml>=6.0.2,<7'
