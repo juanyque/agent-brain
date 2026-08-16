@@ -1,0 +1,48 @@
+---
+title: "Resolución de contrato de arrendamiento de vivienda"
+document_type: termination
+project_type: residential-lease
+template_version: "0.1.0"
+data_revision: "{{ project.data_revision }}"
+lang: es
+---
+
+{% import "partials/parties.md.j2" as party_macros -%}
+<p class="document-date">En {{ property.address.municipality }}, a {{ (settlement.agreement_date if settlement is defined and settlement.agreement_date is defined else project.effective_date)|es_date }}</p>
+
+{{ party_macros.party_list("Parte arrendadora", parties.landlords) }}
+
+{{ party_macros.party_list("Parte arrendataria", parties.tenants) }}
+
+Ambas partes se reconocen mutuamente capacidad legal suficiente para formalizar el presente documento de **RESOLUCIÓN DE CONTRATO DE ARRENDAMIENTO DE VIVIENDA Y LIQUIDACIÓN**, a cuyo efecto:
+
+## EXPONEN
+
+1. Que con fecha **{{ operation.lease.signature_date|es_date }}**, ambas partes suscribieron un contrato de arrendamiento sobre la vivienda situada en **{{ property.address.full_text }}**, {{ property.address.postal_code }} {{ property.address.municipality }} ({{ property.address.province }}), con una renta mensual fijada en **{{ operation.lease.monthly_rent|es_money }}**. Asimismo, la parte arrendadora recibió la cantidad de **{{ operation.lease.deposit_amount|es_money }}** en concepto de fianza legal y **{{ operation.lease.additional_guarantee_amount|es_money }}** en concepto de garantía adicional.
+2. Que en el citado contrato se estipuló que la parte arrendataria asumía el pago de los gastos y consumos derivados de los suministros de luz, agua, gas y demás servicios de la vivienda.
+3. Que la parte arrendataria ha comunicado a la parte arrendadora su voluntad de dar por extinguida la relación arrendaticia, lo cual es aceptado por esta última de mutuo acuerdo.
+
+En consecuencia, las partes formalizan la resolución del arriendo con arreglo a los siguientes:
+
+## ACUERDOS
+
+### PRIMERO.- RESOLUCIÓN Y ENTREGA DE LLAVES
+Queda resuelto de pleno derecho y sin efecto alguno el contrato de arrendamiento formalizado el **{{ operation.lease.signature_date|es_date }}**, con efectos desde el **{{ (settlement.effective_date if settlement is defined and settlement.effective_date is defined else settlement.agreement_date)|es_date }}**. En este acto, la parte arrendataria hace entrega de la posesión y de las correspondientes llaves de la vivienda a la parte arrendadora, quien las declara recibidas a su entera satisfacción.
+
+### SEGUNDO.- SUMINISTROS Y GASTOS PENDIENTES
+La parte arrendataria asume la liquidación de las partes proporcionales de las facturas de luz, agua, gas y demás suministros devengados hasta la fecha efectiva de resolución. La parte arrendadora procederá al cambio de titularidad de los suministros que estuviesen a nombre de los arrendatarios.
+
+### TERCERO.- INDEMNIZACIÓN POR DESISTIMIENTO ANTICIPADO
+{% if settlement is defined and settlement.compensation_amount is defined and settlement.compensation_amount > 0 -%}
+En aplicación de la estipulación relativa a la duración y desistimiento del contrato original, la parte arrendataria indemniza a la parte arrendadora con la cantidad de **{{ settlement.compensation_amount|es_money }}**{% if settlement.compensation_reason is defined %} ({{ settlement.compensation_reason }}){% endif %}, acordando expresamente ambas partes que dicho importe sea deducido de la fianza y garantía adicional depositadas.
+{%- else -%}
+No se devenga indemnización alguna por la resolución de mutuo acuerdo del arriendo.
+{%- endif %}
+
+### CUARTO.- LIQUIDACIÓN Y DEVOLUCIÓN DE GARANTÍAS
+La parte arrendadora, una vez comprobado el buen estado de conservación de la vivienda y la inexistencia de desperfectos o deudas pendientes por suministros, transferirá a la parte arrendataria el saldo resultante de la fianza y garantía adicional depositadas{% if settlement is defined and settlement.deposit_refund_amount is defined %} (ascendente a **{{ settlement.deposit_refund_amount|es_money }}**){% endif %}, deduciendo en su caso los importes debidamente justificados.
+
+### QUINTO.- FINIQUITO Y RENUNCIA
+Leído lo que antecede y conformes las partes, declaran expresamente hallarse liquidadas en sus respectivas obligaciones derivadas del contrato extinguido, manifestando no tener nada más que reclamarse por ningún concepto relacionado con el arrendamiento que por este acto se resuelve.
+
+{{ party_macros.signatures(parties.landlords, parties.tenants) }}

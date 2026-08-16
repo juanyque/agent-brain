@@ -136,14 +136,28 @@ def resolve_project_data(
 
     profile_path = resolve(profile_ref, manifest_path.parent)
     package = load_yaml(profile_path, DefaultsPackage)
-    merged = _merge(package.data, instance.root)
+
+    defaults_data = dict(package.data)
+    instance_operation = instance.root.get("operation")
+    if (
+        isinstance(instance_operation, dict)
+        and "reservation" not in instance_operation
+        and isinstance(defaults_data.get("operation"), dict)
+    ):
+        defaults_operation = dict(defaults_data["operation"])
+        defaults_operation.pop("reservation", None)
+        defaults_data["operation"] = defaults_operation
+
+    merged = _merge(defaults_data, instance.root)
     override_path = data_path.parent / _OVERRIDE_NAME
+
     override_sha256: str | None = None
     if override_path.is_file():
         override = load_yaml(override_path, DefaultsOverride)
-        merged = _merge(package.data, override.data)
+        merged = _merge(defaults_data, override.data)
         merged = _merge(merged, instance.root)
         override_sha256 = digest(override_path)
+
     require_document_data(
         DocumentPreflightRequest(
             root=merged,

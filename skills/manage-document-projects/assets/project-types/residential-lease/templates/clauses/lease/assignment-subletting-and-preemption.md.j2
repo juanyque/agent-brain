@@ -1,31 +1,25 @@
 <!-- clause: lease.assignment-subletting-and-preemption@0.1.0 -->
-### Cesión, subarriendo y adquisición preferente
+### OCTAVA.- CESIÓN, SUBARRIENDO Y RENUNCIA A LA ADQUISICIÓN PREFERENTE
+
 
 {% if operation.lease.assignment.assignment_policy == "written-consent-required" -%}
-La parte arrendataria no podrá ceder el contrato sin consentimiento previo y
-escrito de la parte arrendadora.
+La parte arrendataria no podrá ceder el contrato sin **consentimiento previo y por escrito** de la parte arrendadora.
 {%- elif operation.lease.assignment.assignment_policy == "prohibited" -%}
-La cesión del contrato queda prohibida.
+La **cesión del contrato queda expresamente prohibida**.
 {%- else -%}
-La cesión se admite en los términos expresamente permitidos por este contrato
-y por la normativa aplicable.
+La cesión se admite en los términos expresamente permitidos por este contrato y por la normativa aplicable.
 {%- endif %}
 
 {% if operation.lease.assignment.subletting_policy == "partial-with-written-consent" -%}
-El subarriendo solo podrá ser parcial y requerirá consentimiento previo y
-escrito de la parte arrendadora.
+El subarriendo solo podrá ser parcial y requerirá **consentimiento previo y por escrito** de la parte arrendadora.
 {%- elif operation.lease.assignment.subletting_policy == "prohibited" -%}
-El subarriendo queda prohibido.
+El **subarriendo total o parcial queda expresamente prohibido**, constituyendo su infracción causa de resolución de pleno derecho.
 {%- else -%}
-El subarriendo se admite en los términos expresamente permitidos por este
-contrato y por la normativa aplicable.
+El subarriendo se admite en los términos expresamente permitidos por este contrato y por la normativa aplicable.
 {%- endif %}
 
 {% if operation.lease.preemption.waiver -%}
-La parte arrendataria renuncia al derecho de adquisición preferente, sin
-perjuicio de la comunicación previa de la intención de vender que resulte
-legalmente obligatoria.
+La parte arrendataria **renuncia expresamente al derecho de adquisición preferente** (tanteo y retracto). La parte arrendadora comunicará su intención de vender la vivienda con una antelación mínima de **treinta (30) días** a la fecha de formalización de la compraventa.
 {%- else -%}
-La parte arrendataria conserva sus derechos legales de tanteo y retracto en
-caso de venta de la vivienda.
+La parte arrendataria conserva sus derechos legales de tanteo y retracto en caso de venta de la vivienda.
 {%- endif %}

@@ -7,11 +7,9 @@ data_revision: "{{ project.data_revision }}"
 lang: es
 ---
 
-> **BORRADOR PENDIENTE DE REVISIÓN JURÍDICA. NO FIRMAR.**
-
 {% import "partials/parties.md.j2" as party_macros -%}
-<p align="right">En {{ property.address.municipality }}, a
-{{ operation.reservation.agreement_date|es_date }}</p>
+<p class="document-date">En {{ property.address.municipality }}, a {{ operation.reservation.agreement_date|es_date }}</p>
+
 
 {{ party_macros.party_list("Parte arrendadora", parties.landlords) }}
 

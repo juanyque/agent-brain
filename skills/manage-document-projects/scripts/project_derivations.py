@@ -112,7 +112,7 @@ def derive_project_data(
             )
 
     reservation = operation.get("reservation")
-    if isinstance(reservation, dict):
+    if isinstance(reservation, dict) and "amount" in reservation:
         _ = reservation.setdefault(
             "application_priority",
             list(rules.reservation_application_priority),
@@ -133,4 +133,5 @@ def derive_project_data(
             "remaining_first_rent": float(payment.remaining_first_rent),
             "total_due_at_signature": float(payment.total_due_at_signature),
         }
+
     return root

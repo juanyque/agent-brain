@@ -1,26 +1,30 @@
 <!-- clause: lease.expenses-and-supplies@0.1.0 -->
-### Gastos, tributos y suministros
+### SÉPTIMA.- GASTOS, TRIBUTOS Y SUMINISTROS
+
 
 La distribución declarada de gastos es la siguiente:
 
 | Concepto | Parte obligada |
 | --- | --- |
-| Gastos de comunidad | {{ "arrendadora" if operation.lease.expenses.community_fees == "landlord" else "arrendataria" }} |
-| Impuesto sobre bienes inmuebles | {{ "arrendadora" if operation.lease.expenses.property_tax == "landlord" else "arrendataria" }} |
-| Tasa de residuos | {{ "arrendadora" if operation.lease.expenses.waste_fee == "landlord" else "arrendataria" }} |
-| Gestión inmobiliaria y formalización | {{ "arrendadora" if operation.lease.expenses.management_fees == "landlord" else "arrendataria" }} |
-| Mantenimiento de la vivienda | {{ "arrendadora" if operation.lease.expenses.maintenance == "landlord" else "arrendataria" }} |
-| Seguro de hogar | {{ "arrendadora" if operation.lease.expenses.home_insurance == "landlord" else "arrendataria" }} |
+| Gastos de comunidad de propietarios | **{{ "arrendadora" if operation.lease.expenses.community_fees == "landlord" else "arrendataria" }}** |
+| Impuesto sobre bienes inmuebles (IBI) | **{{ "arrendadora" if operation.lease.expenses.property_tax == "landlord" else "arrendataria" }}** |
+| Tasa de residuos urbanos | **{{ "arrendadora" if operation.lease.expenses.waste_fee == "landlord" else "arrendataria" }}** |
+| Gestión inmobiliaria y formalización | **{{ "arrendadora" if operation.lease.expenses.management_fees == "landlord" else "arrendataria" }}** |
+| Mantenimiento de instalaciones | **{{ "arrendadora" if operation.lease.expenses.maintenance == "landlord" else "arrendataria" }}** |
+| Póliza de seguro de hogar | **{{ "arrendadora" if operation.lease.expenses.home_insurance == "landlord" else "arrendataria" }}** |
 
-Los suministros individualizados mediante contador serán de cuenta de la parte
-{{ "arrendadora" if operation.lease.supplies.metered_supplies == "landlord" else "arrendataria" }}.
-La titularidad de sus contratos corresponderá a la parte
-{{ "arrendadora" if operation.lease.supplies.contracts_holder == "landlord" else "arrendataria" }}.
-La parte arrendataria no dará de baja los suministros al finalizar el contrato,
-sino que facilitará el cambio de titularidad.
+Los suministros de **luz, agua y gas** se encuentran actualmente dados de alta.
+Los consumos derivados de suministros individualizados mediante contador serán
+de cuenta exclusiva de la parte **arrendataria**, quien transferirá o domiciliará
+los pagos con cargo a su cuenta bancaria.
 
-Todo pacto que repercuta a la parte arrendataria un gasto general, tributo o
-carga no individualizable deberá constar por escrito con el importe anual
-exigido por la normativa aplicable. Los gastos de gestión inmobiliaria y de
-formalización serán de cuenta de la parte arrendadora cuando así lo imponga la
-ley.
+La parte arrendataria se obliga expresamente a **cambiar la titularidad de los
+suministros a su nombre en un plazo máximo de diez (10) días** naturales desde
+la firma del presente contrato.
+
+La parte arrendataria **no dará de baja los suministros** al término del
+contrato, facilitando la continuidad del servicio o el traspaso de titularidad.
+
+Se hace constar expresamente que el **suministro de agua** es gestionado por la
+administración de fincas del edificio y será cargado directamente a la cuenta
+bancaria de la parte arrendataria.

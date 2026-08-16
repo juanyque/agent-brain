@@ -35,11 +35,19 @@ def es_date(value: date | str) -> str:
     return parsed.strftime("%d/%m/%Y")
 
 
-def es_money(value: Decimal | float | str) -> str:
+def es_money(value: Decimal | float | str | None) -> str:
+    if value is None:
+        return "____________________ €"
+    if isinstance(value, str) and (value.strip() == "" or "_" in value):
+        return value if "€" in value else f"{value} €"
     return f"{_grouped(_decimal(value), 2)} €"
 
 
-def es_number(value: Decimal | float | str) -> str:
+def es_number(value: Decimal | float | str | None) -> str:
+    if value is None:
+        return "____________________"
+    if isinstance(value, str) and (value.strip() == "" or "_" in value):
+        return value
     return _grouped(_decimal(value), 2)
 
 

@@ -7,37 +7,51 @@ data_revision: "{{ project.data_revision }}"
 lang: es
 ---
 
-> **BORRADOR PENDIENTE DE REVISIÓN. NO FIRMAR.**
-
 {% import "partials/parties.md.j2" as party_macros -%}
-Proyecto: `{{ project.id }}`  
-Vivienda: **{{ property.address.full_text }}**  
-Fecha del inventario y entrega de llaves: **{{ inventory.event_date|es_date }}**
+<p class="document-date">En {{ property.address.municipality }}, a {{ inventory.event_date|es_date }}</p>
+
+Vivienda objeto del inventario: **{{ property.address.full_text }}**, {{ property.address.postal_code }} {{ property.address.municipality }} ({{ property.address.province }}).
 
 ## Estancias y elementos
 
 {% for room in inventory.rooms -%}
+<div class="inventory-room">
 ### {{ room.name }}
 
 {% for item in room["items"] -%}
 - {{ item }}
 {% endfor %}
-{% if room.photos is defined -%}
 
-Fotografías asociadas:
-
-{% for photo in room.photos -%}
-- `{{ photo }}`
+{% if room.photos is defined and room.photos -%}
+<table class="photo-grid">
+{% for photo_chunk in room.photos|batch(2) %}
+  <tr>
+  {% if photo_chunk|length == 1 %}
+    <td colspan="2" class="single-photo">
+      <img src="{{ photo_chunk[0] }}" alt="{{ room.name }}" />
+    </td>
+  {% else %}
+    <td>
+      <img src="{{ photo_chunk[0] }}" alt="{{ room.name }}" />
+    </td>
+    <td>
+      <img src="{{ photo_chunk[1] }}" alt="{{ room.name }}" />
+    </td>
+  {% endif %}
+  </tr>
 {% endfor %}
+</table>
 {% endif %}
+</div>
 
 {% endfor -%}
+
 ## Llaves entregadas
 
 | Tipo | Cantidad | Fecha |
 | --- | ---: | --- |
 {% for key in inventory["keys"] -%}
-| {{ key.kind }} | {{ key.quantity }} | {{ key.delivered_on|es_date }} |
+| {{ key.kind }} | {{ key.quantity }} | {{ key.delivered_on|es_date if key.delivered_on is defined and key.delivered_on else "____________________" }} |
 {% endfor %}
 
 ## Lecturas de contadores
@@ -45,8 +59,9 @@ Fotografías asociadas:
 | Suministro | Lectura | Unidad | Fecha | Observaciones |
 | --- | ---: | --- | --- | --- |
 {% for reading in inventory.meter_readings -%}
-| {% if reading.utility == "electricity" %}electricidad{% elif reading.utility == "water" %}agua{% else %}gas{% endif %} | {{ reading.value|es_number }} | {{ reading.unit }} | {{ reading.read_on|es_date }} | {% if reading.notes is defined %}{{ reading.notes }}{% endif %} |
+| {% if reading.utility == "electricity" %}electricidad{% elif reading.utility == "water" %}agua{% else %}gas{% endif %} | {{ reading.value|es_number }} | {{ reading.unit }} | {{ (reading.read_on if reading.read_on is defined and reading.read_on else inventory.event_date)|es_date }} | {% if reading.notes is defined %}{{ reading.notes }}{% endif %} |
 {% endfor %}
+
 
 Las partes deberán comprobar este inventario y registrar por separado cualquier
 discrepancia, estado de conservación o evidencia fotográfica antes de aprobarlo.

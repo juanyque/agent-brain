@@ -7,17 +7,8 @@ data_revision: "{{ project.data_revision }}"
 lang: es
 ---
 
-{% if document_release_status == "reviewed-for-signature" %}
-> **VERSIÓN REVISADA PARA FIRMA.** La aprobación por versión y las
-> comprobaciones vigentes se conservan en el archivo de selección adjunto.
-{% else %}
-> **BORRADOR PENDIENTE DE REVISIÓN JURÍDICA. NO FIRMAR.**
-{% endif %}
-
 {% import "partials/parties.md.j2" as party_macros -%}
-Proyecto: `{{ project.id }}`  
-Jurisdicción: `{{ project.jurisdiction }}`  
-Fecha de firma: **{{ operation.lease.signature_date|es_date }}**
+<p class="document-date">En {{ property.address.municipality }}, a {{ operation.lease.signature_date|es_date }}</p>
 
 {{ party_macros.party_list("Parte arrendadora", parties.landlords) }}
 
@@ -27,24 +18,17 @@ Fecha de firma: **{{ operation.lease.signature_date|es_date }}**
 {% include fragment %}
 {% endfor %}
 
-{% if document_release_status == "reviewed-for-signature" %}
-## Trazabilidad de revisión
+### DÉCIMA.- LEGISLACIÓN APLICABLE Y JURISDICCIÓN
 
-La selección exacta, las versiones aprobadas, las exclusiones justificadas y
-las comprobaciones jurisdiccionales vigentes se conservan junto al documento.
-{% else %}
-## Controles pendientes de aprobación
+El presente contrato se rige por lo libremente pactado por las partes, por los
+preceptos imperativos de la Ley 29/1994, de 24 de noviembre, de Arrendamientos
+Urbanos (LAU), y supletoriamente por las normas del Código Civil.
 
-La selección exacta de cláusulas y sus versiones se conserva junto al documento.
-Antes de la firma deben completarse las comprobaciones jurisdiccionales en vivo
-y la revisión profesional de las cláusulas, en especial las relativas a
-notificaciones, legislación aplicable y controversias.
-{% endif %}
 
-El inventario generado con el mismo proyecto se considera un documento
-relacionado y deberá identificarse expresamente cuando se apruebe su anexión.
-
-La autorización temporal de acceso previo es un documento relacionado
-independiente. No modifica la fecha de inicio del arrendamiento.
+Para la resolución de cualquier controversia, litigio o reclamación derivada de
+la interpretación, cumplimiento o ejecución del presente contrato, ambas partes
+se someten expresamente a la jurisdicción y competencia de los **Juzgados y
+Tribunales de {{ property.address.municipality }}**, con renuncia expresa a
+cualquier otro fuero que pudiera corresponderles.
 
 {{ party_macros.signatures(parties.landlords, parties.tenants) }}

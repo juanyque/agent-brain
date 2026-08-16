@@ -18,6 +18,7 @@
 
 body {
   margin: 0;
+  text-align: justify;
   hyphens: auto;
 }
 
@@ -28,6 +29,7 @@ h3 {
   font-family: "Source Sans 3", "Noto Sans", Arial, sans-serif;
   line-height: 1.2;
   page-break-after: avoid;
+  break-after: avoid;
 }
 
 h1 {
@@ -38,31 +40,58 @@ h1 {
 
 h2 {
   font-size: 12pt;
-  margin: 4mm 0 2mm;
+  margin: 5mm 0 2mm;
+  page-break-after: avoid;
+  break-after: avoid;
 }
 
 h3 {
   font-size: 10.5pt;
-  margin: 4mm 0 1.5mm;
+  margin: 3mm 0 1mm;
+  page-break-after: avoid;
+  break-after: avoid;
 }
 
 p {
-  margin: 0 0 2.5mm;
+  margin: 0 0 2mm;
   orphans: 3;
   widows: 3;
+}
+
+ul {
+  margin: 1mm 0 2mm;
+  padding-left: 5mm;
+}
+
+li {
+  margin-bottom: 0.5mm;
+}
+
+.document-date {
+  text-align: right;
+  margin: 0 0 4mm;
+  font-weight: 500;
+}
+
+
+
+section,
+.contract-clause {
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 table {
   border-collapse: collapse;
   break-inside: avoid;
-  margin: 3mm 0;
+  margin: 2mm 0;
   width: 100%;
 }
 
 th,
 td {
   border: 0.25mm solid #9ca3af;
-  padding: 1.5mm;
+  padding: 1.2mm;
   text-align: left;
   vertical-align: top;
 }
@@ -73,11 +102,46 @@ blockquote {
   break-inside: avoid;
 }
 
+table.photo-grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5mm 0 2.5mm;
+  border: none;
+  break-inside: auto;
+}
+
+table.photo-grid tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+table.photo-grid td {
+  width: 50%;
+  border: none;
+  padding: 0.75mm;
+  text-align: center;
+  vertical-align: middle;
+}
+
+table.photo-grid td.single-photo {
+  width: 100%;
+  text-align: center;
+}
+
+table.photo-grid img {
+  max-width: 98%;
+  max-height: 68mm;
+  height: auto;
+  margin: 0 auto;
+  border: 0.2mm solid #d1d5db;
+  border-radius: 1.5mm;
+}
+
 .page-break {
   break-before: page;
 }
 
 .signature-block {
   break-inside: avoid;
-  margin-top: 18mm;
+  margin-top: 15mm;
 }

@@ -30,9 +30,13 @@
     },
     "inventory": {
       "$ref": "#/$defs/inventory"
+    },
+    "settlement": {
+      "$ref": "#/$defs/settlement"
     }
   },
   "$defs": {
+
     "project": {
       "type": "object",
       "additionalProperties": false,
@@ -995,6 +999,38 @@
         "landlord",
         "tenant"
       ]
+    },
+    "settlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agreement_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "effective_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "keys_delivered": {
+          "type": "boolean"
+        },
+        "supplies_status": {
+          "type": "string"
+        },
+        "compensation_amount": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        },
+        "compensation_reason": {
+          "type": "string"
+        },
+        "deposit_retained": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        },
+        "deposit_refund_amount": {
+          "$ref": "#/$defs/nonNegativeAmount"
+        }
+      }
     }
   }
 }

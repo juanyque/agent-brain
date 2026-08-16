@@ -107,8 +107,13 @@ def request_for_template(
 def build_selection(request: SelectionBuildRequest) -> PreparedSelection:
     """Validate project inputs and calculate their clause selection."""
     manifest = load_yaml(request.manifest, ProjectTypeManifest)
-    resolved_data = resolve_project_data(request.manifest, request.data)
+    resolved_data = resolve_project_data(
+        request.manifest,
+        request.data,
+        document=request.document,
+    )
     data = resolved_data.data
+
     project = ProjectEnvelope.model_validate(data.root).project
 
     try:

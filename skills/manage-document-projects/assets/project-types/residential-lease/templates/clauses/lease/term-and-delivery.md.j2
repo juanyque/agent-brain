@@ -1,15 +1,31 @@
 <!-- clause: lease.term-and-delivery@0.1.0 -->
-### Duración inicial y entrega
+### SEGUNDA.- DURACIÓN, PRÓRROGAS Y RECUPERACIÓN POR NECESIDAD
+
 
 El arrendamiento comenzará el **{{ operation.lease.start_date|es_date }}** y tendrá una
-duración inicial declarada de **{{ operation.lease.initial_duration_months }}
-meses**.
+duración inicial de **{{ operation.lease.initial_duration_months }} meses**.
 
-Finalizado el plazo inicial, las prórrogas legales alcanzarán, cuando proceda,
-una duración total mínima de **{{ operation.lease.legal_extension_years }}
-años**. El primer periodo anual termina el
-**{{ operation.lease.first_annual_period_end|es_date }}** y su primera
-renovación comienza el **{{ operation.lease.first_renewal_date|es_date }}**.
+Llegado el día del vencimiento del contrato, este se prorrogará obligatoriamente
+por plazos anuales hasta alcanzar una duración mínima de
+**{{ operation.lease.legal_extension_years }} años**, salvo que la parte arrendataria
+manifieste a la parte arrendadora, con al menos **un mes (30 días)** de antelación
+a la fecha de terminación del contrato o de cualquiera de sus prórrogas, su voluntad
+de no renovarlo.
 
-La entrega anticipada de llaves se regula exclusivamente mediante la
-autorización temporal relacionada y no adelanta el inicio del arrendamiento.
+Llegado el vencimiento del contrato una vez transcurrido el periodo mínimo de
+cinco años, si ninguna de las partes hubiese notificado a la otra con al menos
+**un mes (30 días)** de antelación su voluntad de no renovarlo, el contrato se
+prorrogará obligatoriamente por plazos anuales hasta un máximo de **tres años más**.
+
+{% if operation.lease.recovery_for_need.enabled_when_legally_applicable -%}
+No procederá la prórroga obligatoria del contrato si, una vez transcurrido el
+primer año de duración, la parte arrendadora comunica a la parte arrendataria la
+**necesidad de ocupar la vivienda** para destinarla a vivienda permanente para sí
+o sus familiares en primer grado de consanguinidad o adopción, o para su cónyuge
+en los supuestos legales de separación, divorcio o nulidad. La comunicación se
+realizará con al menos **dos meses de antelación** a la fecha en la que se vaya a
+necesitar la vivienda.
+{%- endif %}
+
+La entrega de llaves y posesión formal de la finca se produce con la firma de este
+documento y no modifica la fecha pactada de inicio del arrendamiento.

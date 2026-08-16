@@ -96,7 +96,22 @@ documents:
       - operation.lease.early_access.access_until
       - operation.lease.early_access.keys_delivered_on
   termination:
-    status: planned
+    status: template-ready
+    template: templates/termination.md.j2
+    data_requirement: settlement
+    required_data:
+      - project.effective_date
+      - property.address.full_text
+      - property.address.postal_code
+      - property.address.municipality
+      - property.address.province
+      - parties.landlords
+      - parties.tenants
+      - operation.lease.signature_date
+      - operation.lease.monthly_rent
+      - operation.lease.deposit_amount
+      - operation.lease.additional_guarantee_amount
+
 
 workflow:
   states:
