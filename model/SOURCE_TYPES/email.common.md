@@ -5,7 +5,7 @@
 
 A mailbox (personal or shared inbox) that can be searched and read via the runtime's
 available access (an MCP server, a CLI, or similar). Vendor-agnostic: this guide applies
-regardless of which specific mailbox provider a project's descriptor names.
+regardless of which specific mailbox provider a source's descriptor names.
 
 ## What to look for
 

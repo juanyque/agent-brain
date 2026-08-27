@@ -23,6 +23,9 @@ project the session opens in.
 
 ## Operating rules
 
-- Load only the descriptor a registry entry names, never every note under `WIP/SOURCES/`.
+- The descriptor for `<source-slug>` is always `sources.<source-slug>.md`; the
+  `Descriptor:` field above must confirm that same slug, never name a different file.
+- Never register the same `<source-slug>` under two different `###` headings; a
+  duplicate is blocked as ambiguous, not merged or picked arbitrarily.
 - Do not treat tool installation or account access as source opt-in.
 - Keep raw per-source capture in `INBOX/sources/<source-slug>/`, never in this registry.

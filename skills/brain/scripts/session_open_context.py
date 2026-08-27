@@ -145,8 +145,15 @@ def collect_session_digest_state(
         # (RULES-OPTIONAL-CAPABILITIES.common.md -> "Scopes"): activation depends on
         # whether WIP.md links the registry anywhere, never on the current directory --
         # unlike wip_context above, which is deliberately cwd-filtered for presentation.
+        # The session cwd is still passed through to select an environment profile
+        # (see source_scheduler.py's module docstring): that's an access-resolution
+        # concern, not a source-scoping one, and keeps this static check aligned with
+        # the same profile the investigating subagent's live resolution will select.
         if registry_activated(brain_root):
-            sources_due = tuple(summarize_due_sources(brain_root, date.fromisoformat(today)))
+            session_cwd = Path(request.cwd) if request.cwd else None
+            sources_due = tuple(
+                summarize_due_sources(brain_root, date.fromisoformat(today), session_cwd)
+            )
         else:
             sources_due = ()
         existing_note = find_existing_session_note(brain_root, request.session_id)

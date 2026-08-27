@@ -5,7 +5,7 @@
 
 A hosted document (a shared doc, spec, or design) together with its existing comment
 threads. Vendor-agnostic: this guide applies regardless of which specific document platform
-a project's descriptor names (Google Docs is a common example, not the only one).
+a source's descriptor names (Google Docs is a common example, not the only one).
 
 This is a deliberately narrower job than a general "review this document" skill: the
 periodic-ingestion loop below covers **verification and freshness** only. Purpose-fit or

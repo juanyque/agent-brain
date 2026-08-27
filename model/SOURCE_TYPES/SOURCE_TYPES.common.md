@@ -10,7 +10,10 @@ names a type below, deep-read the corresponding guide before investigating that 
 `SOURCE_TYPES/` holds investigation guides organized by kind of external source (messaging
 tool, task tracker, ...), never by vendor name. A guide describes what a subagent
 investigating a source of that type should look for and how to summarize it — never how to
-authenticate or which specific product to use; that lives in the source's own descriptor.
+authenticate or which specific product to use. A source's own descriptor names only the
+generic capability it needs and what to read within it (`RULES-OPTIONAL-CAPABILITIES.common.md`
+→ "Access"); the concrete tool and endpoint live in the brain's environment profile,
+resolved through that capability.
 
 ## Index
 

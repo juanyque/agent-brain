@@ -94,8 +94,8 @@ class ContainsCurrentPeriodTests(unittest.TestCase):
 
     def test_newer_partial_entry_overrides_an_older_done_entry_regardless_of_file_order(self) -> None:
         # Same conflict as above, but with the entries in the opposite (non-newest-
-        # first) file order, to prove the decision is based on entry_sort_key, not
-        # on which one happens to appear first in the section.
+        # first) file order, to prove the decision is based on the entries' actual
+        # run_at timestamps, not on which one happens to appear first in the section.
         today = date(2026, 8, 20)
         current_month = f"{today.year}-{today.month:02d}"
         lines = [
@@ -117,11 +117,11 @@ class ContainsCurrentPeriodTests(unittest.TestCase):
 class MixedRunAtSortingTests(unittest.TestCase):
     def test_offset_aware_and_naive_run_at_do_not_crash_latest_entry(self) -> None:
         # Given: run_at is optional (JOBS.common.md), so one entry may carry an
-        # offset-aware timestamp while a sibling entry omits it entirely (naive
-        # midnight fallback in entry_sort_key). Before the fix, max() over these two
-        # raised TypeError: can't compare offset-naive and offset-aware datetimes --
-        # and summarize_due_jobs() is called unconditionally at session open, so this
-        # was a session-start crash, not just a latent scheduler defect.
+        # offset-aware timestamp while a sibling entry omits it entirely. Before the
+        # fix, comparing those two run_at values directly raised TypeError: can't
+        # compare offset-naive and offset-aware datetimes -- and summarize_due_jobs()
+        # is called unconditionally at session open, so this was a session-start
+        # crash, not just a latent scheduler defect.
         lines = [
             "- run: 2026-08-18",
             "  run_at: 2026-08-18T09:00:00+02:00",
@@ -138,6 +138,30 @@ class MixedRunAtSortingTests(unittest.TestCase):
         latest = ms.latest_entry(entries)  # must not raise TypeError
 
         self.assertEqual(latest.run, date(2026, 8, 19))
+
+    def test_same_day_missing_run_at_falls_back_to_file_order_not_midnight(self) -> None:
+        # Given: two entries for the SAME run day, newest-first as documented
+        # (JOBS.common.md), where only the older one recorded a run_at. A naive
+        # "missing run_at means midnight" tiebreak would rank the untimed newer
+        # entry as earlier than the timed older one and hide it -- exactly the
+        # second-round review finding. Since the two run_at values can't be
+        # objectively compared (one is missing), file order is the only remaining
+        # signal, and the newer entry (first in the newest-first file) must win.
+        lines = [
+            "- run: 2026-08-20",
+            "  period: 2026-W34",
+            "  status: partial",
+            "  summary: newer, untimed",
+            "- run: 2026-08-20",
+            "  run_at: 2026-08-20T09:00:00+02:00",
+            "  period: 2026-W34",
+            "  status: done",
+            "  summary: older, timed",
+        ]
+
+        latest = ms.latest_entry(ms.parse_job_entries(lines))
+
+        self.assertEqual(latest.summary, "newer, untimed")
 
     def test_summarize_due_jobs_does_not_crash_with_mixed_run_at(self) -> None:
         today = date(2026, 8, 20)
@@ -224,6 +248,50 @@ class SummarizeDueJobsTests(unittest.TestCase):
             summary = ms.summarize_due_jobs(brain, today)
 
         self.assertTrue(any(line.startswith("- Yearly: review") for line in summary))
+
+
+class YearlyStateTests(unittest.TestCase):
+    def test_newer_in_progress_entry_overrides_an_older_done_entry(self) -> None:
+        # Mirrors the weekly/monthly latest-entry fix: yearly_state() used to return
+        # on the FIRST current-year entry in file order, so an older `done` entry
+        # placed before a newer `in_progress` one would incorrectly report the year
+        # as finished.
+        today = date(2026, 8, 20)
+        lines = [
+            f"- run: {today.isoformat()}",
+            "  run_at: " + today.isoformat() + "T09:00:00+02:00",
+            f"  period: {today.year}",
+            "  status: done",
+            "  summary: first pass",
+            f"- run: {today.isoformat()}",
+            "  run_at: " + today.isoformat() + "T16:00:00+02:00",
+            f"  period: {today.year}",
+            "  status: in_progress",
+            "  summary: archive resumed",
+        ]
+
+        status, _, _ = ms.yearly_state(lines, today)
+
+        self.assertEqual(status, "in_progress")
+
+    def test_result_is_the_same_regardless_of_file_order(self) -> None:
+        today = date(2026, 8, 20)
+        lines = [
+            f"- run: {today.isoformat()}",
+            "  run_at: " + today.isoformat() + "T16:00:00+02:00",
+            f"  period: {today.year}",
+            "  status: in_progress",
+            "  summary: archive resumed",
+            f"- run: {today.isoformat()}",
+            "  run_at: " + today.isoformat() + "T09:00:00+02:00",
+            f"  period: {today.year}",
+            "  status: done",
+            "  summary: first pass",
+        ]
+
+        status, _, _ = ms.yearly_state(lines, today)
+
+        self.assertEqual(status, "in_progress")
 
 
 if __name__ == "__main__":

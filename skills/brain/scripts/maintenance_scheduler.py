@@ -6,7 +6,7 @@ import argparse
 import json
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime
 from pathlib import Path
 
 
@@ -121,22 +121,40 @@ def parse_run_at(raw: str | None) -> datetime | None:
         return None
 
 
-def entry_sort_key(entry: JobLogEntry) -> tuple[date, time]:
-    # `run_at` is optional (JOBS.common.md): a section can legitimately mix an entry
-    # that has it with one that doesn't. Comparing raw datetimes would then mix
-    # offset-aware and offset-naive values and crash `max()`. Sorting on (run date,
-    # time-of-day) instead sidesteps tzinfo comparison entirely -- `run` is already the
-    # authoritative day, and time-of-day is only a same-day tiebreaker.
-    time_of_day = entry.run_at.time() if entry.run_at is not None else time.min
-    return (entry.run, time_of_day)
-
-
 def entry_label(entry: JobLogEntry) -> str:
     return entry.run_at.isoformat() if entry.run_at is not None else entry.run.isoformat()
 
 
+def _is_more_recent(candidate: JobLogEntry, current_best: JobLogEntry) -> bool:
+    """Whether `candidate` is more recent than `current_best`.
+
+    `run` (the calendar day) is the primary, always-comparable signal. `run_at` is
+    optional (JOBS.common.md) and only disambiguates two entries that share the same
+    `run` day -- and only when BOTH have it and both are the same aware/naive kind,
+    since a missing or type-mismatched timestamp can't be objectively compared to
+    another. When run_at can't decide, file order is the only remaining signal: entries
+    are documented newest-first, so the earlier one in the list (== current_best,
+    since callers scan front-to-back) wins by staying in place.
+    """
+    if candidate.run != current_best.run:
+        return candidate.run > current_best.run
+    if candidate.run_at is None or current_best.run_at is None:
+        return False
+    candidate_aware = candidate.run_at.tzinfo is not None
+    best_aware = current_best.run_at.tzinfo is not None
+    if candidate_aware != best_aware:
+        return False
+    return candidate.run_at > current_best.run_at
+
+
 def latest_entry(entries: list[JobLogEntry]) -> JobLogEntry | None:
-    return max(entries, key=entry_sort_key) if entries else None
+    if not entries:
+        return None
+    best = entries[0]
+    for entry in entries[1:]:
+        if _is_more_recent(entry, best):
+            best = entry
+    return best
 
 
 def latest_run(lines: list[str]) -> date | None:
@@ -176,14 +194,16 @@ def contains_current_month(lines: list[str], today: date) -> bool:
 
 
 def yearly_state(lines: list[str], today: date) -> tuple[str, str, str]:
+    # Same rationale as contains_current_week/month: the latest structured entry
+    # decides, never the first one encountered in file order.
     current = str(today.year)
-    for entry in parse_job_entries(lines):
-        if entry.period != current:
-            continue
-        if entry.status in {"in_progress", "partial", "pending"}:
-            return "in_progress", entry_label(entry), f"{entry.status}: {entry.summary}".strip()
-        if entry.status == "done":
-            return "done", entry_label(entry), f"done: {entry.summary}".strip()
+    period_entries = [entry for entry in parse_job_entries(lines) if entry.period == current]
+    latest = latest_entry(period_entries)
+    if latest is not None:
+        if latest.status in {"in_progress", "partial", "pending"}:
+            return "in_progress", entry_label(latest), f"{latest.status}: {latest.summary}".strip()
+        if latest.status == "done":
+            return "done", entry_label(latest), f"done: {latest.summary}".strip()
     for line in lines:
         match = YEAR_RE.match(line)
         if not match or int(match.group(1)) != today.year:

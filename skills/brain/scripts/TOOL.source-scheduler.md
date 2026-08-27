@@ -3,24 +3,33 @@
 ## Purpose
 - Decide, for source ingestion (`RULES-OPTIONAL-CAPABILITIES.common.md` -> "Source
   ingestion"), which registered sources are due, not due, or blocked.
-- Decide whether the capability is activated for the brain at all (a direct link to
-  `sources.registry` anywhere in `WIP/WIP.md`).
+- Decide whether the capability is activated for the brain at all (a real wikilink or
+  Markdown link to `sources.registry`, resolved by exact target basename, anywhere in
+  `WIP/WIP.md`).
 - Record the watermark after a source has actually been investigated.
 
 ## Scope
 Source ingestion is brain-scoped, not project-scoped: every enabled registry entry is
-evaluated every session, regardless of the working directory a session opens in.
+evaluated every session, regardless of the working directory a session opens in. `--cwd`
+(on `list-due`, and threaded through automatically at session open) is unrelated to this:
+it only selects which environment profile applies, exactly like `profile_context.py`'s own
+selector. It never scopes which sources are evaluated.
 
 ## Decision model
 - `due`: the cadence window has elapsed (or the source is `Check cadence (days): always`).
   Safe to investigate.
 - `not due` (silent): checked recently enough. Nothing is surfaced.
-- `blocked`: something about the source could not be determined safely, so it is reported
-  and skipped rather than investigated. Causes: missing/symlinked descriptor, missing or
-  unwritten source type (no `SOURCE_TYPES/<type>.md` guide), a missing or malformed
-  `Requires capability` field, a capability the brain's active environment profile
-  cannot route, or a missing/malformed `Check cadence (days)` / `Last checked` field.
-  Fail-closed by design: an indeterminable case is never guessed open.
+- `blocked`: something about the source, its descriptor, its type guide, or the registry
+  itself could not be determined safely, so it is reported and skipped rather than
+  investigated. Causes include: the registry is missing, symlinked, or unreadable; a
+  slug is registered more than once; a registry `Descriptor:` field is missing or does
+  not name this slug; the descriptor is missing, symlinked, not valid UTF-8, or has a
+  duplicated field; the source type is malformed, or its `SOURCE_TYPES/<type>.md` guide
+  is missing, symlinked, or unwritten; `Requires capability` is missing, malformed, or
+  unroutable by the active environment profile; `Locator` or `Last status` is missing; or
+  `Check cadence (days)` / `Last checked` is missing or malformed (including under
+  `always`, which still validates a non-sentinel `Last checked` date). Fail-closed by
+  design: an indeterminable case is never guessed open.
 
 Capability validation is static only (a profile-document lookup, no live provider call).
 The subagent that actually investigates a due source resolves the capability live (e.g.
@@ -56,10 +65,15 @@ python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-d
 - `mark-checked` is dry-run by default; it only prints the plan. `--apply` is required to
   write.
 - The source slug is validated before any path is constructed; a slug outside
-  `^[a-z0-9][a-z0-9._-]*$` (e.g. containing `/` or `..`) is rejected, not resolved.
+  `^[a-z0-9][a-z0-9._-]*$` (e.g. containing `/`, or not starting with a letter or digit)
+  is rejected, not resolved. This blocks path separators; it does not forbid a literal
+  `.` or `..` substring inside an otherwise valid slug.
 - A descriptor that is a symlink, or whose parent inside the brain is a symlink, is
-  rejected rather than followed.
-- The write is atomic (temp file + rename), never a partial in-place edit.
+  rejected rather than followed. The same no-follow check applies to a source's type
+  guide under `SOURCE_TYPES/`.
+- The write is atomic: a uniquely named temp file created with `O_EXCL` in the same
+  directory (never a predictable sibling, so it can't be pre-planted as a symlink),
+  then a rename. The original file's mode is preserved explicitly.
 - `Last checked:` is the watermark of the last *successful* check. `mark-checked --status
   degraded` updates `Last status:` but deliberately leaves `Last checked:` untouched, so a
   failed attempt never advances the "safe to skip up to here" boundary and the source
@@ -70,12 +84,19 @@ python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-d
 ## Registry/descriptor parsing contract
 - `sources.registry.md` entries: `### <slug>` heading, then `- Status:`, `- Type:`,
   `- Descriptor:`, `- Purpose:` fields. Only `Status: enabled` entries are considered.
+  `Descriptor:` is a validated cross-check, not a redirect: the descriptor path is
+  always the deterministic `sources.<slug>.md`, and the field must resolve to that
+  same slug or the entry is blocked -- it never picks a different file.
 - `sources.<slug>.md` descriptor fields read by this script: `Type:` (via the registry
-  entry, not the descriptor), `Requires capability:`, `Check cadence (days):`,
-  `Last checked:`, `Last status:`.
+  entry, not the descriptor), `Requires capability:`, `Locator:`, `Check cadence (days):`,
+  `Last checked:`, `Last status:`. `Locator` and `Last status` must be present (their
+  content is otherwise the investigating subagent's / `mark-checked`'s concern, not
+  validated here beyond presence).
 - `Check cadence (days): always` is the sentinel for a source that is inherently
   time-sensitive per session (a calendar), represented internally as `cadence_days == 0`.
 - `Last checked:` sentinels meaning "never checked": empty, `not checked`, or `none`.
+- A field value may be written as inline code (`` `issues.search` ``); one surrounding
+  pair of backticks is stripped before parsing.
 
 ## Known limitations
 - Capability validation only checks that the active environment profile routes the named
@@ -84,3 +105,7 @@ python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-d
 - A brain with no environment profile configured at all blocks every source that
   declares a `Requires capability` (which is every source) -- see
   `docs/runtime-profiles.md` for setting one up.
+- Two concurrent `mark-checked --apply` calls for the same source are not coordinated:
+  each write is atomic and self-consistent, but whichever completes its rename last
+  wins. Not expected in normal use (nothing else runs `mark-checked` for a source
+  outside its own investigation), so no locking is implemented.

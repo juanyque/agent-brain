@@ -136,7 +136,8 @@ class SessionDryRunTests(unittest.TestCase):
         sources.mkdir()
         (sources / "sources.registry.md").write_text(
             "# Source registry\n\n## Sources\n\n"
-            "### slack-eng\n- Status: enabled\n- Type: messaging-tool\n",
+            "### slack-eng\n- Status: enabled\n- Type: messaging-tool\n"
+            "- Descriptor: [[sources.slack-eng]]\n",
             encoding="utf-8",
         )
         (sources / "sources.slack-eng.md").write_text(

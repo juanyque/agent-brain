@@ -19,8 +19,12 @@ capability that is not part of the base brain model.
 - Each capability declares its own scope below; the activation link's placement and the
   loading rule follow that declared scope, not a single vault-wide rule.
 
-Every active registry and descriptor under `WIP/` must also be linked directly from
-`WIP/WIP.md`, following the normal WIP dashboard invariant.
+Every active registry under `WIP/` must also be linked directly from `WIP/WIP.md`,
+following the normal WIP dashboard invariant. For a project-scoped capability, each
+project's descriptor is linked the same way, under that project's own heading. For a
+brain-scoped capability, the registry is the whole discovery surface: its entries name
+their own descriptors (see each capability's own section below), and requiring a second,
+separate WIP.md link per descriptor would make the registry redundant.
 
 ### Scopes
 
@@ -117,10 +121,16 @@ WIP/
     └── sources.<source-slug>.md
 ```
 
-- `sources.registry.md` is the compact source-to-descriptor index.
+- `sources.registry.md` is the compact source-to-descriptor index. A missing, symlinked,
+  unreadable, or duplicate-slug registry is reported as blocked, distinct from a
+  legitimately empty "nothing enabled yet" result.
 - `sources.<source-slug>.md` describes one source: its type, what to look for, its
   check cadence, and the script-owned watermark (`Last checked:`).
 - Use one descriptor per source, not one per account or per channel within a source.
+- A registry entry's `Descriptor:` field is a validated cross-check, not a redirect: the
+  descriptor path is always the deterministic `sources.<slug>.md`. The field must name
+  that same slug or the entry is blocked — never silently derived from, or silently
+  disagreeing with, a different file.
 
 Use the common templates in `TEMPLATES/TEMPLATE.source-registry.common.md` and
 `TEMPLATES/TEMPLATE.source-descriptor.common.md` when creating these notes.
@@ -157,13 +167,18 @@ without a written guide yet is not investigated until one exists — do not impr
   same capability vocabulary a skill would request through the environment-profile
   resolver — see `docs/runtime-profiles.md`), and a `Locator:` describing exactly what to
   read within that capability (a query, a mailbox and label, a list of channels, a URL).
-  Neither the concrete tool nor the endpoint belongs in the descriptor: the environment
-  profile that resolves the capability already owns that, and duplicating it here would
+  Both fields are required; a due decision never dispatches without a locator. Neither
+  the concrete tool nor the endpoint belongs in the descriptor: the environment profile
+  that resolves the capability already owns that, and duplicating it here would
   duplicate private data.
 - `source_scheduler.py` only checks that the named capability is statically routable by
   the brain's environment profile — it never performs a live call. A source whose
   capability is missing, unroutable, or absent from the active profile is reported as
   blocked, with the reason, and is not investigated.
+- Which profile applies is selected the same way `profile_context.py` selects it for any
+  other skill (by the session's cwd, via the brain's `project_rules`) — never a fixed
+  brain-root anchor. This is an access-resolution detail only; it does not scope which
+  sources are evaluated, since source ingestion stays brain-scoped regardless of cwd.
 - The subagent that investigates a due source resolves the capability live (the same way
   any other skill does, e.g. via `profile_context.py`) and reports the source as
   `degraded` if that resolution fails at investigation time — never inventing a result

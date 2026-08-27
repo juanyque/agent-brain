@@ -5,7 +5,7 @@
 
 A knowledge-base entry (a wiki page, a database entry, a reference doc) addressed by a URL.
 Vendor-agnostic: this guide applies regardless of which specific knowledge-base platform a
-project's descriptor names.
+source's descriptor names.
 
 ## Investigation approach
 
@@ -15,5 +15,5 @@ ground-truth verification pass with a keep/merge/drop rubric, and an optional ge
 "does this page still serve its purpose" pass as a separate, human-in-the-loop extension.
 The only difference is what's linked: a knowledge-base page rather than a hosted document.
 
-Deep-read `documents-and-comments.common.md` for the full detail — what to look for, how to
-summarize, failure signals, and the publishing guarantee are all the same.
+Deep-read `SOURCE_TYPES/documents-and-comments.md` for the full detail — what to look for,
+how to summarize, failure signals, and the publishing guarantee are all the same.

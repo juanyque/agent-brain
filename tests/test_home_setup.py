@@ -493,6 +493,42 @@ class HomeSetupRealSourceCatalogTests(unittest.TestCase):
 
         self.assertEqual(codes, {"brain-wrapper-missing"})
 
+    def test_every_real_source_type_cross_reference_resolves_in_installed_brain(self) -> None:
+        # Second-round review finding: knowledge-base.common.md correctly wikilinked
+        # [[documents-and-comments]] but its prose separately named the wrong local
+        # file (documents-and-comments.common.md, which only exists under _COMMON/).
+        # A test that only checks the templates (see SourceTypeWrapperReferenceTests
+        # below) can't catch drift inside the real guides themselves.
+        import re
+
+        cross_ref = re.compile(r"SOURCE_TYPES/([a-z][a-z0-9-]*)\.md")
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            brain.mkdir()
+            reporter = Reporter(root / "home-setup.log")
+            with redirect_stdout(io.StringIO()):
+                apply(brain, MODEL_DIR, True, True, reporter)
+
+            for guide_path in sorted((MODEL_DIR / "SOURCE_TYPES").glob("*.common.md")):
+                lines = guide_path.read_text(encoding="utf-8").splitlines()
+                # Skip the title and content-boundary comment lines: the boundary's
+                # own "owner" field legitimately names a *.common.md path.
+                body = "\n".join(line for line in lines if not line.startswith("<!--"))
+                for match in cross_ref.finditer(body):
+                    referenced = brain / "SOURCE_TYPES" / f"{match.group(1)}.md"
+                    self.assertTrue(
+                        referenced.is_file(),
+                        f"{guide_path.name} references missing {referenced.relative_to(brain)}",
+                    )
+                stale = re.search(r"[a-z][a-z0-9-]*\.common\.md", body)
+                self.assertIsNone(
+                    stale,
+                    f"{guide_path.name} names a *.common.md path in its body: "
+                    f"{stale.group(0) if stale else ''}",
+                )
+
 
 class SourceTypeWrapperReferenceTests(unittest.TestCase):
     """Instantiate the real source-registry/descriptor templates and confirm their

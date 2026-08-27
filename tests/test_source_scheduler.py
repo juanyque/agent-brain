@@ -22,8 +22,18 @@ def _registry(*entries: str) -> str:
     return "# Source registry\n\n## Sources\n\n" + "\n".join(entries)
 
 
-def _entry(slug: str, status: str, source_type: str = "messaging-tool") -> str:
-    return f"### {slug}\n- Status: {status}\n- Type: {source_type}\n\n"
+def _entry(
+    slug: str,
+    status: str,
+    source_type: str = "messaging-tool",
+    *,
+    descriptor: str | None = None,
+) -> str:
+    descriptor = f"[[sources.{slug}]]" if descriptor is None else descriptor
+    return (
+        f"### {slug}\n- Status: {status}\n- Type: {source_type}\n"
+        f"- Descriptor: {descriptor}\n\n"
+    )
 
 
 def _write_profile(brain: Path, capability: str = "chat.search") -> None:
@@ -151,6 +161,49 @@ class RegistryActivatedTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)
             _write(brain / "WIP" / "WIP.md", "## Unrelated project\n\n- nothing to see here\n")
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_near_name_wikilink_does_not_activate(self) -> None:
+        # Second-round review finding: a raw substring match would fire on any target
+        # that merely CONTAINS "sources.registry" as text, not just the exact file.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## Anything\n\n- [[not-sources.registry.md]]\n")
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_backup_wikilink_does_not_activate(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## Anything\n\n- [[sources.registry.backup]]\n")
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_markdown_link_with_fragment_still_activates(self) -> None:
+        # A real link to the registry with a heading fragment must not be rejected
+        # just because something follows the ".md" before the closing paren.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n- [registry](WIP/SOURCES/sources.registry.md#Sources)\n",
+            )
+            self.assertTrue(ss.registry_activated(brain))
+
+    def test_link_inside_html_comment_does_not_activate(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n<!-- example: [[sources.registry]] -->\n",
+            )
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_link_inside_fenced_code_does_not_activate(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n```\n[[sources.registry]]\n```\n",
+            )
             self.assertFalse(ss.registry_activated(brain))
 
 
@@ -320,6 +373,228 @@ class DecideSourceBlockedTests(unittest.TestCase):
                     decision = self._decide(brain)
                 self.assertFalse(decision.blocked)
                 self.assertTrue(decision.due)
+
+    def test_missing_locator_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, locator="")
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("Locator", decision.reason)
+
+    def test_missing_last_status_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            # _descriptor() always writes the "- Last status:" line, even with an
+            # empty value (which would still count as present); drop the whole line
+            # to test true absence.
+            text = descriptor.read_text(encoding="utf-8")
+            descriptor.write_text(
+                "\n".join(line for line in text.splitlines() if "Last status" not in line) + "\n",
+                encoding="utf-8",
+            )
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("Last status", decision.reason)
+
+    def test_always_with_malformed_watermark_date_is_blocked(self) -> None:
+        # Second-round review finding: the always-cadence branch returned early
+        # without validating a non-sentinel Last checked value.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, cadence="always", last_checked="not-a-date")
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("invalid 'Last checked'", decision.reason)
+
+    def test_duplicate_descriptor_field_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            text = descriptor.read_text(encoding="utf-8")
+            descriptor.write_text(text + "- Last checked: 2026-08-02\n", encoding="utf-8")
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("duplicate field", decision.reason)
+        self.assertIn("last checked", decision.reason)
+
+    def test_invalid_utf8_descriptor_is_blocked_not_a_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            descriptor.write_bytes(b"\xff\xfe not valid utf-8")
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("UTF-8", decision.reason)
+
+    def test_descriptor_field_missing_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(_entry("slack-eng", "enabled", "messaging-tool", descriptor="")),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("Descriptor", decision.reason)
+
+    def test_descriptor_field_naming_a_different_slug_is_blocked(self) -> None:
+        # Second-round review finding: the registry's Descriptor field was parsed
+        # but never checked against the slug it was filed under.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(
+                    _entry("slack-eng", "enabled", "messaging-tool", descriptor="[[sources.other]]")
+                ),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write(brain / "WIP" / "SOURCES" / "sources.other.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("Descriptor", decision.reason)
+
+    def test_source_type_path_traversal_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            outside_guide = Path(raw).parent / "outside-guide.md"
+            _write(outside_guide, "# outside\n")
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(_entry("slack-eng", "enabled", "../../outside-guide")),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_profile(brain)
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("invalid source type", decision.reason)
+
+    def test_symlinked_source_type_guide_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            outside_guide = Path(raw).parent / "outside-guide.md"
+            _write(outside_guide, "# outside\n")
+            guide = brain / "SOURCE_TYPES" / "messaging-tool.md"
+            guide.unlink()
+            guide.symlink_to(outside_guide)
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("symlink", decision.reason)
+
+    def test_directory_named_like_a_guide_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(_entry("slack-eng", "enabled", "messaging-tool")),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            (brain / "SOURCE_TYPES" / "messaging-tool.md").mkdir(parents=True)
+            _write_profile(brain)
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("not a regular file", decision.reason)
+
+
+class RegistryLevelBlockedTests(unittest.TestCase):
+    def test_missing_registry_is_blocked_when_activated(self) -> None:
+        # Distinct from "registry exists with zero enabled entries," which is a
+        # legitimate quiet result -- an activated capability whose registry is gone
+        # must be visible, not silently empty.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("not found", decisions[0].reason)
+
+    def test_symlinked_registry_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            outside_registry = Path(raw).parent / "outside-registry.md"
+            _write(outside_registry, _registry(_entry("slack-eng", "enabled")))
+            registry = brain / "WIP" / "SOURCES" / "sources.registry.md"
+            registry.parent.mkdir(parents=True)
+            registry.symlink_to(outside_registry)
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("symlink", decisions[0].reason)
+
+    def test_invalid_utf8_registry_is_blocked_not_a_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            registry = brain / "WIP" / "SOURCES" / "sources.registry.md"
+            registry.parent.mkdir(parents=True)
+            registry.write_bytes(b"\xff\xfe not valid utf-8")
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("UTF-8", decisions[0].reason)
+
+    def test_duplicate_enabled_slug_is_one_blocked_decision_not_two_dispatches(self) -> None:
+        # Second-round review finding: a duplicate slug produced two separate
+        # SourceDecisions (and so two subagent dispatches) instead of one ambiguity.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(
+                    _entry("slack-eng", "enabled", "messaging-tool"),
+                    _entry("slack-eng", "enabled", "messaging-tool"),
+                ),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("duplicate", decisions[0].reason)
+
+
+class SourceDecisionInvariantTests(unittest.TestCase):
+    """`due` and `blocked` are meant to encode three exclusive states (due / not due /
+    blocked), not four independent booleans. Lock that no code path can produce
+    `due=True, blocked=True` together."""
+
+    def test_due_and_blocked_are_never_both_true(self) -> None:
+        cases: list[ss.SourceDecision] = []
+        with tempfile.TemporaryDirectory() as raw:
+            cases.append(self._decide_one(_build_working_brain(raw)))  # due
+        with tempfile.TemporaryDirectory() as raw:
+            cases.append(  # not due
+                self._decide_one(_build_working_brain(raw, last_checked="2026-08-27"))
+            )
+        with tempfile.TemporaryDirectory() as raw:
+            cases.append(self._decide_one(_build_working_brain(raw, locator="")))  # blocked
+
+        for decision in cases:
+            with self.subTest(decision=decision):
+                self.assertFalse(decision.due and decision.blocked)
+
+    @staticmethod
+    def _decide_one(brain: Path) -> ss.SourceDecision:
+        return ss.decide_sources(brain, date(2026, 8, 27))[0]
 
 
 class DecideSourceCadenceTests(unittest.TestCase):
@@ -497,6 +772,55 @@ class MarkCheckedTests(unittest.TestCase):
 
             self.assertNotIn("2026-08-27", outside.read_text(encoding="utf-8"))
 
+    def test_duplicate_watermark_field_is_rejected_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            original = _descriptor(last_checked="2026-08-02") + "- Last checked: 2026-08-02\n"
+            _write(descriptor, original)
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+
+            self.assertEqual(descriptor.read_text(encoding="utf-8"), original)
+
+    def test_preexisting_temp_symlink_never_overwrites_target_or_replaces_descriptor(self) -> None:
+        # Second-round review finding: a predictable ".tmp" sibling plus a plain
+        # write_text() would follow a pre-planted symlink there, overwrite whatever it
+        # points at, and then rename that symlink over the real descriptor.
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor())
+            outside = Path(raw).parent / "outside-target.md"
+            _write(outside, "untouched\n")
+            planted_tmp = descriptor.with_suffix(descriptor.suffix + ".tmp")
+            planted_tmp.symlink_to(outside)
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+
+            self.assertEqual(outside.read_text(encoding="utf-8"), "untouched\n")
+            self.assertFalse(descriptor.is_symlink())
+            self.assertIn("- Last checked: 2026-08-27", descriptor.read_text(encoding="utf-8"))
+
+    def test_apply_preserves_a_private_descriptor_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor())
+            descriptor.chmod(0o600)
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+
+            self.assertEqual(descriptor.stat().st_mode & 0o777, 0o600)
+
+    def test_apply_leaves_no_temp_file_residue(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor())
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+
+            leftovers = list(Path(raw).glob("*.tmp"))
+        self.assertEqual(leftovers, [])
+
 
 class DescriptorPathForTests(unittest.TestCase):
     def test_valid_slug_resolves(self) -> None:
@@ -611,6 +935,109 @@ class MarkCheckedCliTests(unittest.TestCase):
             self.assertIn("symlink", result.stdout)
             self.assertNotIn("2026", outside.read_text(encoding="utf-8"))
             (SCRIPTS_DIR / "source_scheduler.log").unlink(missing_ok=True)
+
+    def test_dry_run_never_approves_a_mutation_apply_would_reject(self) -> None:
+        # Second-round review finding: dry-run returned 0 on a descriptor missing
+        # 'Last status:' and only apply discovered the problem, so a reviewed plan
+        # could claim success for an update that was never actually going to happen.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            text = descriptor.read_text(encoding="utf-8")
+            descriptor.write_text(
+                "\n".join(line for line in text.splitlines() if "Last status" not in line) + "\n",
+                encoding="utf-8",
+            )
+
+            dry_run = self._run(
+                "mark-checked", "--brain-root", str(brain),
+                "--source", "slack-eng", "--status", "ok",
+            )
+            apply = self._run(
+                "mark-checked", "--brain-root", str(brain),
+                "--source", "slack-eng", "--status", "ok", "--apply",
+            )
+
+            self.assertEqual(dry_run.returncode, 1)
+            self.assertEqual(apply.returncode, 1)
+            (SCRIPTS_DIR / "source_scheduler.log").unlink(missing_ok=True)
+
+
+class ProfileSelectionConsistencyTests(unittest.TestCase):
+    """Second-round review finding: the scheduler resolved a profile via
+    `cwd=brain_root`, while live resolution (profile_context.py) uses the session's
+    real cwd -- in a brain with per-project profiles, those two could select
+    different profiles and disagree about which capabilities are routed."""
+
+    def _brain_with_two_profiles(self, raw: str) -> Path:
+        brain = Path(raw)
+        _write(
+            brain / "_AGENTS" / "SHARED" / "environment.json",
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "default_profile": "default",
+                    "project_rules": [{"path_prefix": str(brain / "project"), "profile": "project"}],
+                }
+            ),
+        )
+        _write(
+            brain / "_AGENTS" / "SHARED" / "profiles" / "default.json",
+            json.dumps(
+                {
+                    "schema_version": 1, "id": "default", "display_name": "Default",
+                    "providers": {"m": {"kind": "manual", "service": "m", "required": False, "operations": {}}},
+                    "capability_routes": {"chat.search": ["m"]},
+                    "projects": [],
+                }
+            ),
+        )
+        _write(
+            brain / "_AGENTS" / "SHARED" / "profiles" / "project.json",
+            json.dumps(
+                {
+                    "schema_version": 1, "id": "project", "display_name": "Project",
+                    "providers": {"m": {"kind": "manual", "service": "m", "required": False, "operations": {}}},
+                    "capability_routes": {"issues.search": ["m"]},
+                    "projects": [],
+                }
+            ),
+        )
+        return brain
+
+    def test_scheduler_uses_the_profile_the_given_cwd_selects(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = self._brain_with_two_profiles(raw)
+            (brain / "project").mkdir()
+
+            default_routes, error = ss.capability_routes(brain, cwd=None)
+            project_routes, _ = ss.capability_routes(brain, cwd=brain / "project")
+
+        self.assertIsNone(error)
+        self.assertEqual(default_routes, {"chat.search"})
+        self.assertEqual(project_routes, {"issues.search"})
+
+    def test_decide_sources_blocks_when_the_session_cwd_profile_lacks_the_capability(self) -> None:
+        # The exact reproduction from the review: a source whose capability the
+        # BRAIN-ROOT profile would route, but the session's real project profile
+        # would not, must block using the profile the live subagent will actually use.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = self._brain_with_two_profiles(raw)
+            project_dir = brain / "project"
+            project_dir.mkdir()
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(_entry("slack-eng", "enabled", "messaging-tool")),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+
+            from_brain_root = ss.decide_sources(brain, date(2026, 8, 27), cwd=None)[0]
+            from_project_cwd = ss.decide_sources(brain, date(2026, 8, 27), cwd=project_dir)[0]
+
+        self.assertFalse(from_brain_root.blocked)
+        self.assertTrue(from_project_cwd.blocked)
+        self.assertIn("not routed", from_project_cwd.reason)
 
 
 if __name__ == "__main__":

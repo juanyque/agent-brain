@@ -4,7 +4,7 @@
 ## What this covers
 
 A personal or shared calendar that can be queried for events on a given day. Vendor-agnostic:
-this guide applies regardless of which specific calendar provider a project's descriptor
+this guide applies regardless of which specific calendar provider a source's descriptor
 names.
 
 ## Why this type is special

@@ -5,7 +5,7 @@
 
 Channel- or thread-based messaging tools (chat platforms) where the user participates in
 one or more channels, groups, or direct threads. Vendor-agnostic: this guide applies
-regardless of which specific tool a project's descriptor names.
+regardless of which specific tool a source's descriptor names.
 
 ## What to look for
 

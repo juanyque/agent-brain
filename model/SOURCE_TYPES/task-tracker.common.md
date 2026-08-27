@@ -5,7 +5,7 @@
 
 Systems that track work items with a lifecycle (open/in-progress/closed), assignment, and
 relationships between items (task trackers, issue trackers, and similar). Vendor-agnostic:
-this guide applies regardless of which specific tool a project's descriptor names.
+this guide applies regardless of which specific tool a source's descriptor names.
 
 ## What to look for
 
