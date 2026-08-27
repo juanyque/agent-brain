@@ -55,7 +55,6 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from environment_profiles import ProfileError, resolve_profile  # noqa: E402
-from model_check_no_follow import lstat_entry  # noqa: E402
 from _common import Reporter, build_command_string  # noqa: E402
 
 
@@ -75,7 +74,11 @@ MARKDOWN_LINK_TARGET_RE = re.compile(
     r"\]\(\s*(?:<(?P<angle>[^<>\n]*)>|(?P<bare>[^\s)]+))"
     r"(?:\s+(?:\"[^\"]*\"|'[^']*'|\([^()]*\)))?\s*\)"
 )
-HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+# An unclosed HTML comment block runs through end of document under CommonMark
+# (it is raw HTML, not prose, with no closing delimiter required) -- a "closed
+# comments only" pattern would leave a later, unrendered Markdown link in place
+# for the extractor to pick up as if it were live text.
+HTML_COMMENT_RE = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
 # A fenced block: 3+ backticks or tildes opening a line, closed by a same-character
 # run of at least that length on a line by itself (optionally followed only by
 # trailing spaces/tabs -- CommonMark ignores those but requires nothing else), or
@@ -85,8 +88,17 @@ HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 FENCED_CODE_RE = re.compile(r"^(`{3,}|~{3,}).*?(?:^\1[ \t]*$|\Z)", re.DOTALL | re.MULTILINE)
 # An inline code span: N backticks, content, the same N backticks again (CommonMark
 # allows any run length, e.g. double backticks to embed a literal single backtick).
-INLINE_CODE_RE = re.compile(r"(`+).*?\1", re.DOTALL)
-URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+# Both delimiter runs must be MAXIMAL (not preceded/followed by another backtick):
+# without the lookaround, a bare backreference lets a short opening run match as a
+# PREFIX of a longer, unrelated closing run (e.g. an opening `` pairing against the
+# first two backticks of a later ```), incorrectly treating a genuinely rendered
+# link between mismatched-length runs as code and hiding it from activation.
+INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)", re.DOTALL)
+# Any URI scheme prefix (RFC 3986: scheme ":" ...), not only the hierarchical
+# "scheme://" form -- a destination like `https:/x` or `mailto:/x` still has a
+# scheme and is not a brain-relative path, but omitting "//" let it slip past a
+# `://`-only check and be misread as local once its scheme was ignored.
+URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 PROTOCOL_RELATIVE_RE = re.compile(r"^//")
 REGISTRY_LINK_BASENAMES = {"sources.registry", "sources.registry.md"}
 
@@ -162,13 +174,6 @@ def parse_registry_entries(text: str) -> list[SourceEntry]:
             current_lines.append(line)
     flush()
     return entries
-
-
-def enabled_sources(registry_path: Path) -> list[SourceEntry]:
-    if not registry_path.exists():
-        return []
-    text = registry_path.read_text(encoding="utf-8")
-    return [entry for entry in parse_registry_entries(text) if entry.status == "enabled"]
 
 
 def _open_parent_no_follow(path: Path, safe_root: Path) -> tuple[int, str]:
@@ -345,10 +350,17 @@ def _registry_descriptor_link_issue(entry: SourceEntry) -> str | None:
     registry entry silently point away from what it actually loads; keeping the field
     unvalidated (as before) let it silently disagree with what actually loads. Neither
     is acceptable, so the field must be present and name this exact slug."""
+    # Exactly one target, not "at least one": the documented contract
+    # (TEMPLATE.source-registry.common.md) is a single wikilink naming this slug,
+    # nothing else. Accepting the field whenever ANY extracted target matched let a
+    # value naming both this slug and a second, conflicting one (e.g.
+    # "[[sources.slug]] and [[sources.other]]") pass validation -- not a redirect
+    # (the read still uses the deterministic path), but a silent loss of exactly
+    # the ambiguous/stale-metadata detection this cross-check exists to provide.
     targets = _link_target_basenames(entry.descriptor)
     expected = {f"sources.{entry.slug}", f"sources.{entry.slug}.md"}
-    if not any(target in expected for target in targets):
-        return "registry 'Descriptor' field is missing or does not name this slug"
+    if len(targets) != 1 or targets[0] not in expected:
+        return "registry 'Descriptor' field must name exactly this slug"
     return None
 
 
@@ -388,11 +400,19 @@ def decide_source(
     if not SOURCE_TYPE_RE.match(entry.source_type):
         return blocked(f"invalid source type: {entry.source_type!r}")
     guide_path = source_types_dir / f"{entry.source_type}.md"
-    if not lstat_entry(guide_path).exists:
-        return blocked(f"no guide for type {entry.source_type!r}")
-    _, guide_issue = _read_source_file_or_issue(brain_root, guide_path, "source type guide")
+    # No separate lstat_entry() preflight: it only distinguishes "missing" via
+    # FileNotFoundError, so an unreadable SOURCE_TYPES/ directory (e.g. mode 000)
+    # raised a bare PermissionError here instead of a blocked decision. The
+    # hardened read below is the single authority for every outcome, missing
+    # included -- it already maps FileNotFoundError/NotADirectoryError to a "not
+    # found" issue string.
+    guide_text, guide_issue = _read_source_file_or_issue(brain_root, guide_path, "source type guide")
     if guide_issue is not None:
+        if guide_issue == "source type guide not found":
+            return blocked(f"no guide for type {entry.source_type!r}")
         return blocked(guide_issue)
+    if not guide_text.strip():
+        return blocked("source type guide is empty")
 
     descriptor_lines = descriptor_text.splitlines()
     duplicates = _duplicate_field_keys(descriptor_lines)
@@ -762,7 +782,13 @@ def run_mark_checked(brain_root: Path, today: date, source: str, status: str, ap
 
     try:
         mark_checked(descriptor_path, today, status, brain_root)
-    except (FileNotFoundError, ValueError) as error:
+    except (OSError, ValueError) as error:
+        # OSError, not just the FileNotFoundError/ValueError mark_checked() itself
+        # raises deliberately: an environmental write failure (e.g. a non-writable
+        # SOURCES/ directory) surfaces as a raw OSError from _atomic_write(), which
+        # this call passes through unchanged -- it must be reported the same way as
+        # any other mark-checked failure, not escape as an uncaught traceback after
+        # the plan was already logged.
         reporter.write(f"mark-checked failed: {error}")
         reporter.flush()
         return 1
@@ -777,7 +803,14 @@ def main() -> int:
     if not brain_root.is_dir():
         print(f"Brain root not found: {brain_root}")
         return 1
-    today = date.fromisoformat(args.date) if args.date else datetime.now().date()
+    if args.date:
+        try:
+            today = date.fromisoformat(args.date)
+        except ValueError:
+            print(f"Invalid --date value: {args.date!r} (expected YYYY-MM-DD)")
+            return 1
+    else:
+        today = datetime.now().date()
 
     if args.command == "mark-checked":
         return run_mark_checked(brain_root, today, args.source, args.status, args.apply)

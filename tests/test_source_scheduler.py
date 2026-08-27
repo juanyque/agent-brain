@@ -108,26 +108,19 @@ def _build_working_brain(raw: str, **descriptor_kwargs) -> Path:
 
 class RegistryParsingTests(unittest.TestCase):
     def test_only_enabled_sources_are_returned(self) -> None:
-        with tempfile.TemporaryDirectory() as raw:
-            brain = Path(raw)
-            registry = brain / "WIP" / "SOURCES" / "sources.registry.md"
-            _write(
-                registry,
-                _registry(
-                    _entry("slack-eng", "enabled"),
-                    _entry("old-tool", "disabled"),
-                ),
-            )
-            entries = ss.enabled_sources(registry)
+        # Fifth-round review's `enabled_sources()` helper is gone (sixth-round
+        # finding: it read via plain Path.exists()/read_text(), bypassing the
+        # no-follow invariant every other read in this module honors, and had no
+        # production caller to justify keeping an unsafe public entrypoint around).
+        # This exercises the same "enabled-only filtering" behavior directly
+        # against parse_registry_entries(), which is what any real caller uses.
+        text = _registry(
+            _entry("slack-eng", "enabled"),
+            _entry("old-tool", "disabled"),
+        )
+        entries = [e for e in ss.parse_registry_entries(text) if e.status == "enabled"]
 
         self.assertEqual([e.slug for e in entries], ["slack-eng"])
-
-    def test_missing_registry_returns_no_sources(self) -> None:
-        with tempfile.TemporaryDirectory() as raw:
-            brain = Path(raw)
-            entries = ss.enabled_sources(brain / "WIP" / "SOURCES" / "sources.registry.md")
-
-        self.assertEqual(entries, [])
 
 
 class RegistryActivatedTests(unittest.TestCase):
@@ -320,6 +313,57 @@ class RegistryActivatedTests(unittest.TestCase):
             _write(
                 brain / "WIP" / "WIP.md",
                 '## Anything\n\n[registry](WIP/SOURCES/sources.registry.md "Registry")\n',
+            )
+            self.assertTrue(ss.registry_activated(brain))
+
+    def test_link_inside_an_unclosed_html_comment_does_not_activate(self) -> None:
+        # Sixth-round review finding: HTML_COMMENT_RE only stripped CLOSED
+        # comments. Under CommonMark, an "<!--" with no matching "-->" continues as
+        # raw, unrendered HTML through end of document; a Markdown-looking link
+        # inside it is not a real link, but the old regex left it in place for the
+        # extractor to pick up.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "<!-- [registry](WIP/SOURCES/sources.registry.md)\n")
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_closed_html_comment_is_still_stripped(self) -> None:
+        # Guards the case above: an unclosed comment must run to EOF, but a
+        # NORMAL, closed comment must still only strip its own span, not
+        # everything after it.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "<!-- [[sources.registry]] --> [registry](WIP/SOURCES/sources.registry.md)\n",
+            )
+            self.assertTrue(ss.registry_activated(brain))
+
+    def test_uri_scheme_without_double_slash_does_not_activate(self) -> None:
+        # Sixth-round review finding: URL_SCHEME_RE required a literal "scheme://",
+        # but URI syntax doesn't require the "//" authority marker -- a rendered
+        # destination like "https:/x" or "mailto:/x" still has a scheme and is not
+        # a brain-relative path, yet slipped past a "://"-only check.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n[registry](https:/sources.registry.md)\n",
+            )
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_mismatched_backtick_run_lengths_do_not_hide_a_rendered_link(self) -> None:
+        # Sixth-round review finding: INLINE_CODE_RE's bare backreference let a
+        # short opening run (e.g. two backticks) match as a PREFIX of a longer,
+        # unrelated closing run (e.g. the first two backticks of a later run of
+        # three) even though CommonMark does not pair mismatched-length runs --
+        # incorrectly treating a genuinely rendered link between them as code and
+        # hiding it from activation.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n`` [registry](WIP/SOURCES/sources.registry.md) ```\n",
             )
             self.assertTrue(ss.registry_activated(brain))
 
@@ -607,6 +651,34 @@ class DecideSourceBlockedTests(unittest.TestCase):
         self.assertTrue(decision.blocked)
         self.assertIn("Descriptor", decision.reason)
 
+    def test_descriptor_field_naming_the_expected_slug_plus_a_conflicting_one_is_blocked(self) -> None:
+        # Sixth-round review finding: the cross-check passed if ANY extracted
+        # target matched the expected slug, so a value naming both this slug and a
+        # second, conflicting one (e.g. "[[sources.slug]] and
+        # [[sources.other]]") passed validation -- not a redirect (the read still
+        # uses the deterministic path), but a silent loss of exactly the
+        # ambiguous/stale-metadata detection this cross-check exists to catch. The
+        # documented contract (TEMPLATE.source-registry.common.md) is a single
+        # wikilink naming this slug, nothing else.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(
+                    _entry(
+                        "slack-eng", "enabled", "messaging-tool",
+                        descriptor="[[sources.slack-eng]] and [[sources.other]]",
+                    )
+                ),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("Descriptor", decision.reason)
+
     def test_source_type_path_traversal_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)
@@ -648,6 +720,40 @@ class DecideSourceBlockedTests(unittest.TestCase):
 
         self.assertTrue(decision.blocked)
         self.assertIn("UTF-8", decision.reason)
+
+    def test_unreadable_source_type_directory_is_blocked_not_a_crash(self) -> None:
+        # Sixth-round review finding: a separate lstat_entry(guide_path).exists
+        # preflight only distinguished "missing" via FileNotFoundError, so an
+        # unreadable SOURCE_TYPES/ directory (e.g. mode 000) raised a bare
+        # PermissionError instead of a blocked decision -- and since
+        # collect_session_digest_state() doesn't catch scheduler exceptions, that
+        # could abort session open entirely rather than surfacing one blocked
+        # source.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            source_types_dir = brain / "SOURCE_TYPES"
+            source_types_dir.chmod(0o000)
+            try:
+                decision = self._decide(brain)
+            finally:
+                source_types_dir.chmod(0o755)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("not safely readable", decision.reason)
+
+    def test_whitespace_only_source_type_guide_is_blocked(self) -> None:
+        # Sixth-round review finding: the guide was verified readable but its text
+        # was discarded unchecked, so a zero-byte or whitespace-only guide -- an
+        # "unwritten" source type per the rule's own contract -- still let the
+        # source through as due.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            guide = brain / "SOURCE_TYPES" / "messaging-tool.md"
+            guide.write_text("   \n\n  \n", encoding="utf-8")
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("empty", decision.reason)
 
     def test_directory_named_like_a_guide_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -1383,6 +1489,20 @@ class ListDueCliTests(unittest.TestCase):
         self.assertEqual(len(payload["decisions"]), 1)
         self.assertEqual(payload["decisions"][0]["slug"], "slack-eng")
 
+    def test_invalid_date_argument_is_a_clean_failure_not_a_traceback(self) -> None:
+        # Sixth-round review finding: --date was parsed with a bare
+        # date.fromisoformat(args.date), so an invalid value raised an uncaught
+        # ValueError and printed a Python traceback instead of a diagnostic and a
+        # nonzero exit.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+
+            result = self._run("--brain-root", str(brain), "list-due", "--date", "not-a-date")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn("Invalid --date", result.stdout)
+
 
 class MarkCheckedCliTests(unittest.TestCase):
     """CLI-level tests: exercise main() via subprocess, the actual published contract,
@@ -1487,6 +1607,30 @@ class MarkCheckedCliTests(unittest.TestCase):
             self.assertEqual(dry_run.returncode, 1)
             self.assertEqual(apply.returncode, 1)
             (SCRIPTS_DIR / "source_scheduler.log").unlink(missing_ok=True)
+
+    def test_apply_write_failure_is_reported_not_an_uncaught_exception(self) -> None:
+        # Sixth-round review finding: run_mark_checked() only caught
+        # (FileNotFoundError, ValueError) around mark_checked(), but an
+        # environmental write failure (e.g. a non-writable SOURCES/ directory)
+        # surfaces as a raw OSError from _atomic_write() -- it escaped as an
+        # uncaught exception after the dry-run plan was already logged, instead of
+        # the documented nonzero tool result.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            sources_dir = brain / "WIP" / "SOURCES"
+            sources_dir.chmod(0o555)
+            try:
+                result = self._run(
+                    "mark-checked", "--brain-root", str(brain),
+                    "--source", "slack-eng", "--status", "ok", "--apply",
+                )
+            finally:
+                sources_dir.chmod(0o755)
+                (SCRIPTS_DIR / "source_scheduler.log").unlink(missing_ok=True)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn("mark-checked failed", result.stdout)
 
 
 class ProfileSelectionConsistencyTests(unittest.TestCase):
