@@ -108,6 +108,122 @@ class SessionDryRunTests(unittest.TestCase):
         self.assertIn("- Weekly: due", result.stdout)
         self.assertIn("- Monthly: due", result.stdout)
         self.assertIn("- Yearly: due", result.stdout)
+        # Source ingestion is an optional capability: WIP.md here never links
+        # sources.registry.md, so it must stay dormant and silent.
+        self.assertNotIn("sources_due:", result.stdout)
+
+    def test_dry_run_surfaces_due_source_only_when_wip_links_the_registry(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            SessionRecoveryTests.attach_current_model(brain)
+            templates = brain / "TEMPLATES"
+            templates.mkdir()
+            (templates / "TEMPLATE.wip-session.common.md").write_text(
+                "# Session <date> / <topic> / <id>\n\n"
+                "## State\n- Status: open\n\n"
+                "## Resume command\n- placeholder\n",
+                encoding="utf-8",
+            )
+            today = datetime.now().strftime("%Y-%m-%d")
+            journal = brain / "JOURNAL"
+            journal.mkdir()
+            (journal / f"{today}.md").write_text("# Sessions\n\n# Actions\n", encoding="utf-8")
+            wip = brain / "WIP"
+            wip.mkdir()
+            (wip / "WIP.md").write_text(
+                "# WIP\n\n"
+                "## runtime-project - Source ingestion\n"
+                "- Registry: [[sources.registry#runtime-project]]\n",
+                encoding="utf-8",
+            )
+            sources = wip / "SOURCES"
+            sources.mkdir()
+            (sources / "sources.registry.md").write_text(
+                "# Source registry\n\n## Sources\n\n"
+                "### slack-eng\n- Status: enabled\n- Type: messaging-tool\n",
+                encoding="utf-8",
+            )
+            (sources / "sources.slack-eng.md").write_text(
+                "# Source: slack-eng\n\n## Schedule\n- Last checked: not checked\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS_DIR / "session_open.py"),
+                    "--brain-root",
+                    str(brain),
+                    "--session-id",
+                    "session-sources-active",
+                    "--runtime",
+                    "codex",
+                    "--cwd",
+                    "/workspace/runtime-project",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("sources_due:", result.stdout)
+        self.assertIn("- slack-eng (messaging-tool): never checked", result.stdout)
+
+    def test_dry_run_omits_sources_due_when_registry_exists_but_wip_does_not_link_it(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            SessionRecoveryTests.attach_current_model(brain)
+            templates = brain / "TEMPLATES"
+            templates.mkdir()
+            (templates / "TEMPLATE.wip-session.common.md").write_text(
+                "# Session <date> / <topic> / <id>\n\n"
+                "## State\n- Status: open\n\n"
+                "## Resume command\n- placeholder\n",
+                encoding="utf-8",
+            )
+            today = datetime.now().strftime("%Y-%m-%d")
+            journal = brain / "JOURNAL"
+            journal.mkdir()
+            (journal / f"{today}.md").write_text("# Sessions\n\n# Actions\n", encoding="utf-8")
+            wip = brain / "WIP"
+            wip.mkdir()
+            (wip / "WIP.md").write_text(
+                "# WIP\n\n## runtime-project\n- unrelated dashboard entry, no source link\n",
+                encoding="utf-8",
+            )
+            sources = wip / "SOURCES"
+            sources.mkdir()
+            (sources / "sources.registry.md").write_text(
+                "# Source registry\n\n## Sources\n\n"
+                "### slack-eng\n- Status: enabled\n- Type: messaging-tool\n",
+                encoding="utf-8",
+            )
+            (sources / "sources.slack-eng.md").write_text(
+                "# Source: slack-eng\n\n## Schedule\n- Last checked: not checked\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS_DIR / "session_open.py"),
+                    "--brain-root",
+                    str(brain),
+                    "--session-id",
+                    "session-sources-dormant",
+                    "--runtime",
+                    "codex",
+                    "--cwd",
+                    "/workspace/runtime-project",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("sources_due:", result.stdout)
 
     def test_dry_run_omits_maintenance_jobs_block_when_nothing_is_due(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

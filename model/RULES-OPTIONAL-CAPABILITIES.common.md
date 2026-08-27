@@ -1,6 +1,7 @@
 # Optional capabilities
 <!-- content-boundary: {"kind":"policy-owner","policy_id":"policy.optional-capabilities","owner":"model/RULES-OPTIONAL-CAPABILITIES.common.md"} -->
 <!-- content-boundary: {"kind":"optional-capability","capability":"graphify","startup":"excluded"} -->
+<!-- content-boundary: {"kind":"optional-capability","capability":"source-ingestion","startup":"excluded"} -->
 
 Use this rule when a project's active WIP context references an optional tool or
 capability that is not part of the base brain model.
@@ -83,3 +84,71 @@ Model setup may report whether the Graphify CLI and runtime skill are available 
 offer an explicit installation command. It must not install Graphify, create
 `WIP/GRAPHIFY/`, register projects, or generate graphs by default. Runtime skill linking
 and package installation remain separate from vault and project activation.
+
+## Source ingestion
+
+Source ingestion is an optional capability that checks external sources (a task tracker,
+a messaging tool, a git server, a calendar, a knowledge base, a document store, and
+similar — never a hardcoded vendor) for what changed since the last check, without the
+user asking each time.
+
+### Vault layout
+
+When a vault opts in, use these Obsidian-safe names by convention:
+
+```text
+WIP/
+└── SOURCES/
+    ├── sources.registry.md
+    └── sources.<source-slug>.md
+```
+
+- `sources.registry.md` is the compact source-to-descriptor index.
+- `sources.<source-slug>.md` describes one source: its type, what to look for, its
+  check cadence, and the script-owned watermark (`Last checked:`).
+- Use one descriptor per source, not one per account or per channel within a source.
+
+Use the common templates in `TEMPLATES/TEMPLATE.source-registry.common.md` and
+`TEMPLATES/TEMPLATE.source-descriptor.common.md` when creating these notes.
+
+### Source types
+
+`SOURCE_TYPES/SOURCE_TYPES.common.md` is a compact index of source types (messaging tool,
+email, task tracker, knowledge base, documents and their comments, review-request
+traceability, and similar). Each descriptor names its type; deep-read the matching
+`SOURCE_TYPES/<type>.common.md` guide before investigating a source of that type. A type
+without a written guide yet is not investigated until one exists — do not improvise.
+
+### Due-ness and the watermark
+
+- `skills/brain/scripts/source_scheduler.py` decides deterministically, from each
+  descriptor's `Last checked:` field and cadence, whether a source is due. The agent never
+  guesses this.
+- A descriptor may set `Check cadence (days): always` instead of a number. This is for
+  source types that are inherently time-sensitive per session rather than "changed since
+  last check" (a calendar is the reference case — see `SOURCE_TYPES/calendar.common.md`):
+  such a source is always due, every session, regardless of `Last checked`.
+- `session_open.py`'s digest surfaces only sources that are actually due, quiet otherwise.
+- After investigating a due source, update its watermark with
+  `source_scheduler.py mark-checked` — never edit `Last checked:` by hand.
+
+### Investigation behavior
+
+For each source the digest lists as due:
+
+1. Spawn one subagent per source using the runtime's subagent mechanism when available and
+   permitted by the active instructions; otherwise investigate sequentially in the parent.
+2. Each subagent reads that source's descriptor and matching `SOURCE_TYPES/` guide for what
+   to look for, and reports back only if something is genuinely relevant — never a false
+   "nothing happened" account, and never noise for its own sake.
+3. Raw capture lands in `INBOX/sources/<source-slug>/<date>.md`, one file per source per
+   day — a central, not-yet-classified capture area, not a durable record. Triage into
+   `WIP/`, `BACKLOG/`, or `MEMORY/` happens later, on request (`/brain revisar fuentes`) or
+   during ordinary session work.
+4. A subagent's failure (timeout, missing permission, error) is logged as a one-line note
+   and skipped — it never blocks the rest of the sources or the session start.
+
+### Installation
+
+Model setup must not enable a source, install a tool, or generate capture files by
+default. Activation is explicit per project, following the general rule above.

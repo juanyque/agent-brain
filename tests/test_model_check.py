@@ -1552,6 +1552,7 @@ class LoadingContractTests(unittest.TestCase):
             ),
             task_types=("- [[fixture-task]] Fixed task route",),
             maintenance_jobs=("- Weekly: due (No Weekly job entry found for the current ISO week.)",),
+            sources_due=("- fixture-source (messaging-tool): never checked",),
             injected_project_agents=True,
         )
 

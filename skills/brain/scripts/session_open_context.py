@@ -6,6 +6,7 @@ from pathlib import Path
 
 from maintenance_scheduler import summarize_due_jobs
 from session_digest import SessionDigestRequest, SessionDigestState
+from source_scheduler import summarize_due_sources
 from session_open_discovery import (
     find_existing_session_note,
     is_session_open,
@@ -140,6 +141,14 @@ def collect_session_digest_state(
         wip_context = tuple(extract_wip_context(wip_path, request.cwd))
         task_types = tuple(extract_task_types(task_types_path))
         maintenance_jobs = tuple(summarize_due_jobs(brain_root, date.fromisoformat(today)))
+        # Source ingestion is an optional capability (RULES-OPTIONAL-CAPABILITIES.common.md):
+        # dormant unless WIP.md's cwd-matching section actually links the source registry.
+        # extract_wip_context already restricts to that section, so checking its text is
+        # the same activation gate every other optional capability uses, no extra parsing.
+        if "sources.registry" in "\n".join(wip_context):
+            sources_due = tuple(summarize_due_sources(brain_root, date.fromisoformat(today)))
+        else:
+            sources_due = ()
         existing_note = find_existing_session_note(brain_root, request.session_id)
         session_note_exists = session_note_path.exists()
         injected_project_agents = False
@@ -152,6 +161,7 @@ def collect_session_digest_state(
         wip_context = fixture.wip_context
         task_types = fixture.task_types
         maintenance_jobs = fixture.maintenance_jobs
+        sources_due = fixture.sources_due
         existing_note = (
             brain_root / fixture.existing_session_note
             if fixture.existing_session_note is not None
@@ -199,5 +209,6 @@ def collect_session_digest_state(
         wip_context=wip_context,
         task_types=task_types,
         maintenance_jobs=maintenance_jobs,
+        sources_due=sources_due,
         injected_project_agents=injected_project_agents,
     )

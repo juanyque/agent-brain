@@ -26,6 +26,7 @@ class SessionDigestFixtureData:
     wip_context: tuple[str, ...]
     task_types: tuple[str, ...]
     maintenance_jobs: tuple[str, ...]
+    sources_due: tuple[str, ...]
     injected_project_agents: bool
 
 
@@ -50,6 +51,7 @@ class SessionDigestState:
     wip_context: tuple[str, ...]
     task_types: tuple[str, ...]
     maintenance_jobs: tuple[str, ...]
+    sources_due: tuple[str, ...]
     injected_project_agents: bool
 
 
@@ -139,6 +141,10 @@ def render_session_digest(state: SessionDigestState) -> str:
         lines.append("maintenance_jobs:")
         lines.extend(f"  {line}" for line in state.maintenance_jobs)
         lines.append("")
+    if state.sources_due:
+        lines.append("sources_due:")
+        lines.extend(f"  {line}" for line in state.sources_due)
+        lines.append("")
     return "\n".join(lines) + "\n"
 
 
@@ -162,6 +168,7 @@ def fixed_session_digest_fixture_data() -> SessionDigestFixtureData:
         ),
         task_types=("- [[fixture-task]] Fixed task route",),
         maintenance_jobs=("- Weekly: due (No Weekly job entry found for the current ISO week.)",),
+        sources_due=("- fixture-source (messaging-tool): never checked",),
         injected_project_agents=True,
     )
 
