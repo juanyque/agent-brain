@@ -65,12 +65,24 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 CAPABILITY_RE = re.compile(r"^[a-z][a-z0-9_.-]*$")
 SOURCE_TYPE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 WIKILINK_TARGET_RE = re.compile(r"\[\[([^\]|#]+)")
-MARKDOWN_LINK_TARGET_RE = re.compile(r"\]\(([^)#]+)")
+# A Markdown link destination: either <...>-bracketed (CommonMark's form for a
+# destination containing spaces) or a bare run of non-whitespace, non-")" characters
+# (matching up to a "#fragment" is handled by the caller, not this regex, so both
+# forms are trimmed the same way). An optional title (quoted, or parenthesized) may
+# follow, separated by whitespace, before the closing ")" -- captured but discarded,
+# so a titled link like `[x](y.md "Title")` still resolves to the destination alone.
+MARKDOWN_LINK_TARGET_RE = re.compile(
+    r"\]\(\s*(?:<(?P<angle>[^<>\n]*)>|(?P<bare>[^\s)]+))"
+    r"(?:\s+(?:\"[^\"]*\"|'[^']*'|\([^()]*\)))?\s*\)"
+)
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 # A fenced block: 3+ backticks or tildes opening a line, closed by a same-character
-# run of at least that length on its own line, or unclosed through end of string
-# (CommonMark still treats an unclosed fence as code, not prose).
-FENCED_CODE_RE = re.compile(r"^(`{3,}|~{3,}).*?(?:^\1|\Z)", re.DOTALL | re.MULTILINE)
+# run of at least that length on a line by itself (optionally followed only by
+# trailing spaces/tabs -- CommonMark ignores those but requires nothing else), or
+# unclosed through end of string (CommonMark still treats an unclosed fence as code,
+# not prose). A line that merely STARTS with the delimiter but has other content
+# after it (e.g. a longer fence, or an info string) is not a valid close.
+FENCED_CODE_RE = re.compile(r"^(`{3,}|~{3,}).*?(?:^\1[ \t]*$|\Z)", re.DOTALL | re.MULTILINE)
 # An inline code span: N backticks, content, the same N backticks again (CommonMark
 # allows any run length, e.g. double backticks to embed a literal single backtick).
 INLINE_CODE_RE = re.compile(r"(`+).*?\1", re.DOTALL)
@@ -170,7 +182,10 @@ def _open_parent_no_follow(path: Path, safe_root: Path) -> tuple[int, str]:
     parts = path.relative_to(safe_root).parts
     if not parts:
         raise OSError(f"refusing safe-root path as a file: {path}")
-    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    directory_flags = (
+        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
     descriptor = os.open(safe_root, directory_flags)
     try:
         if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
@@ -191,10 +206,20 @@ def _open_parent_no_follow(path: Path, safe_root: Path) -> tuple[int, str]:
 def _read_no_follow(path: Path, brain_root: Path) -> str:
     """Read `path` as UTF-8 text via the directory-fd chain in `_open_parent_no_follow()`,
     so a symlink swap anywhere along the path -- not only at the final component -- is
-    rejected by the relevant `open()` call itself."""
+    rejected by the relevant `open()` call itself.
+
+    The leaf open includes `O_NONBLOCK`: a FIFO with no writer would otherwise block
+    indefinitely inside a plain blocking `open()`, well before the `S_ISREG` check
+    below ever runs, hanging session start instead of yielding a blocked decision.
+    `O_NONBLOCK` has no effect on an ordinary regular file's open or subsequent reads.
+    """
     parent_fd, leaf = _open_parent_no_follow(path, brain_root)
     try:
-        fd = os.open(leaf, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=parent_fd)
+        fd = os.open(
+            leaf,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
+            dir_fd=parent_fd,
+        )
     finally:
         os.close(parent_fd)
     if not stat.S_ISREG(os.fstat(fd).st_mode):
@@ -231,20 +256,25 @@ def _link_target_basenames(text: str) -> list[str]:
     to end of file), and inline code spans of any backtick-run length (a link shown
     only as example text is not a rendered link). Excludes external Markdown link
     destinations, both `scheme://...` and protocol-relative `//host/...` forms -- an
-    external link that merely ends in a filename matching the registry's is not a local
-    link to it. Strips a `<...>`-bracketed Markdown destination (CommonMark's syntax for
-    a destination containing spaces) to its unbracketed form before resolving it.
+    external link that merely ends in a filename matching the registry's is not a
+    local link to it. A `<...>`-bracketed destination (CommonMark's syntax for a
+    destination containing spaces) is unwrapped by `MARKDOWN_LINK_TARGET_RE` itself,
+    before the external/protocol-relative classification runs -- classifying the
+    still-bracketed form first would let `(<https://...>)` slip past both checks
+    (neither regex matches a leading `<`) and be misread as a local path.
     """
     stripped = HTML_COMMENT_RE.sub("", text)
     stripped = FENCED_CODE_RE.sub("", stripped)
     stripped = INLINE_CODE_RE.sub("", stripped)
     targets = [match.group(1).strip() for match in WIKILINK_TARGET_RE.finditer(stripped)]
     for match in MARKDOWN_LINK_TARGET_RE.finditer(stripped):
-        target = match.group(1).strip()
-        if URL_SCHEME_RE.match(target) or PROTOCOL_RELATIVE_RE.match(target):
+        raw_target = match.group("angle") if match.group("angle") is not None else match.group("bare")
+        # Fragment stripping happens here, uniformly for both destination forms,
+        # rather than excluding "#" from the regex's character classes -- the bare
+        # alternative must still be able to stop at a title's leading whitespace.
+        target = raw_target.split("#", 1)[0].strip()
+        if not target or URL_SCHEME_RE.match(target) or PROTOCOL_RELATIVE_RE.match(target):
             continue
-        if len(target) >= 2 and target.startswith("<") and target.endswith(">"):
-            target = target[1:-1].strip()
         targets.append(target)
     return [Path(target).name for target in targets if target]
 
@@ -424,7 +454,14 @@ def decide_source(
     except ValueError:
         return blocked(f"invalid 'Last checked' date: {last_checked_raw!r}")
 
-    next_due = last_checked + timedelta(days=cadence_days)
+    # A syntactically valid but extreme 'Last checked' date (e.g. 9999-12-31)
+    # combined with any positive cadence overflows `date.max` on addition; an
+    # arbitrarily large cadence can overflow `timedelta` construction itself. Either
+    # is a malformed descriptor, not a crash -- block it like any other bad cadence.
+    try:
+        next_due = last_checked + timedelta(days=cadence_days)
+    except OverflowError:
+        return blocked("'Last checked' plus cadence overflows the representable date range")
     if today >= next_due:
         reason = f"last checked {last_checked.isoformat()}, cadence {cadence_days}d"
         return SourceDecision(
@@ -477,6 +514,21 @@ def decide_sources(brain_root: Path, today: date, cwd: Path | None = None) -> li
             )
             continue
         if entry.status != "enabled":
+            # A duplicate FIELD (as opposed to a duplicate slug, handled above) is
+            # still reportable even on a `disabled` entry: decide_source() would
+            # catch it, but decide_source() is never called for a non-enabled
+            # entry, so this loop -- not that function -- must surface it here.
+            # This also makes the outcome order-independent when the duplicated
+            # field is `Status:` itself: whichever value parse_fields() happened to
+            # keep, the corruption is still flagged rather than silently skipped.
+            if entry.duplicate_fields:
+                decisions.append(
+                    SourceDecision(
+                        entry.slug, entry.source_type, False, True,
+                        f"duplicate field(s) in registry entry: {', '.join(sorted(entry.duplicate_fields))}",
+                        "none", 0,
+                    )
+                )
             continue
         decisions.append(decide_source(brain_root, entry, today, routed_capabilities, profile_error))
     return decisions
@@ -519,7 +571,16 @@ def _atomic_write(path: Path, content: str, brain_root: Path) -> None:
     """
     parent_fd, leaf = _open_parent_no_follow(path, brain_root)
     try:
-        original_mode = os.stat(leaf, dir_fd=parent_fd).st_mode & 0o777
+        # follow_symlinks=False, not a plain stat(): the caller's own no-follow read
+        # happens strictly before this call, leaving a window for the leaf to be
+        # swapped for a symlink in between. A default follow_symlinks=True stat would
+        # silently copy the symlink TARGET's mode onto the new temp file instead of
+        # rejecting the swap -- recreating a private descriptor world-readable if the
+        # target happens to be, without ever touching the target itself.
+        leaf_status = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
+        if not stat.S_ISREG(leaf_status.st_mode):
+            raise OSError(f"refusing to write a non-regular-file target: {path}")
+        original_mode = leaf_status.st_mode & 0o777
         tmp_name = f"{leaf}.{os.getpid()}.{os.urandom(8).hex()}.tmp"
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(tmp_name, flags, 0o600, dir_fd=parent_fd)
@@ -538,8 +599,12 @@ def _atomic_write(path: Path, content: str, brain_root: Path) -> None:
         os.close(parent_fd)
 
 
-LAST_CHECKED_LINE_RE = re.compile(r"(?mi)^- Last checked:.*$")
-LAST_STATUS_LINE_RE = re.compile(r"(?mi)^- Last status:.*$")
+# `-\s+`, not a literal single space, matching FIELD_RE's own whitespace tolerance:
+# a descriptor with e.g. "-  Last checked:" (two spaces) is parsed as the field by
+# decide_source() and must be recognized as the same field here, or a source
+# decide_source() returns as due becomes one mark_checked() refuses to write.
+LAST_CHECKED_LINE_RE = re.compile(r"(?mi)^-\s+Last checked:.*$")
+LAST_STATUS_LINE_RE = re.compile(r"(?mi)^-\s+Last status:.*$")
 
 
 def _mark_checked_content_issue(text: str) -> str | None:

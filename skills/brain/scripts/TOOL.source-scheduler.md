@@ -30,13 +30,20 @@ selector. It never scopes which sources are evaluated.
   parent), unreadable, not valid UTF-8, or has a duplicated field; the source type is
   malformed, or its `SOURCE_TYPES/<type>.md` guide is missing, symlinked, unwritten, or
   itself unreadable; `Requires capability` is missing, malformed, or unroutable by the
-  active environment profile; `Locator` or `Last status` is missing; or
-  `Check cadence (days)` / `Last checked` is missing or malformed (including under
-  `always`, which still validates a non-sentinel `Last checked` date). Fail-closed by
-  design: an indeterminable case is never guessed open. `list-due` itself also checks
+  active environment profile; `Locator` or `Last status` is missing; a leaf path
+  (registry, descriptor, or guide) resolves to something other than a regular file
+  (a FIFO, device, or directory); or `Check cadence (days)` / `Last checked` is
+  missing, malformed, or arithmetically out of range (a `Last checked` near
+  `date.max` plus even a small cadence overflows the representable date range, and
+  is blocked rather than crashing) -- including under `always`, which still
+  validates a non-sentinel `Last checked` date. A duplicate slug or a duplicate
+  field within one entry (e.g. two `Descriptor:` lines) is reported regardless of
+  that entry's `Status:`, including two `disabled` sections. Fail-closed by design:
+  an indeterminable case is never guessed open. `list-due` itself also checks
   activation (a real, local, rendered link to `sources.registry`, excluding HTML
   comments, fenced or inline code of any backtick/tilde length, and external or
-  protocol-relative URLs) before evaluating anything -- see "Usage" below.
+  protocol-relative URLs, with an optional CommonMark title tolerated after the
+  destination) before evaluating anything -- see "Usage" below.
 
 Capability validation is static only (a profile-document lookup, no live provider call).
 The subagent that actually investigates a due source resolves the capability live (e.g.
@@ -84,16 +91,22 @@ python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-d
   not just the leaf -- through a directory-fd chain rooted at the brain: each parent
   directory between the brain root and the file is opened with `O_DIRECTORY|O_NOFOLLOW`
   relative to the already-open previous directory's descriptor, then the leaf is opened
-  with `O_NOFOLLOW` relative to that descriptor. A symlink anywhere in the path --
-  leaf or any parent component -- is rejected rather than followed, and a swap of any
+  with `O_NOFOLLOW | O_NONBLOCK` relative to that descriptor, and the result is
+  rejected unless it is a regular file. A symlink anywhere in the path -- leaf or
+  any parent component -- is rejected rather than followed; `O_NONBLOCK` closes a
+  separate gap where a FIFO with no writer would otherwise hang the open
+  indefinitely, before the regular-file check ever ran; and a swap of any
   component after an earlier check but before this open cannot redirect an
   already-open descriptor.
-- The write uses the same directory-fd chain to open the parent, then creates a
-  uniquely named temp file with `O_EXCL` relative to that descriptor (never a
-  predictable sibling path, so it can't be pre-planted as a symlink), then
-  `os.rename()` (not `os.replace()`, which does not support `dir_fd` on every
-  platform this runs on) relative to the same descriptor for both source and
-  destination. The original file's mode is preserved explicitly.
+- The write uses the same directory-fd chain to open the parent, `lstat`s the leaf
+  (`follow_symlinks=False`, rejecting anything but a regular file -- a raced
+  post-read symlink swap must not have its target's mode silently copied onto the
+  replacement) to capture the original mode, then creates a uniquely named temp
+  file with `O_EXCL` relative to that descriptor (never a predictable sibling
+  path, so it can't be pre-planted as a symlink), then `os.rename()` (not
+  `os.replace()`, which does not support `dir_fd` on every platform this runs on)
+  relative to the same descriptor for both source and destination. The original
+  file's mode is preserved explicitly.
 - `Last checked:` is the watermark of the last *successful* check. `mark-checked --status
   degraded` updates `Last status:` but deliberately leaves `Last checked:` untouched, so a
   failed attempt never advances the "safe to skip up to here" boundary and the source
@@ -117,6 +130,9 @@ python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-d
 - `Last checked:` sentinels meaning "never checked": empty, `not checked`, or `none`.
 - A field value may be written as inline code (`` `issues.search` ``); one surrounding
   pair of backticks is stripped before parsing.
+- A field line may have one or more spaces after the leading `-`; `mark-checked`'s
+  watermark-line matching accepts the same range, not just a single literal space, so
+  a source `decide_source()` returns as due is always one it can also write.
 
 ## Known limitations
 - Capability validation only checks that the active environment profile routes the named

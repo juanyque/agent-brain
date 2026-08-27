@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -278,6 +280,72 @@ class RegistryActivatedTests(unittest.TestCase):
                 "## Anything\n\n[registry](<WIP/SOURCES/sources.registry.md>)\n",
             )
             self.assertTrue(ss.registry_activated(brain))
+
+    def test_angle_bracketed_external_url_does_not_activate(self) -> None:
+        # Fifth-round review finding: the external/protocol-relative check ran on
+        # the still-<...>-bracketed destination, which matches neither
+        # URL_SCHEME_RE nor PROTOCOL_RELATIVE_RE (both anchor on the first
+        # character, here "<"). Unwrapping happened only afterward, so the
+        # destination was reclassified as local and activated.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n[artifact](<https://example.invalid/sources.registry.md>)\n",
+            )
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_non_closing_fence_line_does_not_end_the_fence_early(self) -> None:
+        # Fifth-round review finding: the fence-closing pattern matched any line
+        # that merely STARTED with the opening delimiter run, even with other
+        # content after it (e.g. a longer run, or trailing text) -- not a valid
+        # CommonMark close. A link genuinely still inside the fence could leak out
+        # and activate.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n```\nsome prefix\n```extra\n[[sources.registry]]\n```\n",
+            )
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_titled_local_markdown_link_activates(self) -> None:
+        # Fifth-round review finding: the destination regex captured everything up
+        # to the first ")" or "#", so a link with a CommonMark title
+        # (`[x](y.md "Title")`) had the title text folded into the "destination",
+        # which then never matched the registry's basename -- rejecting a valid,
+        # rendered local link.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                '## Anything\n\n[registry](WIP/SOURCES/sources.registry.md "Registry")\n',
+            )
+            self.assertTrue(ss.registry_activated(brain))
+
+    def test_fifo_leaf_does_not_hang_registry_activated(self) -> None:
+        # Fifth-round review finding: the leaf open used a plain blocking O_RDONLY,
+        # so a FIFO with no writer blocked inside open() itself, well before the
+        # S_ISREG check that would otherwise reject it -- hanging session start
+        # indefinitely instead of yielding dormant. A SIGALRM bounds this test so a
+        # regression fails fast instead of hanging the whole suite.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            (brain / "WIP").mkdir()
+            os.mkfifo(brain / "WIP" / "WIP.md")
+
+            def _timeout(signum, frame):
+                raise TimeoutError("registry_activated() blocked on a FIFO leaf")
+
+            old_handler = signal.signal(signal.SIGALRM, _timeout)
+            signal.alarm(5)
+            try:
+                result = ss.registry_activated(brain)
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+
+        self.assertFalse(result)
 
 
 class DecideSourceBlockedTests(unittest.TestCase):
@@ -722,6 +790,34 @@ class RegistryLevelBlockedTests(unittest.TestCase):
         self.assertTrue(decisions[0].blocked)
         self.assertIn("duplicate field", decisions[0].reason)
 
+    def test_duplicate_field_within_a_disabled_registry_entry_is_blocked(self) -> None:
+        # Fifth-round review finding: duplicate_fields is computed for every parsed
+        # entry, but was only ever reported from inside decide_source() -- which is
+        # never called for a `disabled` entry. A single disabled section with two
+        # `Descriptor:` lines produced no decision at all instead of a blocked one,
+        # contradicting the settled contract that duplicate-field detection spans
+        # every entry regardless of status (matching how duplicate slugs already do).
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## Anything\n\n- [[sources.registry]]\n")
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(
+                    "### slack-eng\n- Status: disabled\n- Type: messaging-tool\n"
+                    "- Descriptor: [[sources.slack-eng]]\n"
+                    "- Descriptor: [[sources.other]]\n\n"
+                ),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+            self.assertTrue(ss.registry_activated(brain))
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("duplicate field", decisions[0].reason)
+
     def test_unreadable_registry_is_blocked_not_a_crash(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)
@@ -819,6 +915,20 @@ class DecideSourceCadenceTests(unittest.TestCase):
             now_due = self._due(raw, "2026-12-31", "1", date(2027, 1, 1))
         self.assertFalse(not_yet)
         self.assertTrue(now_due)
+
+    def test_last_checked_near_date_max_plus_cadence_is_blocked_not_a_crash(self) -> None:
+        # Fifth-round review finding: a syntactically valid but extreme 'Last
+        # checked' date (date.fromisoformat accepts up to 9999-12-31) combined with
+        # any positive cadence overflows date.max on addition; only ValueError from
+        # parsing was handled, so the OverflowError escaped decide_source() entirely
+        # instead of yielding a blocked decision for just that source.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, cadence="1", last_checked="9999-12-31")
+            decisions = ss.decide_sources(brain, date(2026, 8, 28))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("overflow", decisions[0].reason.lower())
 
     def test_always_cadence_is_always_due_even_when_checked_today(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -1139,6 +1249,67 @@ class MarkCheckedTests(unittest.TestCase):
 
             self.assertEqual(sorted(p.name for p in external.iterdir()), ["sources.slack-eng.md"])
             self.assertNotIn("2026-08-27", (external / "sources.slack-eng.md").read_text(encoding="utf-8"))
+
+    def test_extra_space_after_the_list_marker_is_writable_after_being_decided_due(self) -> None:
+        # Fifth-round review finding: FIELD_RE (the parser) tolerates one-or-more
+        # spaces after "-", but LAST_CHECKED_LINE_RE/LAST_STATUS_LINE_RE (the writer)
+        # required exactly one literal space. A descriptor using two spaces (e.g.
+        # "-  Last checked:") was returned due by decide_source() but rejected by
+        # mark_checked() as missing the watermark lines -- a source accepted for
+        # investigation could never be marked checked afterward.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(_entry("slack-eng", "enabled", "messaging-tool")),
+            )
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            _write(
+                descriptor,
+                "# Source: slack-eng\n\n## Access\n\n-  Requires capability: chat.search\n"
+                "-  Locator: x\n\n## Schedule\n\n-  Check cadence (days): 1\n"
+                "-  Last checked: not checked\n-  Last status: not checked\n",
+            )
+            _write_guide(brain)
+            _write_profile(brain)
+
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+            self.assertEqual(len(decisions), 1)
+            self.assertTrue(decisions[0].due, decisions[0].reason)
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", brain)
+
+            self.assertIn("2026-08-27", descriptor.read_text(encoding="utf-8"))
+
+    def test_write_rejects_a_descriptor_raced_to_a_symlink_instead_of_copying_its_target_mode(self) -> None:
+        # Fifth-round review finding: `_atomic_write()`'s `os.stat(leaf, dir_fd=...)`
+        # used the default follow_symlinks=True. If the leaf was swapped for a
+        # symlink strictly after `mark_checked()`'s own safe read but before
+        # `_atomic_write()` ran, the stat silently followed it and copied the
+        # SYMLINK TARGET's mode onto the freshly written temp file -- e.g. turning a
+        # private 0600 descriptor into 0644 (matching whatever the external target
+        # happened to be) instead of rejecting the swap outright.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            _write(descriptor, _descriptor())
+            descriptor.chmod(0o600)
+            outside = Path(raw).parent / "outside-target.md"
+            _write(outside, "untouched\n")
+            outside.chmod(0o644)
+
+            real_atomic_write = ss._atomic_write
+
+            def swap_then_write(path, content, brain_root):
+                path.unlink()
+                path.symlink_to(outside)
+                real_atomic_write(path, content, brain_root)
+
+            with mock.patch.object(ss, "_atomic_write", side_effect=swap_then_write):
+                with self.assertRaises(OSError):
+                    ss.mark_checked(descriptor, date(2026, 8, 27), "ok", brain)
+
+            self.assertEqual(outside.read_text(encoding="utf-8"), "untouched\n")
 
 
 class DescriptorPathForTests(unittest.TestCase):
