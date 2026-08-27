@@ -1551,6 +1551,7 @@ class LoadingContractTests(unittest.TestCase):
                 "  - fixed WIP context for /fixture/project",
             ),
             task_types=("- [[fixture-task]] Fixed task route",),
+            maintenance_jobs=("- Weekly: due (No Weekly job entry found for the current ISO week.)",),
             injected_project_agents=True,
         )
 

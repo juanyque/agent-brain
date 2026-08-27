@@ -89,7 +89,7 @@ python3 ~/.agents/skills/brain/scripts/session_open.py \
   --cwd "$(pwd)"
 ```
 
-Review the compact digest, announce that the brain is connected, and briefly summarize active context. On routine opens, pass `--apply` with the same resolved id/runtime/cwd to create or upsert the session note and daily `# Sessions` registration.
+Review the compact digest, announce that the brain is connected, and briefly summarize active context. If the digest lists `maintenance_jobs`, mention the due/review jobs briefly and offer to run `brain maintain` — do not run it unprompted. On routine opens, pass `--apply` with the same resolved id/runtime/cwd to create or upsert the session note and daily `# Sessions` registration.
 
 Load [references/session-lifecycle-routing.md](references/session-lifecycle-routing.md) only when the task needs detailed session start, day rollover, close-session, peer-session, `session_open.py`, `session_close.py`, or `session_bootstrap.py` behavior.
 

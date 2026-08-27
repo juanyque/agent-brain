@@ -60,6 +60,20 @@ Each job section follows this shape:
 
 **Calendar-driven jobs** (Weekly, Monthly, Yearly) do not declare a `### Trigger`. Their scheduling is derived from the `period` field in `JOBS_LOGS.md` and surfaced by `maintenance_scheduler.py`, which decides whether a job is due based on the latest entry. A user phrase such as "weekly maintenance" can always force one of them to run, but that is an override rather than the primary trigger.
 
+## Determinism and escalation
+
+Calendar-job due-ness is computed deterministically by `maintenance_scheduler.py` from the latest
+structured entry in `JOBS_LOGS.md` — never guessed or estimated by the agent. `summarize_due_jobs()`
+surfaces genuinely due/review Weekly/Monthly/Yearly jobs automatically in the session-open digest
+(`session_open.py`), so a user should not need to say "weekly maintenance" for a stale job to become
+visible. Surfacing is passive: the digest names what is due, the agent decides what to do about it,
+and nothing runs without the user asking.
+
+This is the general shape to reuse whenever a recurring condition can be decided from durable state:
+a script computes the answer deterministically from a durable ledger, the agent only interprets the
+final result, and a condition the script cannot classify becomes a `boyscout` backlog finding rather
+than an ad hoc judgment call repeated every session.
+
 ## Ownership metadata
 
 | Policy area | Owner | Authority |

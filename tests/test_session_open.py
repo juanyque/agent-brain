@@ -101,6 +101,72 @@ class SessionDryRunTests(unittest.TestCase):
         self.assertIn("- [[runtime-task]] Visible task one-liner", result.stdout)
         self.assertNotIn(sentinel, result.stdout)
         self.assertNotIn("UNRELATED_PRIVATE_SENTINEL_TODO17", result.stderr)
+        # No JOBS_LOGS.md exists in this fixture brain, so every calendar job is
+        # genuinely due and must be surfaced automatically, without the user
+        # having to say "weekly maintenance".
+        self.assertIn("maintenance_jobs:", result.stdout)
+        self.assertIn("- Weekly: due", result.stdout)
+        self.assertIn("- Monthly: due", result.stdout)
+        self.assertIn("- Yearly: due", result.stdout)
+
+    def test_dry_run_omits_maintenance_jobs_block_when_nothing_is_due(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            SessionRecoveryTests.attach_current_model(brain)
+            templates = brain / "TEMPLATES"
+            templates.mkdir()
+            (templates / "TEMPLATE.wip-session.common.md").write_text(
+                "# Session <date> / <topic> / <id>\n\n"
+                "## State\n- Status: open\n\n"
+                "## Resume command\n- placeholder\n",
+                encoding="utf-8",
+            )
+            today_date = datetime.now().date()
+            today = today_date.isoformat()
+            current_week = f"{today_date.isocalendar().year}-W{today_date.isocalendar().week:02d}"
+            current_month = f"{today_date.year}-{today_date.month:02d}"
+            journal = brain / "JOURNAL"
+            journal.mkdir()
+            (journal / f"{today}.md").write_text("# Sessions\n\n# Actions\n", encoding="utf-8")
+            (brain / "JOBS_LOGS.md").write_text(
+                "## Weekly\n"
+                f"- run: {today}\n"
+                f"  period: {current_week}\n"
+                "  status: done\n"
+                "  summary: nothing pending\n"
+                "## Monthly\n"
+                f"- run: {today}\n"
+                f"  period: {current_month}\n"
+                "  status: done\n"
+                "  summary: nothing pending\n"
+                "## Yearly\n"
+                f"- run: {today}\n"
+                f"  period: {today_date.year}\n"
+                "  status: done\n"
+                "  summary: nothing pending\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS_DIR / "session_open.py"),
+                    "--brain-root",
+                    str(brain),
+                    "--session-id",
+                    "session-quiet-maintenance",
+                    "--runtime",
+                    "codex",
+                    "--cwd",
+                    "/workspace/runtime-project",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("maintenance_jobs:", result.stdout)
 
 
 if __name__ == "__main__":

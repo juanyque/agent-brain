@@ -11,7 +11,6 @@ from pathlib import Path
 
 
 DATE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
-WEEK_RE = re.compile(r"\b(\d{4}-W\d{2})\b")
 YEAR_RE = re.compile(r"^\s*-\s*(\d{4})\b")
 SECTION_RE = re.compile(r"^##\s+(.+?)\s*$")
 ENTRY_START_RE = re.compile(r"^\s*-\s+run:\s*(\d{4}-\d{2}-\d{2})\s*$")
@@ -150,29 +149,20 @@ def latest_run_label(lines: list[str]) -> str:
 
 
 def contains_current_week(lines: list[str], today: date) -> bool:
+    # Due-ness depends only on the latest structured entry's `period`/`status` —
+    # never on incidental dates elsewhere in the section (e.g. a `refs:` wikilink
+    # or `run_at:` timestamp that happens to fall in the current week but says
+    # nothing about whether the job itself ran).
     current = f"{today.isocalendar().year}-W{today.isocalendar().week:02d}"
     entries = parse_job_entries(lines)
-    if any(entry.period == current and entry.status == "done" for entry in entries):
-        return True
-    if any(raw == current for line in lines for raw in WEEK_RE.findall(line)):
-        return True
-    return any((found := latest_date([line])) is not None and found.isocalendar()[:2] == today.isocalendar()[:2] for line in lines)
+    return any(entry.period == current and entry.status == "done" for entry in entries)
 
 
 def contains_current_month(lines: list[str], today: date) -> bool:
+    # Same rationale as contains_current_week: structured entry only.
     current = f"{today.year}-{today.month:02d}"
     entries = parse_job_entries(lines)
-    if any(entry.period == current and entry.status == "done" for entry in entries):
-        return True
-    for line in lines:
-        for raw in DATE_RE.findall(line):
-            try:
-                d = date.fromisoformat(raw)
-            except ValueError:
-                continue
-            if d.year == today.year and d.month == today.month:
-                return True
-    return False
+    return any(entry.period == current and entry.status == "done" for entry in entries)
 
 
 def yearly_state(lines: list[str], today: date) -> tuple[str, str, str]:
@@ -252,6 +242,26 @@ def decide_jobs(brain_root: Path, today: date) -> list[JobDecision]:
         decisions.append(JobDecision("Yearly", "due", "No Yearly job entry found for the current year.", "none", "Propose yearly maintenance checklist."))
 
     return decisions
+
+
+CALENDAR_JOB_NAMES = {"Weekly", "Monthly", "Yearly"}
+SURFACED_STATUSES = {"due", "review"}
+
+
+def summarize_due_jobs(brain_root: Path, today: date) -> list[str]:
+    """One line per genuinely due/review calendar job, for passive surfacing
+    (e.g. the session-open digest). Excludes Daily and Session consolidation:
+    Daily's due-ness is already reflected by the digest's own daily-note
+    fields, and Session consolidation is event-triggered so decide_jobs()
+    always reports it as "review" regardless of whether anything is owed —
+    surfacing it here would be noise on every session open, not a signal.
+    """
+    decisions = decide_jobs(brain_root, today)
+    return [
+        f"- {d.name}: {d.status} ({d.reason})"
+        for d in decisions
+        if d.name in CALENDAR_JOB_NAMES and d.status in SURFACED_STATUSES
+    ]
 
 
 def render_report(brain_root: Path, today: date, decisions: list[JobDecision]) -> str:

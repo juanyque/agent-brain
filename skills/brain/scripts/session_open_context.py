@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
+from maintenance_scheduler import summarize_due_jobs
 from session_digest import SessionDigestRequest, SessionDigestState
 from session_open_discovery import (
     find_existing_session_note,
@@ -138,6 +139,7 @@ def collect_session_digest_state(
         )
         wip_context = tuple(extract_wip_context(wip_path, request.cwd))
         task_types = tuple(extract_task_types(task_types_path))
+        maintenance_jobs = tuple(summarize_due_jobs(brain_root, date.fromisoformat(today)))
         existing_note = find_existing_session_note(brain_root, request.session_id)
         session_note_exists = session_note_path.exists()
         injected_project_agents = False
@@ -149,6 +151,7 @@ def collect_session_digest_state(
         operational_files = fixture.operational_files
         wip_context = fixture.wip_context
         task_types = fixture.task_types
+        maintenance_jobs = fixture.maintenance_jobs
         existing_note = (
             brain_root / fixture.existing_session_note
             if fixture.existing_session_note is not None
@@ -195,5 +198,6 @@ def collect_session_digest_state(
         operational_files=operational_files,
         wip_context=wip_context,
         task_types=task_types,
+        maintenance_jobs=maintenance_jobs,
         injected_project_agents=injected_project_agents,
     )
