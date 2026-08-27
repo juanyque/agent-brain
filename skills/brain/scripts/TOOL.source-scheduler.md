@@ -21,15 +21,20 @@ selector. It never scopes which sources are evaluated.
 - `not due` (silent): checked recently enough. Nothing is surfaced.
 - `blocked`: something about the source, its descriptor, its type guide, or the registry
   itself could not be determined safely, so it is reported and skipped rather than
-  investigated. Causes include: the registry is missing, symlinked, or unreadable; a
-  slug is registered more than once; a registry `Descriptor:` field is missing or does
-  not name this slug; the descriptor is missing, symlinked, not valid UTF-8, or has a
-  duplicated field; the source type is malformed, or its `SOURCE_TYPES/<type>.md` guide
-  is missing, symlinked, or unwritten; `Requires capability` is missing, malformed, or
-  unroutable by the active environment profile; `Locator` or `Last status` is missing; or
+  investigated. Causes include: the registry is missing, symlinked, unreadable (any
+  `OSError`, not only a decode failure), or not valid UTF-8; a slug is registered more
+  than once -- including one `enabled` and one `disabled` section for the same slug, or
+  a registry entry with a duplicated field (e.g. two `Descriptor:` lines); a registry
+  `Descriptor:` field is missing or does not name this slug; the descriptor is missing,
+  symlinked, unreadable, not valid UTF-8, or has a duplicated field; the source type is
+  malformed, or its `SOURCE_TYPES/<type>.md` guide is missing, symlinked, unwritten, or
+  itself unreadable; `Requires capability` is missing, malformed, or unroutable by the
+  active environment profile; `Locator` or `Last status` is missing; or
   `Check cadence (days)` / `Last checked` is missing or malformed (including under
   `always`, which still validates a non-sentinel `Last checked` date). Fail-closed by
-  design: an indeterminable case is never guessed open.
+  design: an indeterminable case is never guessed open. `list-due` itself also checks
+  activation (a real, local, rendered link to `sources.registry`) before evaluating
+  anything -- see "Usage" below.
 
 Capability validation is static only (a profile-document lookup, no live provider call).
 The subagent that actually investigates a due source resolves the capability live (e.g.
@@ -42,6 +47,11 @@ via `profile_context.py`) and reports `degraded` if that live resolution fails.
 python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-due
 python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-due --json
 ```
+`list-due` checks activation itself (a real link to `sources.registry` anywhere in
+`WIP/WIP.md`) before evaluating anything; a dormant brain reports `dormant: ...` (or
+`{"activated": false, "decisions": []}` under `--json`) rather than dispatching sources
+that were never opted in. `--json`'s shape is always
+`{"activated": <bool>, "decisions": [...]}`.
 
 ### Record a completed check (dry-run by default)
 ```bash

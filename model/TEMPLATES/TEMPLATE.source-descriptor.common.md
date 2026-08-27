@@ -41,9 +41,11 @@ guessed open.
 Use `always` instead of a number for a source type that is inherently time-sensitive per
 session rather than "changed since last check" (see `SOURCE_TYPES/calendar.md`).
 
-Allowed status values: `ok`, `no_activity`, `degraded`. `source_scheduler.py mark-checked`
-owns the last two fields — never edit them by hand. `degraded` never advances
-`Last checked:`; only `ok`/`no_activity` do.
+`not checked` above is the initialization sentinel, not a status value: it means this
+source has never been investigated. Once it has, `Last status:` holds one of `ok`,
+`no_activity`, `degraded`. `source_scheduler.py mark-checked` owns the last two fields —
+never edit them by hand. `degraded` never advances `Last checked:`; only `ok`/`no_activity`
+do.
 
 ## Capture
 

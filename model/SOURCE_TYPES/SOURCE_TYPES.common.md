@@ -22,7 +22,9 @@ a wikilink to the guide, or a note that the guide does not exist yet.
 
 ## Guide shape
 
-Each `SOURCE_TYPES/<type>.common.md` guide should include:
+For a model maintainer adding a new type: each `model/SOURCE_TYPES/<type>.common.md` file
+should include (a brain consumer never reads this path directly -- it reads the generated
+local wrapper, `SOURCE_TYPES/<type>.md`):
 
 - **What this covers** — the kind of source, in vendor-agnostic terms.
 - **What to look for** — the concrete signals worth surfacing (e.g. "unclosed items

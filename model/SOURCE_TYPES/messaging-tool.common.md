@@ -5,7 +5,9 @@
 
 Channel- or thread-based messaging tools (chat platforms) where the user participates in
 one or more channels, groups, or direct threads. Vendor-agnostic: this guide applies
-regardless of which specific tool a source's descriptor names.
+regardless of which specific tool the brain's environment profile resolves the source's
+capability to (the descriptor itself never names a provider — see "Access" in
+`RULES-OPTIONAL-CAPABILITIES.common.md`).
 
 ## What to look for
 

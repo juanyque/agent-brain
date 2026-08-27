@@ -206,6 +206,28 @@ class RegistryActivatedTests(unittest.TestCase):
             )
             self.assertFalse(ss.registry_activated(brain))
 
+    def test_link_inside_inline_code_does_not_activate(self) -> None:
+        # Third-round review finding: a single-backtick example (rendered as text by
+        # Obsidian, not a link) still activated.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\nExample: `[[sources.registry]]`\n",
+            )
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_external_url_ending_in_the_registry_filename_does_not_activate(self) -> None:
+        # Third-round review finding: an absolute URL whose path happens to end in
+        # sources.registry.md is not a local dashboard link.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n[artifact](https://example.invalid/sources.registry.md)\n",
+            )
+            self.assertFalse(ss.registry_activated(brain))
+
 
 class DecideSourceBlockedTests(unittest.TestCase):
     def _decide(self, brain: Path, today: date = date(2026, 8, 27)) -> ss.SourceDecision:
@@ -495,6 +517,19 @@ class DecideSourceBlockedTests(unittest.TestCase):
         self.assertTrue(decision.blocked)
         self.assertIn("symlink", decision.reason)
 
+    def test_invalid_utf8_source_type_guide_is_blocked_not_dispatched(self) -> None:
+        # Third-round review finding: the guide was only lstat'd for shape, never
+        # actually read, so an unreadable guide the subagent can't deep-read was
+        # still dispatched as due.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            guide = brain / "SOURCE_TYPES" / "messaging-tool.md"
+            guide.write_bytes(b"\xff\xfe not valid utf-8")
+            decision = self._decide(brain)
+
+        self.assertTrue(decision.blocked)
+        self.assertIn("UTF-8", decision.reason)
+
     def test_directory_named_like_a_guide_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)
@@ -570,6 +605,63 @@ class RegistryLevelBlockedTests(unittest.TestCase):
         self.assertEqual(len(decisions), 1)
         self.assertTrue(decisions[0].blocked)
         self.assertIn("duplicate", decisions[0].reason)
+
+    def test_enabled_and_disabled_sections_sharing_a_slug_is_blocked(self) -> None:
+        # Third-round review finding: duplicates were computed only from the
+        # already-`enabled`-filtered list, so one enabled + one disabled section for
+        # the same slug slipped through as an unambiguous single source.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(
+                    _entry("slack-eng", "enabled", "messaging-tool"),
+                    _entry("slack-eng", "disabled", "messaging-tool"),
+                ),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("duplicate", decisions[0].reason)
+
+    def test_duplicate_field_within_a_single_registry_entry_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(
+                    "### slack-eng\n- Status: enabled\n- Type: messaging-tool\n"
+                    "- Descriptor: [[sources.slack-eng]]\n"
+                    "- Descriptor: [[sources.other]]\n\n"
+                ),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("duplicate field", decisions[0].reason)
+
+    def test_unreadable_registry_is_blocked_not_a_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            registry = brain / "WIP" / "SOURCES" / "sources.registry.md"
+            _write(registry, _registry(_entry("slack-eng", "enabled")))
+            registry.chmod(0o000)
+            try:
+                decisions = ss.decide_sources(brain, date(2026, 8, 27))
+            finally:
+                registry.chmod(0o644)
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("not readable", decisions[0].reason)
 
 
 class SourceDecisionInvariantTests(unittest.TestCase):
@@ -801,6 +893,47 @@ class MarkCheckedTests(unittest.TestCase):
             self.assertFalse(descriptor.is_symlink())
             self.assertIn("- Last checked: 2026-08-27", descriptor.read_text(encoding="utf-8"))
 
+    def test_descriptor_swapped_to_symlink_after_the_earlier_check_is_rejected(self) -> None:
+        # Third-round review finding: run_mark_checked()'s early is_symlink() check
+        # and the later actual read were two separate operations; swapping the real
+        # descriptor for a symlink in between made the read follow it and copy
+        # external content into the (still-regular-file) descriptor. _read_no_follow()
+        # closes the gap by making the read itself refuse to follow.
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor())
+            outside = Path(raw).parent / "outside-secret.md"
+            _write(outside, "EXTERNAL-SECRET locator content\n")
+
+            # Simulate the swap happening strictly after any earlier symlink check.
+            descriptor.unlink()
+            descriptor.symlink_to(outside)
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+
+            self.assertEqual(outside.read_text(encoding="utf-8"), "EXTERNAL-SECRET locator content\n")
+
+    def test_field_name_casing_accepted_by_decide_is_also_writable(self) -> None:
+        # Third-round review finding: parse_fields()/decide_source() casefold field
+        # names, so a descriptor with lowercase "- last checked:" was returned due,
+        # but mark_checked()'s exact-case regex then rejected it as malformed --
+        # scheduler and writer disagreed on the same file.
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(
+                descriptor,
+                "# Source: slack-eng\n\n## Access\n- requires capability: chat.search\n"
+                "- locator: x\n\n## Schedule\n- check cadence (days): 1\n"
+                "- last checked: not checked\n- last status: not checked\n",
+            )
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertIn("2026-08-27", updated)
+        self.assertIn("ok", updated)
+
     def test_apply_preserves_a_private_descriptor_mode(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             descriptor = Path(raw) / "sources.slack-eng.md"
@@ -856,6 +989,42 @@ class ParseArgsTests(unittest.TestCase):
         with_apply = ss.parse_args(["mark-checked", "--source", "x", "--status", "ok", "--apply"])
         self.assertFalse(without.apply)
         self.assertTrue(with_apply.apply)
+
+
+class ListDueCliTests(unittest.TestCase):
+    """Third-round review finding: main() called decide_sources() directly without
+    ever checking registry_activated(), so the published CLI could dispatch a
+    dormant brain's sources even though the tool doc claims it decides activation."""
+
+    def _run(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS_DIR / "source_scheduler.py"), *args],
+            text=True, capture_output=True, check=False,
+        )
+
+    def test_list_due_reports_dormant_and_not_due_sources_when_not_activated(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)  # no WIP/WIP.md link written
+
+            result = self._run("--brain-root", str(brain), "list-due")
+            json_result = self._run("--brain-root", str(brain), "list-due", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("dormant", result.stdout)
+        payload = json.loads(json_result.stdout)
+        self.assertEqual(payload, {"activated": False, "decisions": []})
+
+    def test_list_due_dispatches_once_activated(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            _write(brain / "WIP" / "WIP.md", "## Fuentes externas\n\n- [[sources.registry]]\n")
+
+            result = self._run("--brain-root", str(brain), "list-due", "--json")
+
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["activated"])
+        self.assertEqual(len(payload["decisions"]), 1)
+        self.assertEqual(payload["decisions"][0]["slug"], "slack-eng")
 
 
 class MarkCheckedCliTests(unittest.TestCase):

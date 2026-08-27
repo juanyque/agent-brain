@@ -68,6 +68,8 @@ WIKILINK_TARGET_RE = re.compile(r"\[\[([^\]|#]+)")
 MARKDOWN_LINK_TARGET_RE = re.compile(r"\]\(([^)#]+)")
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 FENCED_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
+INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
 REGISTRY_LINK_BASENAMES = {"sources.registry", "sources.registry.md"}
 
 VALID_STATUS = ("ok", "no_activity", "degraded")
@@ -82,6 +84,7 @@ class SourceEntry:
     source_type: str
     descriptor: str
     purpose: str
+    duplicate_fields: frozenset[str]
 
 
 @dataclass
@@ -126,6 +129,7 @@ def parse_registry_entries(text: str) -> list[SourceEntry]:
                 source_type=fields.get("type", ""),
                 descriptor=fields.get("descriptor", ""),
                 purpose=fields.get("purpose", ""),
+                duplicate_fields=frozenset(_duplicate_field_keys(current_lines)),
             )
         )
 
@@ -149,15 +153,60 @@ def enabled_sources(registry_path: Path) -> list[SourceEntry]:
     return [entry for entry in parse_registry_entries(text) if entry.status == "enabled"]
 
 
+def _read_no_follow(path: Path) -> str:
+    """Read `path` as UTF-8 text, refusing to follow it if it is (or has just become) a
+    symlink. Using O_NOFOLLOW at open() time closes the gap between an earlier
+    lstat-based symlink check and this read: a swap in between is rejected by the
+    open() call itself, not missed by a stale prior check."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "r", encoding="utf-8") as handle:
+        return handle.read()
+
+
+def _read_source_file_or_issue(brain_root: Path, path: Path, label: str) -> tuple[str | None, str | None]:
+    """Shared safety-and-read logic for the registry, a descriptor, or a source-type
+    guide: validate the path shape, then read it through the same no-follow open --
+    one combined operation instead of a separate shape check followed by a plain
+    open() a race could swap out from under. Returns (text, None) or (None, issue)."""
+    unsafe_parent = symlinked_parent(brain_root, path)
+    if unsafe_parent is not None:
+        return None, f"{label} parent is a symlink: {unsafe_parent}"
+    entry = lstat_entry(path)
+    if not entry.exists:
+        return None, f"{label} not found"
+    if entry.is_symlink:
+        return None, f"{label} is a symlink"
+    if not entry.is_file:
+        return None, f"{label} is not a regular file"
+    try:
+        return _read_no_follow(path), None
+    except UnicodeDecodeError:
+        return None, f"{label} is not valid UTF-8"
+    except OSError as error:
+        return None, f"{label} is not readable: {error}"
+
+
 def _link_target_basenames(text: str) -> list[str]:
-    """Every link target's basename in `text` -- wikilink and Markdown, alias/heading/
-    fragment stripped -- so activation can compare exact filenames instead of a raw
-    substring match (which would also match `not-sources.registry.md` or
-    `sources.registry.backup`, and miss a valid link with a `#fragment`)."""
+    """Every link target's basename in `text` -- wikilink and local Markdown links,
+    alias/heading/fragment stripped -- so activation can compare exact filenames
+    instead of a raw substring match (which would also match `not-sources.registry.md`
+    or `sources.registry.backup`, and miss a valid link with a `#fragment`).
+
+    Excludes: HTML comments, fenced code blocks, and inline code spans (a link shown
+    only as example text, e.g. `` `[[sources.registry]]` ``, is not a rendered link);
+    and any Markdown link whose destination is an absolute URL (`scheme://...`) -- an
+    external link that merely ends in a filename matching the registry's is not a
+    local link to it.
+    """
     stripped = HTML_COMMENT_RE.sub("", text)
     stripped = FENCED_CODE_RE.sub("", stripped)
+    stripped = INLINE_CODE_RE.sub("", stripped)
     targets = [match.group(1).strip() for match in WIKILINK_TARGET_RE.finditer(stripped)]
-    targets += [match.group(1).strip() for match in MARKDOWN_LINK_TARGET_RE.finditer(stripped)]
+    targets += [
+        match.group(1).strip()
+        for match in MARKDOWN_LINK_TARGET_RE.finditer(stripped)
+        if not URL_SCHEME_RE.match(match.group(1).strip())
+    ]
     return [Path(target).name for target in targets if target]
 
 
@@ -167,9 +216,9 @@ def registry_activated(brain_root: Path) -> bool:
     Brain-scoped: a direct link to `sources.registry` anywhere in WIP/WIP.md activates
     the capability for the whole brain, with no per-project heading match and no
     presentational preview-length limit. A bare textual mention of the filename (e.g.
-    prose that happens to say "sources.registry") is not enough -- an actual wikilink or
-    markdown link, resolved to its exact target basename, is required. HTML comments and
-    fenced code blocks are excluded so an example link in either can't activate it.
+    prose that happens to say "sources.registry") is not enough -- an actual, local,
+    rendered wikilink or Markdown link, resolved to its exact target basename, is
+    required. See `_link_target_basenames()` for exactly what is excluded.
     """
     wip_path = brain_root / "WIP" / "WIP.md"
     if not wip_path.exists():
@@ -253,43 +302,31 @@ def decide_source(
     except ValueError as error:
         return blocked(str(error))
 
+    if entry.duplicate_fields:
+        return blocked(
+            f"duplicate field(s) in registry entry: {', '.join(sorted(entry.duplicate_fields))}"
+        )
+
     descriptor_link_issue = _registry_descriptor_link_issue(entry)
     if descriptor_link_issue is not None:
         return blocked(descriptor_link_issue)
 
-    unsafe_parent = symlinked_parent(brain_root, descriptor_path)
-    if unsafe_parent is not None:
-        return blocked(f"descriptor parent is a symlink: {unsafe_parent}")
-    file_entry = lstat_entry(descriptor_path)
-    if not file_entry.exists:
-        return blocked("descriptor not found")
-    if file_entry.is_symlink:
-        return blocked("descriptor is a symlink")
-    if not file_entry.is_file:
-        return blocked("descriptor is not a regular file")
+    descriptor_text, descriptor_issue = _read_source_file_or_issue(brain_root, descriptor_path, "descriptor")
+    if descriptor_issue is not None:
+        return blocked(descriptor_issue)
 
     if not entry.source_type:
         return blocked("missing source type")
     if not SOURCE_TYPE_RE.match(entry.source_type):
         return blocked(f"invalid source type: {entry.source_type!r}")
     guide_path = source_types_dir / f"{entry.source_type}.md"
-    unsafe_guide_parent = symlinked_parent(brain_root, guide_path)
-    if unsafe_guide_parent is not None:
-        return blocked(f"source type guide parent is a symlink: {unsafe_guide_parent}")
-    guide_entry = lstat_entry(guide_path)
-    if not guide_entry.exists:
+    if not lstat_entry(guide_path).exists:
         return blocked(f"no guide for type {entry.source_type!r}")
-    if guide_entry.is_symlink:
-        return blocked(f"source type guide is a symlink: {guide_path}")
-    if not guide_entry.is_file:
-        return blocked(f"source type guide is not a regular file: {guide_path}")
+    _, guide_issue = _read_source_file_or_issue(brain_root, guide_path, "source type guide")
+    if guide_issue is not None:
+        return blocked(guide_issue)
 
-    try:
-        descriptor_text = descriptor_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        return blocked("descriptor is not valid UTF-8")
     descriptor_lines = descriptor_text.splitlines()
-
     duplicates = _duplicate_field_keys(descriptor_lines)
     if duplicates:
         return blocked(f"duplicate field(s) in descriptor: {', '.join(sorted(duplicates))}")
@@ -361,41 +398,26 @@ def decide_source(
     )
 
 
-def _registry_safety_issue(brain_root: Path, registry_path: Path) -> str | None:
-    """Whatever would make the registry itself unreadable. Distinct from "no enabled
-    entries" (a legitimate empty result): an activated capability whose registry is
-    missing, symlinked, or corrupt must be visible as blocked, not indistinguishable
-    from a brain that simply has nothing enabled yet."""
-    unsafe_parent = symlinked_parent(brain_root, registry_path)
-    if unsafe_parent is not None:
-        return f"registry parent is a symlink: {unsafe_parent}"
-    entry = lstat_entry(registry_path)
-    if not entry.exists:
-        return "sources.registry.md not found"
-    if entry.is_symlink:
-        return "sources.registry.md is a symlink"
-    if not entry.is_file:
-        return "sources.registry.md is not a regular file"
-    try:
-        registry_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        return "sources.registry.md is not valid UTF-8"
-    return None
-
-
 def decide_sources(brain_root: Path, today: date, cwd: Path | None = None) -> list[SourceDecision]:
     sources_dir = brain_root / "WIP" / "SOURCES"
     registry_path = sources_dir / "sources.registry.md"
 
-    registry_issue = _registry_safety_issue(brain_root, registry_path)
+    # Distinct from "no enabled entries" (a legitimate empty result): an activated
+    # capability whose registry is missing, symlinked, or corrupt must be visible as
+    # blocked, not indistinguishable from a brain that simply has nothing enabled yet.
+    registry_text, registry_issue = _read_source_file_or_issue(brain_root, registry_path, "sources.registry.md")
     if registry_issue is not None:
         return [SourceDecision("(registry)", "", False, True, registry_issue, "none", 0)]
 
-    entries = enabled_sources(registry_path)
+    # Duplicate slugs are computed across EVERY parsed entry, before filtering to
+    # `enabled` -- an enabled section that shares a slug with a disabled one is just
+    # as ambiguous as two enabled sections would be.
+    all_entries = parse_registry_entries(registry_text)
     duplicate_slugs = {
-        slug for slug in {entry.slug for entry in entries}
-        if sum(1 for entry in entries if entry.slug == slug) > 1
+        slug for slug in {entry.slug for entry in all_entries}
+        if sum(1 for entry in all_entries if entry.slug == slug) > 1
     }
+    entries = [entry for entry in all_entries if entry.status == "enabled"]
     routed_capabilities, profile_error = capability_routes(brain_root, cwd)
 
     decisions: list[SourceDecision] = []
@@ -451,12 +473,22 @@ def _atomic_write(path: Path, content: str) -> None:
         raise
 
 
+LAST_CHECKED_LINE_RE = re.compile(r"(?mi)^- Last checked:.*$")
+LAST_STATUS_LINE_RE = re.compile(r"(?mi)^- Last status:.*$")
+
+
 def _mark_checked_content_issue(text: str) -> str | None:
     """Whatever would make `mark_checked()` fail on this descriptor content, computed
     without writing anything -- shared by the dry-run and apply paths so a dry-run
-    plan can never claim success where apply would deterministically fail."""
-    checked_matches = re.findall(r"(?m)^- Last checked:.*$", text)
-    status_matches = re.findall(r"(?m)^- Last status:.*$", text)
+    plan can never claim success where apply would deterministically fail.
+
+    Case-insensitive, matching `parse_fields()`/`decide_source()`'s own casefolded
+    field-name matching: a descriptor with `- last checked:` is accepted as due by the
+    scheduler, so the writer must recognize the same line, not just the canonical
+    casing, or a source that was due to be marked checked would be unmarkable.
+    """
+    checked_matches = LAST_CHECKED_LINE_RE.findall(text)
+    status_matches = LAST_STATUS_LINE_RE.findall(text)
     if len(checked_matches) != 1 or len(status_matches) != 1:
         return "descriptor must have exactly one 'Last checked:'/'Last status:' line"
     return None
@@ -469,15 +501,19 @@ def mark_checked(descriptor_path: Path, today: date, status: str) -> None:
         raise FileNotFoundError(f"descriptor not found: {descriptor_path}")
     if descriptor_path.is_symlink():
         raise ValueError(f"descriptor must not be a symlink: {descriptor_path}")
-    text = descriptor_path.read_text(encoding="utf-8")
+    # _read_no_follow(), not plain read_text(): a swap from regular file to symlink
+    # between the is_symlink() check above and this read must be rejected by the
+    # open() call itself, not silently followed.
+    try:
+        text = _read_no_follow(descriptor_path)
+    except OSError as error:
+        raise ValueError(f"descriptor is not safely readable: {descriptor_path}: {error}") from error
     issue = _mark_checked_content_issue(text)
     if issue is not None:
         raise ValueError(f"{issue}: {descriptor_path}")
-    text, _ = re.subn(r"(?m)^- Last status:.*$", f"- Last status: {status}", text, count=1)
+    text, _ = LAST_STATUS_LINE_RE.subn(f"- Last status: {status}", text, count=1)
     if status in WATERMARK_STATUSES:
-        text, _ = re.subn(
-            r"(?m)^- Last checked:.*$", f"- Last checked: {today.isoformat()}", text, count=1
-        )
+        text, _ = LAST_CHECKED_LINE_RE.subn(f"- Last checked: {today.isoformat()}", text, count=1)
     # else: degraded leaves the watermark untouched so the source stays due for retry
     # and no unread window is silently skipped.
     _atomic_write(descriptor_path, text)
@@ -581,9 +617,11 @@ def run_mark_checked(brain_root: Path, today: date, source: str, status: str, ap
         return 1
 
     try:
-        content_issue = _mark_checked_content_issue(descriptor_path.read_text(encoding="utf-8"))
+        content_issue = _mark_checked_content_issue(_read_no_follow(descriptor_path))
     except UnicodeDecodeError:
         content_issue = "descriptor is not valid UTF-8"
+    except OSError as error:
+        content_issue = f"descriptor is not safely readable: {error}"
     if content_issue is not None:
         # Checked before the dry-run/apply branch so a dry-run plan can never claim
         # success where apply would deterministically fail on the same input.
@@ -625,14 +663,25 @@ def main() -> int:
     if args.command == "mark-checked":
         return run_mark_checked(brain_root, today, args.source, args.status, args.apply)
 
+    # The published contract is that this script also decides whether the capability
+    # is active at all (TOOL.source-scheduler.md's own "Purpose"); list-due must not
+    # dispatch a dormant brain's sources just because a caller bypassed the WIP.md
+    # link check.
+    activated = registry_activated(brain_root)
     cwd = Path(args.cwd).expanduser().resolve() if args.cwd else None
-    decisions = decide_sources(brain_root, today, cwd)
+    decisions = decide_sources(brain_root, today, cwd) if activated else []
     if args.json:
-        print(json.dumps([decision.__dict__ for decision in decisions], ensure_ascii=False, indent=2))
+        print(json.dumps(
+            {"activated": activated, "decisions": [decision.__dict__ for decision in decisions]},
+            ensure_ascii=False, indent=2,
+        ))
     else:
         print("# Source scheduler")
         print(f"brain_root: {brain_root}")
         print(f"today: {today.isoformat()}")
+        if not activated:
+            print("dormant: no link to sources.registry in WIP/WIP.md")
+            return 0
         print()
         print("## Decisions")
         for decision in decisions:

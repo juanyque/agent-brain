@@ -4,8 +4,9 @@
 ## What this covers
 
 A knowledge-base entry (a wiki page, a database entry, a reference doc) addressed by a URL.
-Vendor-agnostic: this guide applies regardless of which specific knowledge-base platform a
-source's descriptor names.
+Vendor-agnostic: this guide applies regardless of which specific knowledge-base platform the
+brain's environment profile resolves the source's capability to (the descriptor itself never
+names a provider — see "Access" in `RULES-OPTIONAL-CAPABILITIES.common.md`).
 
 ## Investigation approach
 

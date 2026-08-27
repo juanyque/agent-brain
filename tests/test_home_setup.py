@@ -522,6 +522,16 @@ class HomeSetupRealSourceCatalogTests(unittest.TestCase):
                         referenced.is_file(),
                         f"{guide_path.name} references missing {referenced.relative_to(brain)}",
                     )
+                if guide_path.name == "SOURCE_TYPES.common.md":
+                    # The index's own "Guide shape" section legitimately instructs a
+                    # model maintainer to edit model/SOURCE_TYPES/<type>.common.md --
+                    # that's a different audience than the type guides below, which
+                    # are purely runtime-facing and must never name a *.common.md path.
+                    continue
+                # Deliberately narrow to lowercase-kebab-case stems: this must catch a
+                # stale SOURCE_TYPES-style local-guide reference (the exact shape of
+                # the knowledge-base bug), not a legitimate mixed-case cross-reference
+                # to a RULES-*.common.md file, which every guide makes routinely.
                 stale = re.search(r"[a-z][a-z0-9-]*\.common\.md", body)
                 self.assertIsNone(
                     stale,

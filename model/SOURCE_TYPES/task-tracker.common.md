@@ -5,7 +5,9 @@
 
 Systems that track work items with a lifecycle (open/in-progress/closed), assignment, and
 relationships between items (task trackers, issue trackers, and similar). Vendor-agnostic:
-this guide applies regardless of which specific tool a source's descriptor names.
+this guide applies regardless of which specific tool the brain's environment profile
+resolves the source's capability to (the descriptor itself never names a provider — see
+"Access" in `RULES-OPTIONAL-CAPABILITIES.common.md`).
 
 ## What to look for
 

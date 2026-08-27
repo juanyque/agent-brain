@@ -4,8 +4,9 @@
 ## What this covers
 
 A personal or shared calendar that can be queried for events on a given day. Vendor-agnostic:
-this guide applies regardless of which specific calendar provider a source's descriptor
-names.
+this guide applies regardless of which specific calendar provider the brain's environment
+profile resolves the source's capability to (the descriptor itself never names a provider —
+see "Access" in `RULES-OPTIONAL-CAPABILITIES.common.md`).
 
 ## Why this type is special
 
