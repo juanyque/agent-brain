@@ -65,6 +65,7 @@ Update the doc **at the moment** the relevant signal happens, not at session clo
 | Reference newly discovered (related ticket, PR, doc, memory file) | `## References` | One bullet per reference, link-form. |
 | Acceptance-criteria progress (a box ticked, a new criterion added) | `## Acceptance criteria` | Tick checkboxes; do not rewrite the list each time. |
 | **Demo-worthy result** — a "wow" worth showing later: green end-to-end run, revealing trace, before/after, query with real numbers, elegant diff, a notable visual UI state | sibling **`<slug>.demo-evidence.md`** (NOT a section of the issue doc) | One short entry per the demo-evidence format below. Capture in the moment, same cadence as the rows above. When the evidence is **visual**, ASK the user to take the screenshot with the exact framing — the agent cannot screenshot the user's screen. |
+| **Something worth reflecting externally** — content that belongs in the ticket's comments or an open PR's description, not just this doc | sibling **`<slug>.external-draft.md`** (NOT a section of the issue doc, NEVER posted automatically) | One block per the external-draft format below. Unlike the rows above, this one is captured **at session close** (per `RULES-SESSION-LIFECYCLE.common.md` → Closing gate, "External draft checkpoint"), as a deliberate exception to "not at session close" — a session-end summary is exactly what a ticket comment or PR description needs, not a live-updated stream. |
 
 ### Demo evidence (sibling facet)
 
@@ -87,6 +88,39 @@ Entry format (one block per piece of evidence):
 ```
 
 Heavy binaries (screenshots, evidence files) follow the standard heavy-assets rule: park in `ATTACHMENTS/` temporarily, migrate to online storage, and **link** from the doc — never inline the binary. When a demo-worthy moment is visual, the agent should proactively ask the user for the screenshot rather than skip it.
+
+### External draft (sibling facet)
+
+**Draft-only, always.** Nothing in this file is ever posted, commented, or pushed by the agent
+— it exists so the human can review and paste it in themselves. This mirrors the review-evidence
+report lifecycle's draft → curate → submit pattern (`RULES-REVIEW-EVIDENCE.common.md`), applied
+here to ticket/PR content instead of brag/feedback/complaint reports. An agent session must never
+be given write access to the tracker or git server for the purpose of satisfying this facet.
+
+Captured at session close (see `RULES-SESSION-LIFECYCLE.common.md` → Closing gate, "External
+draft checkpoint"), in a sibling facet file next to the issue doc:
+
+```
+<ticket-folder>/<slug>.external-draft.md
+```
+
+It is a sibling facet (alongside `<slug>.plan.` / `.decisiones.` / `.analisis.` / `.estado.` /
+`.demo-evidence.`), not a section of the issue working doc — the working doc stays a one-way pull
+from the tracker (see "Source of truth" above); this facet is the only place session content is
+ever drafted for a push in the other direction, and only as a draft.
+
+Entry format (one block per destination considered):
+
+```
+### <hook — one line: destination and what would be published>
+- Destination: ticket-comment | pr-description
+- Draft: <the actual drafted text, ready to paste as-is>
+- Context: <1–2 lines: why this is worth reflecting externally>
+- <date> · <TICKET-ID>
+```
+
+"Nothing worth drafting this session" is a valid, expected outcome — most sessions won't produce
+anything that belongs outside this doc. Don't pad the file with a block just to have one.
 
 ### Append-mostly format
 
