@@ -21,20 +21,22 @@ selector. It never scopes which sources are evaluated.
 - `not due` (silent): checked recently enough. Nothing is surfaced.
 - `blocked`: something about the source, its descriptor, its type guide, or the registry
   itself could not be determined safely, so it is reported and skipped rather than
-  investigated. Causes include: the registry is missing, symlinked, unreadable (any
-  `OSError`, not only a decode failure), or not valid UTF-8; a slug is registered more
-  than once -- including one `enabled` and one `disabled` section for the same slug, or
-  a registry entry with a duplicated field (e.g. two `Descriptor:` lines); a registry
-  `Descriptor:` field is missing or does not name this slug; the descriptor is missing,
-  symlinked, unreadable, not valid UTF-8, or has a duplicated field; the source type is
+  investigated. Causes include: the registry is missing, symlinked (leaf or any parent
+  directory component), unreadable (any `OSError`, not only a decode failure), or not
+  valid UTF-8; a slug is registered more than once -- including one `enabled` and one
+  `disabled` section for the same slug, or two `disabled` sections, or a registry entry
+  with a duplicated field (e.g. two `Descriptor:` lines); a registry `Descriptor:` field
+  is missing or does not name this slug; the descriptor is missing, symlinked (leaf or
+  parent), unreadable, not valid UTF-8, or has a duplicated field; the source type is
   malformed, or its `SOURCE_TYPES/<type>.md` guide is missing, symlinked, unwritten, or
   itself unreadable; `Requires capability` is missing, malformed, or unroutable by the
   active environment profile; `Locator` or `Last status` is missing; or
   `Check cadence (days)` / `Last checked` is missing or malformed (including under
   `always`, which still validates a non-sentinel `Last checked` date). Fail-closed by
   design: an indeterminable case is never guessed open. `list-due` itself also checks
-  activation (a real, local, rendered link to `sources.registry`) before evaluating
-  anything -- see "Usage" below.
+  activation (a real, local, rendered link to `sources.registry`, excluding HTML
+  comments, fenced or inline code of any backtick/tilde length, and external or
+  protocol-relative URLs) before evaluating anything -- see "Usage" below.
 
 Capability validation is static only (a profile-document lookup, no live provider call).
 The subagent that actually investigates a due source resolves the capability live (e.g.
@@ -78,12 +80,20 @@ python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-d
   `^[a-z0-9][a-z0-9._-]*$` (e.g. containing `/`, or not starting with a letter or digit)
   is rejected, not resolved. This blocks path separators; it does not forbid a literal
   `.` or `..` substring inside an otherwise valid slug.
-- A descriptor that is a symlink, or whose parent inside the brain is a symlink, is
-  rejected rather than followed. The same no-follow check applies to a source's type
-  guide under `SOURCE_TYPES/`.
-- The write is atomic: a uniquely named temp file created with `O_EXCL` in the same
-  directory (never a predictable sibling, so it can't be pre-planted as a symlink),
-  then a rename. The original file's mode is preserved explicitly.
+- Every read (registry, descriptor, type guide, `WIP.md`) opens each path component --
+  not just the leaf -- through a directory-fd chain rooted at the brain: each parent
+  directory between the brain root and the file is opened with `O_DIRECTORY|O_NOFOLLOW`
+  relative to the already-open previous directory's descriptor, then the leaf is opened
+  with `O_NOFOLLOW` relative to that descriptor. A symlink anywhere in the path --
+  leaf or any parent component -- is rejected rather than followed, and a swap of any
+  component after an earlier check but before this open cannot redirect an
+  already-open descriptor.
+- The write uses the same directory-fd chain to open the parent, then creates a
+  uniquely named temp file with `O_EXCL` relative to that descriptor (never a
+  predictable sibling path, so it can't be pre-planted as a symlink), then
+  `os.rename()` (not `os.replace()`, which does not support `dir_fd` on every
+  platform this runs on) relative to the same descriptor for both source and
+  destination. The original file's mode is preserved explicitly.
 - `Last checked:` is the watermark of the last *successful* check. `mark-checked --status
   degraded` updates `Last status:` but deliberately leaves `Last checked:` untouched, so a
   failed attempt never advances the "safe to skip up to here" boundary and the source

@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
 from tests.support.session_open_test_support import SCRIPTS_DIR
 
@@ -228,6 +229,56 @@ class RegistryActivatedTests(unittest.TestCase):
             )
             self.assertFalse(ss.registry_activated(brain))
 
+    def test_protocol_relative_url_does_not_activate(self) -> None:
+        # Fourth-round review finding: a scheme-less "//host/path" destination is
+        # still an external reference, not a local link, and was previously missed
+        # because only a full "scheme://" prefix was excluded.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n[artifact](//example.invalid/sources.registry.md)\n",
+            )
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_double_backtick_inline_code_does_not_activate(self) -> None:
+        # Fourth-round review finding: INLINE_CODE_RE only matched single backticks,
+        # so a double-backtick span (needed when the content itself contains a
+        # backtick, or just used stylistically) was not stripped and still activated.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## Anything\n\n``[[sources.registry]]``\n")
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_tilde_fenced_code_does_not_activate(self) -> None:
+        # Fourth-round review finding: a fenced code block may use tildes instead of
+        # backticks; FENCED_CODE_RE previously only recognized backtick fences.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## Anything\n\n~~~\n[[sources.registry]]\n~~~\n")
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_unclosed_fenced_code_does_not_activate(self) -> None:
+        # Fourth-round review finding: a fence with no closing run is implicitly
+        # closed at EOF per CommonMark; the old regex required an explicit closing
+        # fence and so treated an unclosed block as ordinary (activating) text.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## Anything\n\n```\n[[sources.registry]]\n")
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_angle_bracket_link_destination_activates(self) -> None:
+        # Fourth-round review finding: CommonMark allows wrapping a link destination
+        # in <...>; the old parser compared the literal "<WIP/SOURCES/..." string as
+        # a basename and never matched, rejecting a valid local link.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n[registry](<WIP/SOURCES/sources.registry.md>)\n",
+            )
+            self.assertTrue(ss.registry_activated(brain))
+
 
 class DecideSourceBlockedTests(unittest.TestCase):
     def _decide(self, brain: Path, today: date = date(2026, 8, 27)) -> ss.SourceDecision:
@@ -270,7 +321,7 @@ class DecideSourceBlockedTests(unittest.TestCase):
             decision = self._decide(brain)
 
         self.assertTrue(decision.blocked)
-        self.assertIn("symlink", decision.reason)
+        self.assertIn("not safely readable", decision.reason)
 
     def test_missing_source_type_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -515,7 +566,7 @@ class DecideSourceBlockedTests(unittest.TestCase):
             decision = self._decide(brain)
 
         self.assertTrue(decision.blocked)
-        self.assertIn("symlink", decision.reason)
+        self.assertIn("not safely readable", decision.reason)
 
     def test_invalid_utf8_source_type_guide_is_blocked_not_dispatched(self) -> None:
         # Third-round review finding: the guide was only lstat'd for shape, never
@@ -571,7 +622,7 @@ class RegistryLevelBlockedTests(unittest.TestCase):
 
         self.assertEqual(len(decisions), 1)
         self.assertTrue(decisions[0].blocked)
-        self.assertIn("symlink", decisions[0].reason)
+        self.assertIn("not safely readable", decisions[0].reason)
 
     def test_invalid_utf8_registry_is_blocked_not_a_crash(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -628,6 +679,29 @@ class RegistryLevelBlockedTests(unittest.TestCase):
         self.assertTrue(decisions[0].blocked)
         self.assertIn("duplicate", decisions[0].reason)
 
+    def test_disabled_and_disabled_sections_sharing_a_slug_is_blocked(self) -> None:
+        # Fourth-round review finding: duplicate detection was computed across every
+        # parsed entry, but the reporting loop only walked the `enabled`-filtered
+        # list -- two `disabled` sections sharing a slug never reached the loop at
+        # all, so the ambiguity was silently dropped instead of surfaced.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(
+                    _entry("slack-eng", "disabled", "messaging-tool"),
+                    _entry("slack-eng", "disabled", "messaging-tool"),
+                ),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("duplicate", decisions[0].reason)
+
     def test_duplicate_field_within_a_single_registry_entry_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)
@@ -661,7 +735,33 @@ class RegistryLevelBlockedTests(unittest.TestCase):
 
         self.assertEqual(len(decisions), 1)
         self.assertTrue(decisions[0].blocked)
-        self.assertIn("not readable", decisions[0].reason)
+        self.assertIn("not safely readable", decisions[0].reason)
+
+    def test_symlinked_parent_directory_of_the_registry_is_blocked_not_followed(self) -> None:
+        # Fourth-round review finding: round-three's no-follow hardening only opened
+        # the LEAF path component with O_NOFOLLOW; a symlink on a PARENT directory
+        # component (here, WIP/SOURCES itself) was still followed, so the registry
+        # read -- and, for mark-checked, the write -- could be silently redirected
+        # into an attacker-controlled external directory. `_open_parent_no_follow()`
+        # walks a directory-fd chain from `brain_root` so no parent component can be
+        # swapped for a symlink without the walk itself refusing to follow it.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw) / "brain"
+            external = Path(raw) / "external-sources-dir"
+            external.mkdir()
+            _write(external / "sources.registry.md", _registry(_entry("slack-eng", "enabled")))
+            (brain / "WIP").mkdir(parents=True)
+            (brain / "WIP" / "SOURCES").symlink_to(external)
+
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        # A symlinked PARENT directory component fails the dir-fd chain's own
+        # O_DIRECTORY|O_NOFOLLOW open with NotADirectoryError on this platform
+        # (distinct from a symlinked LEAF file, which fails with ELOOP and surfaces
+        # as "not safely readable") -- both are caught and reported, never followed.
+        self.assertIn("not found", decisions[0].reason)
 
 
 class SourceDecisionInvariantTests(unittest.TestCase):
@@ -791,7 +891,7 @@ class MarkCheckedTests(unittest.TestCase):
             descriptor = Path(raw) / "sources.slack-eng.md"
             _write(descriptor, _descriptor())
 
-            ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
             updated = descriptor.read_text(encoding="utf-8")
 
         self.assertIn("- Last checked: 2026-08-27", updated)
@@ -802,7 +902,7 @@ class MarkCheckedTests(unittest.TestCase):
             descriptor = Path(raw) / "sources.slack-eng.md"
             _write(descriptor, _descriptor(last_checked="2026-08-01"))
 
-            ss.mark_checked(descriptor, date(2026, 8, 27), "degraded")
+            ss.mark_checked(descriptor, date(2026, 8, 27), "degraded", Path(raw))
             updated = descriptor.read_text(encoding="utf-8")
 
         self.assertIn("- Last checked: 2026-08-01", updated)
@@ -817,12 +917,12 @@ class MarkCheckedTests(unittest.TestCase):
             brain = _build_working_brain(raw, cadence="7", last_checked="2026-08-01")
             descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
 
-            ss.mark_checked(descriptor, date(2026, 8, 20), "degraded")
+            ss.mark_checked(descriptor, date(2026, 8, 20), "degraded", brain)
             still_due = ss.decide_sources(brain, date(2026, 8, 20))[0]
             self.assertTrue(still_due.due)
             self.assertIn("2026-08-01", descriptor.read_text(encoding="utf-8"))
 
-            ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", brain)
             now_not_due = ss.decide_sources(brain, date(2026, 8, 27))[0]
             self.assertFalse(now_not_due.due)
             self.assertIn("- Last checked: 2026-08-27", descriptor.read_text(encoding="utf-8"))
@@ -834,7 +934,7 @@ class MarkCheckedTests(unittest.TestCase):
             _write(descriptor, original)
 
             with self.assertRaises(ValueError):
-                ss.mark_checked(descriptor, date(2026, 8, 27), "bogus")
+                ss.mark_checked(descriptor, date(2026, 8, 27), "bogus", Path(raw))
 
             self.assertEqual(descriptor.read_text(encoding="utf-8"), original)
 
@@ -842,7 +942,7 @@ class MarkCheckedTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             descriptor = Path(raw) / "sources.ghost.md"
             with self.assertRaises(FileNotFoundError):
-                ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
 
     def test_descriptor_missing_fields_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -850,7 +950,7 @@ class MarkCheckedTests(unittest.TestCase):
             _write(descriptor, "# Source: slack-eng\n\nNo schedule fields here.\n")
 
             with self.assertRaises(ValueError):
-                ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
 
     def test_symlinked_descriptor_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -860,7 +960,7 @@ class MarkCheckedTests(unittest.TestCase):
             descriptor.symlink_to(outside)
 
             with self.assertRaises(ValueError):
-                ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
 
             self.assertNotIn("2026-08-27", outside.read_text(encoding="utf-8"))
 
@@ -871,7 +971,7 @@ class MarkCheckedTests(unittest.TestCase):
             _write(descriptor, original)
 
             with self.assertRaises(ValueError):
-                ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
 
             self.assertEqual(descriptor.read_text(encoding="utf-8"), original)
 
@@ -887,7 +987,7 @@ class MarkCheckedTests(unittest.TestCase):
             planted_tmp = descriptor.with_suffix(descriptor.suffix + ".tmp")
             planted_tmp.symlink_to(outside)
 
-            ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
 
             self.assertEqual(outside.read_text(encoding="utf-8"), "untouched\n")
             self.assertFalse(descriptor.is_symlink())
@@ -910,9 +1010,39 @@ class MarkCheckedTests(unittest.TestCase):
             descriptor.symlink_to(outside)
 
             with self.assertRaises(ValueError):
-                ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
 
             self.assertEqual(outside.read_text(encoding="utf-8"), "EXTERNAL-SECRET locator content\n")
+
+    def test_run_mark_checked_rejects_a_descriptor_swapped_between_its_own_precheck_and_the_write(self) -> None:
+        # Fourth-round review finding: the test above only swaps the symlink BEFORE
+        # mark_checked() is ever called, which is indistinguishable from
+        # test_symlinked_descriptor_is_rejected -- it never exercises a genuine
+        # mid-operation race. This test swaps the descriptor for a symlink strictly
+        # BETWEEN run_mark_checked()'s own dry-run content pre-check and
+        # mark_checked()'s later, independent read, proving the two reads don't trust
+        # a shared snapshot.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            outside = Path(raw).parent / "outside-secret.md"
+            _write(outside, "EXTERNAL-SECRET locator content\n")
+
+            real_read = ss._read_source_file_or_issue
+
+            def swap_after_precheck(brain_root, path, label):
+                result = real_read(brain_root, path, label)
+                if path == descriptor:
+                    descriptor.unlink()
+                    descriptor.symlink_to(outside)
+                return result
+
+            with mock.patch.object(ss, "_read_source_file_or_issue", side_effect=swap_after_precheck):
+                exit_code = ss.run_mark_checked(brain, date(2026, 8, 27), "slack-eng", "ok", apply=True)
+
+            self.assertEqual(exit_code, 1)
+            self.assertEqual(outside.read_text(encoding="utf-8"), "EXTERNAL-SECRET locator content\n")
+            (SCRIPTS_DIR / "source_scheduler.log").unlink(missing_ok=True)
 
     def test_field_name_casing_accepted_by_decide_is_also_writable(self) -> None:
         # Third-round review finding: parse_fields()/decide_source() casefold field
@@ -928,11 +1058,45 @@ class MarkCheckedTests(unittest.TestCase):
                 "- last checked: not checked\n- last status: not checked\n",
             )
 
-            ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
             updated = descriptor.read_text(encoding="utf-8")
 
         self.assertIn("2026-08-27", updated)
         self.assertIn("ok", updated)
+
+    def test_field_name_casing_accepted_by_decide_survives_a_full_decide_then_write_round_trip(self) -> None:
+        # Fourth-round review finding: the test above only exercises mark_checked()
+        # directly with a hand-built descriptor -- it never calls decide_sources() at
+        # all, so it can't actually prove the scheduler and the writer agree on the
+        # same file. This builds a full registry + lowercase-cased descriptor, asks
+        # decide_sources() whether it's due, and then writes through mark_checked()
+        # using that same descriptor path, proving both ends of the contract hold on
+        # one real file rather than two independently-asserted halves.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(_entry("slack-eng", "enabled", "messaging-tool")),
+            )
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            _write(
+                descriptor,
+                "# Source: slack-eng\n\n## Access\n- requires capability: chat.search\n"
+                "- locator: x\n\n## Schedule\n- check cadence (days): 1\n"
+                "- last checked: not checked\n- last status: not checked\n",
+            )
+            _write_guide(brain)
+            _write_profile(brain)
+
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+            self.assertEqual(len(decisions), 1)
+            self.assertTrue(decisions[0].due, decisions[0].reason)
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", brain)
+            still_decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+            self.assertIn("2026-08-27", descriptor.read_text(encoding="utf-8"))
+            self.assertFalse(still_decisions[0].due)
 
     def test_apply_preserves_a_private_descriptor_mode(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -940,7 +1104,7 @@ class MarkCheckedTests(unittest.TestCase):
             _write(descriptor, _descriptor())
             descriptor.chmod(0o600)
 
-            ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
 
             self.assertEqual(descriptor.stat().st_mode & 0o777, 0o600)
 
@@ -949,10 +1113,32 @@ class MarkCheckedTests(unittest.TestCase):
             descriptor = Path(raw) / "sources.slack-eng.md"
             _write(descriptor, _descriptor())
 
-            ss.mark_checked(descriptor, date(2026, 8, 27), "ok")
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
 
             leftovers = list(Path(raw).glob("*.tmp"))
         self.assertEqual(leftovers, [])
+
+    def test_write_refuses_a_symlinked_parent_directory_and_touches_nothing_external(self) -> None:
+        # Fourth-round review finding: the write side of the same parent-directory-
+        # swap gap as the registry read above. A pathname-based
+        # `tempfile.mkstemp(dir=path.parent, ...)` re-resolves `path.parent` at call
+        # time, so a symlinked parent would make BOTH the temp file's creation and
+        # the final rename land inside the external directory the symlink points to,
+        # not the brain. The dir-fd chain must refuse to open that parent at all.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw) / "brain"
+            (brain / "WIP").mkdir(parents=True)
+            external = Path(raw) / "external-sources-dir"
+            external.mkdir()
+            _write(external / "sources.slack-eng.md", _descriptor())
+            (brain / "WIP" / "SOURCES").symlink_to(external)
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+
+            with self.assertRaises((OSError, ValueError)):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", brain)
+
+            self.assertEqual(sorted(p.name for p in external.iterdir()), ["sources.slack-eng.md"])
+            self.assertNotIn("2026-08-27", (external / "sources.slack-eng.md").read_text(encoding="utf-8"))
 
 
 class DescriptorPathForTests(unittest.TestCase):
@@ -1101,7 +1287,7 @@ class MarkCheckedCliTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 1)
-            self.assertIn("symlink", result.stdout)
+            self.assertIn("not safely readable", result.stdout)
             self.assertNotIn("2026", outside.read_text(encoding="utf-8"))
             (SCRIPTS_DIR / "source_scheduler.log").unlink(missing_ok=True)
 

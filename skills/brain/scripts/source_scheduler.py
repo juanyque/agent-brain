@@ -39,8 +39,8 @@ import argparse
 import json
 import os
 import re
+import stat
 import sys
-import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -55,7 +55,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from environment_profiles import ProfileError, resolve_profile  # noqa: E402
-from model_check_no_follow import lstat_entry, symlinked_parent  # noqa: E402
+from model_check_no_follow import lstat_entry  # noqa: E402
 from _common import Reporter, build_command_string  # noqa: E402
 
 
@@ -67,9 +67,15 @@ SOURCE_TYPE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 WIKILINK_TARGET_RE = re.compile(r"\[\[([^\]|#]+)")
 MARKDOWN_LINK_TARGET_RE = re.compile(r"\]\(([^)#]+)")
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
-FENCED_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
-INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+# A fenced block: 3+ backticks or tildes opening a line, closed by a same-character
+# run of at least that length on its own line, or unclosed through end of string
+# (CommonMark still treats an unclosed fence as code, not prose).
+FENCED_CODE_RE = re.compile(r"^(`{3,}|~{3,}).*?(?:^\1|\Z)", re.DOTALL | re.MULTILINE)
+# An inline code span: N backticks, content, the same N backticks again (CommonMark
+# allows any run length, e.g. double backticks to embed a literal single backtick).
+INLINE_CODE_RE = re.compile(r"(`+).*?\1", re.DOTALL)
 URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+PROTOCOL_RELATIVE_RE = re.compile(r"^//")
 REGISTRY_LINK_BASENAMES = {"sources.registry", "sources.registry.md"}
 
 VALID_STATUS = ("ok", "no_activity", "degraded")
@@ -153,37 +159,66 @@ def enabled_sources(registry_path: Path) -> list[SourceEntry]:
     return [entry for entry in parse_registry_entries(text) if entry.status == "enabled"]
 
 
-def _read_no_follow(path: Path) -> str:
-    """Read `path` as UTF-8 text, refusing to follow it if it is (or has just become) a
-    symlink. Using O_NOFOLLOW at open() time closes the gap between an earlier
-    lstat-based symlink check and this read: a swap in between is rejected by the
-    open() call itself, not missed by a stale prior check."""
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+def _open_parent_no_follow(path: Path, safe_root: Path) -> tuple[int, str]:
+    """Open `path`'s parent directory via a chain of O_DIRECTORY|O_NOFOLLOW opens
+    starting at `safe_root`, walking one path component at a time with each `open()`
+    relative to the previous one (`dir_fd=`). No intermediate component -- not just the
+    leaf -- can be a symlink that redirects the eventual leaf open/write outside the
+    brain: a swap of any directory along the way is rejected by the `open()` call for
+    that specific component, not missed by an earlier, now-stale check.
+    """
+    parts = path.relative_to(safe_root).parts
+    if not parts:
+        raise OSError(f"refusing safe-root path as a file: {path}")
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(safe_root, directory_flags)
+    try:
+        if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            raise OSError(f"refusing non-directory safe root: {safe_root}")
+        for part in parts[:-1]:
+            next_descriptor = os.open(part, directory_flags, dir_fd=descriptor)
+            if not stat.S_ISDIR(os.fstat(next_descriptor).st_mode):
+                os.close(next_descriptor)
+                raise OSError(f"refusing non-directory path component: {path}")
+            os.close(descriptor)
+            descriptor = next_descriptor
+        return descriptor, parts[-1]
+    except OSError:
+        os.close(descriptor)
+        raise
+
+
+def _read_no_follow(path: Path, brain_root: Path) -> str:
+    """Read `path` as UTF-8 text via the directory-fd chain in `_open_parent_no_follow()`,
+    so a symlink swap anywhere along the path -- not only at the final component -- is
+    rejected by the relevant `open()` call itself."""
+    parent_fd, leaf = _open_parent_no_follow(path, brain_root)
+    try:
+        fd = os.open(leaf, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=parent_fd)
+    finally:
+        os.close(parent_fd)
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise OSError(f"not a regular file: {path}")
     with os.fdopen(fd, "r", encoding="utf-8") as handle:
         return handle.read()
 
 
 def _read_source_file_or_issue(brain_root: Path, path: Path, label: str) -> tuple[str | None, str | None]:
     """Shared safety-and-read logic for the registry, a descriptor, or a source-type
-    guide: validate the path shape, then read it through the same no-follow open --
-    one combined operation instead of a separate shape check followed by a plain
-    open() a race could swap out from under. Returns (text, None) or (None, issue)."""
-    unsafe_parent = symlinked_parent(brain_root, path)
-    if unsafe_parent is not None:
-        return None, f"{label} parent is a symlink: {unsafe_parent}"
-    entry = lstat_entry(path)
-    if not entry.exists:
-        return None, f"{label} not found"
-    if entry.is_symlink:
-        return None, f"{label} is a symlink"
-    if not entry.is_file:
-        return None, f"{label} is not a regular file"
+    guide: the directory-fd chain in `_read_no_follow()` validates path shape (every
+    component a real, non-symlinked directory; the leaf a real, non-symlinked regular
+    file) as part of the same operation that reads it, rather than a separate shape
+    check a race could invalidate before a subsequent plain open(). Returns
+    (text, None) or (None, issue)."""
     try:
-        return _read_no_follow(path), None
+        return _read_no_follow(path, brain_root), None
+    except (FileNotFoundError, NotADirectoryError):
+        return None, f"{label} not found"
     except UnicodeDecodeError:
         return None, f"{label} is not valid UTF-8"
     except OSError as error:
-        return None, f"{label} is not readable: {error}"
+        return None, f"{label} is not safely readable: {error}"
 
 
 def _link_target_basenames(text: str) -> list[str]:
@@ -192,21 +227,25 @@ def _link_target_basenames(text: str) -> list[str]:
     instead of a raw substring match (which would also match `not-sources.registry.md`
     or `sources.registry.backup`, and miss a valid link with a `#fragment`).
 
-    Excludes: HTML comments, fenced code blocks, and inline code spans (a link shown
-    only as example text, e.g. `` `[[sources.registry]]` ``, is not a rendered link);
-    and any Markdown link whose destination is an absolute URL (`scheme://...`) -- an
-    external link that merely ends in a filename matching the registry's is not a
-    local link to it.
+    Excludes: HTML comments, fenced code blocks (backtick or tilde, closed or running
+    to end of file), and inline code spans of any backtick-run length (a link shown
+    only as example text is not a rendered link). Excludes external Markdown link
+    destinations, both `scheme://...` and protocol-relative `//host/...` forms -- an
+    external link that merely ends in a filename matching the registry's is not a local
+    link to it. Strips a `<...>`-bracketed Markdown destination (CommonMark's syntax for
+    a destination containing spaces) to its unbracketed form before resolving it.
     """
     stripped = HTML_COMMENT_RE.sub("", text)
     stripped = FENCED_CODE_RE.sub("", stripped)
     stripped = INLINE_CODE_RE.sub("", stripped)
     targets = [match.group(1).strip() for match in WIKILINK_TARGET_RE.finditer(stripped)]
-    targets += [
-        match.group(1).strip()
-        for match in MARKDOWN_LINK_TARGET_RE.finditer(stripped)
-        if not URL_SCHEME_RE.match(match.group(1).strip())
-    ]
+    for match in MARKDOWN_LINK_TARGET_RE.finditer(stripped):
+        target = match.group(1).strip()
+        if URL_SCHEME_RE.match(target) or PROTOCOL_RELATIVE_RE.match(target):
+            continue
+        if len(target) >= 2 and target.startswith("<") and target.endswith(">"):
+            target = target[1:-1].strip()
+        targets.append(target)
     return [Path(target).name for target in targets if target]
 
 
@@ -218,14 +257,13 @@ def registry_activated(brain_root: Path) -> bool:
     presentational preview-length limit. A bare textual mention of the filename (e.g.
     prose that happens to say "sources.registry") is not enough -- an actual, local,
     rendered wikilink or Markdown link, resolved to its exact target basename, is
-    required. See `_link_target_basenames()` for exactly what is excluded.
+    required. See `_link_target_basenames()` for exactly what is excluded. Any read
+    issue (missing, unsafe, unreadable, or undecodable WIP.md) is treated as dormant,
+    matching the general fail-closed activation doctrine -- an unreadable dashboard
+    must never abort session start.
     """
-    wip_path = brain_root / "WIP" / "WIP.md"
-    if not wip_path.exists():
-        return False
-    try:
-        text = wip_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
+    text, _issue = _read_source_file_or_issue(brain_root, brain_root / "WIP" / "WIP.md", "WIP.md")
+    if text is None:
         return False
     return any(name in REGISTRY_LINK_BASENAMES for name in _link_target_basenames(text))
 
@@ -417,12 +455,16 @@ def decide_sources(brain_root: Path, today: date, cwd: Path | None = None) -> li
         slug for slug in {entry.slug for entry in all_entries}
         if sum(1 for entry in all_entries if entry.slug == slug) > 1
     }
-    entries = [entry for entry in all_entries if entry.status == "enabled"]
     routed_capabilities, profile_error = capability_routes(brain_root, cwd)
 
+    # Iterate every parsed entry, not just `enabled` ones: a duplicate slug is
+    # reportable even when both colliding sections are `disabled` (the enabled-only
+    # filter would silently drop that case, since neither entry would ever reach this
+    # loop to be flagged). Entries that are not duplicates and not enabled are simply
+    # skipped, unchanged from prior behavior.
     decisions: list[SourceDecision] = []
     reported_duplicates: set[str] = set()
-    for entry in entries:
+    for entry in all_entries:
         if entry.slug in duplicate_slugs:
             if entry.slug in reported_duplicates:
                 continue
@@ -433,6 +475,8 @@ def decide_sources(brain_root: Path, today: date, cwd: Path | None = None) -> li
                     "duplicate registry entry for this slug", "none", 0,
                 )
             )
+            continue
+        if entry.status != "enabled":
             continue
         decisions.append(decide_source(brain_root, entry, today, routed_capabilities, profile_error))
     return decisions
@@ -449,28 +493,49 @@ def summarize_due_sources(brain_root: Path, today: date, cwd: Path | None = None
     return lines
 
 
-def _atomic_write(path: Path, content: str) -> None:
+def _atomic_write(path: Path, content: str, brain_root: Path) -> None:
     """Write `content` to `path` via a uniquely named temp file created with
-    O_EXCL|O_CREAT in the same directory, then an atomic rename.
+    O_EXCL|O_CREAT in the same directory, then an atomic rename -- all relative to a
+    parent directory file descriptor opened through `_open_parent_no_follow()`.
 
-    `tempfile.mkstemp()` fails outright if the generated name already exists in any
-    form -- including a pre-planted symlink -- so it can never be tricked into opening
-    through one and writing to an unrelated target the way a predictable `.tmp`
-    sibling plus a plain `write_text()` could. The original file's mode is preserved
-    explicitly: a freshly created file gets the process default mode, which would
-    otherwise silently relax a private (e.g. 0600) descriptor to that default on every
-    write.
+    A pathname-based `tempfile.mkstemp(dir=path.parent, ...)` resolves `path.parent`
+    fresh at call time: if any directory component between `brain_root` and `path` is
+    swapped for a symlink after the caller's own checks but before this call, the temp
+    file (and then the final rename target) is created and replaced inside whatever
+    external directory the symlink now points to. Opening the parent through the
+    dir-fd chain instead means every component was verified to be a real directory,
+    under `brain_root`, at the moment it was opened -- a later swap of any of them
+    cannot redirect an already-open descriptor.
+
+    `O_EXCL|O_CREAT` still guards the temp name itself: it fails outright if the
+    generated name already exists in any form -- including a pre-planted symlink --
+    so it can never be tricked into opening through one. The original file's mode is
+    preserved explicitly: a freshly created file gets the process default mode, which
+    would otherwise silently relax a private (e.g. 0600) descriptor to that default on
+    every write. `os.rename()`, not `os.replace()`: `os.replace` does not support
+    `dir_fd` on every platform this runs on, while POSIX `rename()` already atomically
+    overwrites an existing destination -- the `replace`/`rename` distinction only
+    matters on Windows.
     """
-    original_mode = path.stat().st_mode & 0o777
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f"{path.name}.", suffix=".tmp")
+    parent_fd, leaf = _open_parent_no_follow(path, brain_root)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(content)
-        os.chmod(tmp_name, original_mode)
-        os.replace(tmp_name, path)
-    except Exception:
-        Path(tmp_name).unlink(missing_ok=True)
-        raise
+        original_mode = os.stat(leaf, dir_fd=parent_fd).st_mode & 0o777
+        tmp_name = f"{leaf}.{os.getpid()}.{os.urandom(8).hex()}.tmp"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(tmp_name, flags, 0o600, dir_fd=parent_fd)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(content)
+            os.chmod(tmp_name, original_mode, dir_fd=parent_fd)
+            os.rename(tmp_name, leaf, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+        except Exception:
+            try:
+                os.unlink(tmp_name, dir_fd=parent_fd)
+            except OSError:
+                pass
+            raise
+    finally:
+        os.close(parent_fd)
 
 
 LAST_CHECKED_LINE_RE = re.compile(r"(?mi)^- Last checked:.*$")
@@ -494,18 +559,18 @@ def _mark_checked_content_issue(text: str) -> str | None:
     return None
 
 
-def mark_checked(descriptor_path: Path, today: date, status: str) -> None:
+def mark_checked(descriptor_path: Path, today: date, status: str, brain_root: Path) -> None:
     if status not in VALID_STATUS:
         raise ValueError(f"invalid status: {status!r} (expected one of {VALID_STATUS})")
-    if not descriptor_path.exists():
-        raise FileNotFoundError(f"descriptor not found: {descriptor_path}")
-    if descriptor_path.is_symlink():
-        raise ValueError(f"descriptor must not be a symlink: {descriptor_path}")
-    # _read_no_follow(), not plain read_text(): a swap from regular file to symlink
-    # between the is_symlink() check above and this read must be rejected by the
-    # open() call itself, not silently followed.
+    # _read_no_follow(), not an exists()/is_symlink() pre-check plus a plain
+    # read_text(): both the leaf and every parent directory component are opened
+    # through a dir-fd chain rooted at `brain_root`, so a swap of the descriptor
+    # itself -- or of any directory between it and the brain root -- after an earlier
+    # check is rejected by the open() calls themselves, not silently followed.
     try:
-        text = _read_no_follow(descriptor_path)
+        text = _read_no_follow(descriptor_path, brain_root)
+    except (FileNotFoundError, NotADirectoryError) as error:
+        raise FileNotFoundError(f"descriptor not found: {descriptor_path}") from error
     except OSError as error:
         raise ValueError(f"descriptor is not safely readable: {descriptor_path}: {error}") from error
     issue = _mark_checked_content_issue(text)
@@ -516,7 +581,7 @@ def mark_checked(descriptor_path: Path, today: date, status: str) -> None:
         text, _ = LAST_CHECKED_LINE_RE.subn(f"- Last checked: {today.isoformat()}", text, count=1)
     # else: degraded leaves the watermark untouched so the source stays due for retry
     # and no unread window is silently skipped.
-    _atomic_write(descriptor_path, text)
+    _atomic_write(descriptor_path, text, brain_root)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -601,27 +666,16 @@ def run_mark_checked(brain_root: Path, today: date, source: str, status: str, ap
         reporter.flush()
         return 1
 
-    unsafe_parent = symlinked_parent(brain_root, descriptor_path)
-    if unsafe_parent is not None:
-        reporter.write(f"mark-checked failed: descriptor parent is a symlink: {unsafe_parent}")
+    # Delegates the entire "is this descriptor safely readable" question to the same
+    # hardened, dir-fd-chained read the decision path and the writer both use --
+    # rather than duplicating a separate lstat-based pre-check here that could drift
+    # out of sync with what `mark_checked()` itself actually enforces.
+    descriptor_text, descriptor_issue = _read_source_file_or_issue(brain_root, descriptor_path, "descriptor")
+    if descriptor_issue is not None:
+        reporter.write(f"mark-checked failed: {descriptor_issue}")
         reporter.flush()
         return 1
-    file_entry = lstat_entry(descriptor_path)
-    if file_entry.is_symlink:
-        reporter.write(f"mark-checked failed: descriptor is a symlink: {descriptor_path}")
-        reporter.flush()
-        return 1
-    if not file_entry.exists or not file_entry.is_file:
-        reporter.write(f"mark-checked failed: descriptor not found: {descriptor_path}")
-        reporter.flush()
-        return 1
-
-    try:
-        content_issue = _mark_checked_content_issue(_read_no_follow(descriptor_path))
-    except UnicodeDecodeError:
-        content_issue = "descriptor is not valid UTF-8"
-    except OSError as error:
-        content_issue = f"descriptor is not safely readable: {error}"
+    content_issue = _mark_checked_content_issue(descriptor_text)
     if content_issue is not None:
         # Checked before the dry-run/apply branch so a dry-run plan can never claim
         # success where apply would deterministically fail on the same input.
@@ -642,7 +696,7 @@ def run_mark_checked(brain_root: Path, today: date, source: str, status: str, ap
         return 0
 
     try:
-        mark_checked(descriptor_path, today, status)
+        mark_checked(descriptor_path, today, status, brain_root)
     except (FileNotFoundError, ValueError) as error:
         reporter.write(f"mark-checked failed: {error}")
         reporter.flush()
