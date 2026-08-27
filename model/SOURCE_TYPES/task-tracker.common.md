@@ -1,5 +1,5 @@
 # Task tracker
-<!-- content-boundary: {"kind":"task-index-entry","owner":"model/SOURCE_TYPES/SOURCE_TYPES.common.md"} -->
+<!-- content-boundary: {"kind":"source-type","owner":"model/SOURCE_TYPES/SOURCE_TYPES.common.md"} -->
 
 ## What this covers
 
@@ -47,6 +47,13 @@ this guide applies regardless of which specific tool a project's descriptor name
   before depending on it, don't assume a documented path is a live one.
 
 ## Writing gotchas (only if the subagent also writes back)
+
+Source ingestion at session open is read-only by default (`RULES-OPTIONAL-CAPABILITIES.common.md`
+→ "Investigation behavior"): the automatic, unattended investigation this guide otherwise
+describes never writes to the tracker. This section applies only to a separately
+authorized write-back workflow (e.g. an explicit `ingesta <fuente>` request the user
+confirms interactively, or a dedicated write task) — never to the passive session-open
+check.
 
 - The echo from a first create/comment call can double-escape line breaks (the content
   comes back with literal escape sequences); a subsequent update call on the same item can

@@ -10,23 +10,34 @@ capability that is not part of the base brain model.
 
 - Optional capabilities are disabled by default. Their CLI, runtime skill, or local
   installation does not opt a vault or project in.
-- `WIP/WIP.md` is the activation and discovery surface. A capability is active for a
-  project only when that project's dashboard entry links directly to its registry or
-  descriptor.
-- Put the link under a project-specific heading that matches the working-directory
-  vocabulary. Session startup filters the WIP digest by the current directory, so a
-  generic capability-only heading is not sufficient.
+- `WIP/WIP.md` is the activation and discovery surface. A capability is active only when
+  the vault's dashboard links directly to its registry or descriptor.
 - A directory or note that exists without an active dashboard link is dormant. Do not
   infer activation from filesystem presence alone.
-- Load the linked registry first, then only the descriptor that matches the current
-  project's canonical root. Do not load every registered project.
-- If the match is missing, ambiguous, disabled, invalid, or stale, fail closed: do not
-  use the capability and explain the condition briefly.
-- Registration is explicit per project. Never enroll a repository, install a tool,
-  generate data, or add project hooks merely because the capability is available.
+- Registration is explicit. Never enroll a repository, install a tool, generate data, or
+  add project hooks merely because the capability is available.
+- Each capability declares its own scope below; the activation link's placement and the
+  loading rule follow that declared scope, not a single vault-wide rule.
 
 Every active registry and descriptor under `WIP/` must also be linked directly from
 `WIP/WIP.md`, following the normal WIP dashboard invariant.
+
+### Scopes
+
+- **Project-scoped**: the capability's content is about one specific repository or
+  checkout (Graphify is the reference case — a graph is built over one codebase). Put the
+  link under a project-specific heading that matches the working-directory vocabulary;
+  session startup filters the WIP digest by the current directory. Load the linked
+  registry first, then only the descriptor matching the current project's canonical root
+  — never every registered project. If the match is missing, ambiguous, disabled,
+  invalid, or stale, fail closed: do not use the capability and explain the condition
+  briefly.
+- **Brain-scoped**: the capability's content belongs to the vault as a whole, not to any
+  one project (source ingestion is the reference case — a mailbox or a calendar isn't
+  tied to whichever repository a session happens to open in). The link goes under any
+  heading the user chooses, once, with no working-directory filter. All enabled entries
+  are evaluated every session; an entry that can't be resolved deterministically is
+  reported as blocked, never silently skipped and never guessed open.
 
 ## Graphify
 
@@ -90,7 +101,10 @@ and package installation remain separate from vault and project activation.
 Source ingestion is an optional capability that checks external sources (a task tracker,
 a messaging tool, a git server, a calendar, a knowledge base, a document store, and
 similar — never a hardcoded vendor) for what changed since the last check, without the
-user asking each time.
+user asking each time. It is brain-scoped (see "Scopes" above): a mailbox, a calendar, or
+a personal tracker view belongs to the person, not to whichever project a session happens
+to open in. Every enabled source is evaluated every session; there is no per-project
+filter and no `Repository root matcher` field.
 
 ### Vault layout
 
@@ -113,10 +127,10 @@ Use the common templates in `TEMPLATES/TEMPLATE.source-registry.common.md` and
 
 ### Source types
 
-`SOURCE_TYPES/SOURCE_TYPES.common.md` is a compact index of source types (messaging tool,
+`SOURCE_TYPES/SOURCE_TYPES.md` is a compact index of source types (messaging tool,
 email, task tracker, knowledge base, documents and their comments, review-request
 traceability, and similar). Each descriptor names its type; deep-read the matching
-`SOURCE_TYPES/<type>.common.md` guide before investigating a source of that type. A type
+`SOURCE_TYPES/<type>.md` guide before investigating a source of that type. A type
 without a written guide yet is not investigated until one exists — do not improvise.
 
 ### Due-ness and the watermark
@@ -126,11 +140,34 @@ without a written guide yet is not investigated until one exists — do not impr
   guesses this.
 - A descriptor may set `Check cadence (days): always` instead of a number. This is for
   source types that are inherently time-sensitive per session rather than "changed since
-  last check" (a calendar is the reference case — see `SOURCE_TYPES/calendar.common.md`):
+  last check" (a calendar is the reference case — see `SOURCE_TYPES/calendar.md`):
   such a source is always due, every session, regardless of `Last checked`.
-- `session_open.py`'s digest surfaces only sources that are actually due, quiet otherwise.
-- After investigating a due source, update its watermark with
-  `source_scheduler.py mark-checked` — never edit `Last checked:` by hand.
+- `session_open.py`'s digest surfaces sources that are due, and separately reports sources
+  that are blocked (see "Access" below) — quiet otherwise.
+- `Last checked:` is the watermark of the last **successfully completed** check, never of
+  a mere attempt. After investigating a due source, update it with
+  `source_scheduler.py mark-checked --status ok|no_activity` — never edit `Last checked:`
+  by hand. A `degraded` result (the source was reachable but the check could not
+  meaningfully complete) records `Last status: degraded` but leaves `Last checked:`
+  untouched, so the source stays due for retry and no unread window is silently skipped.
+
+### Access
+
+- A descriptor names the generic capability it needs under `Requires capability:` (the
+  same capability vocabulary a skill would request through the environment-profile
+  resolver — see `docs/runtime-profiles.md`), and a `Locator:` describing exactly what to
+  read within that capability (a query, a mailbox and label, a list of channels, a URL).
+  Neither the concrete tool nor the endpoint belongs in the descriptor: the environment
+  profile that resolves the capability already owns that, and duplicating it here would
+  duplicate private data.
+- `source_scheduler.py` only checks that the named capability is statically routable by
+  the brain's environment profile — it never performs a live call. A source whose
+  capability is missing, unroutable, or absent from the active profile is reported as
+  blocked, with the reason, and is not investigated.
+- The subagent that investigates a due source resolves the capability live (the same way
+  any other skill does, e.g. via `profile_context.py`) and reports the source as
+  `degraded` if that resolution fails at investigation time — never inventing a result
+  from a name alone.
 
 ### Investigation behavior
 
@@ -147,8 +184,10 @@ For each source the digest lists as due:
    during ordinary session work.
 4. A subagent's failure (timeout, missing permission, error) is logged as a one-line note
    and skipped — it never blocks the rest of the sources or the session start.
+5. A source the digest lists as blocked is reported, not investigated: no subagent is
+   spawned for it. Explain the blocking reason briefly and move on.
 
 ### Installation
 
 Model setup must not enable a source, install a tool, or generate capture files by
-default. Activation is explicit per project, following the general rule above.
+default. Activation is explicit, following the general rule above.

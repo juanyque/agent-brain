@@ -6,7 +6,7 @@ import argparse
 import json
 import re
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time
 from pathlib import Path
 
 
@@ -121,8 +121,14 @@ def parse_run_at(raw: str | None) -> datetime | None:
         return None
 
 
-def entry_sort_key(entry: JobLogEntry) -> datetime:
-    return entry.run_at or datetime.combine(entry.run, datetime.min.time())
+def entry_sort_key(entry: JobLogEntry) -> tuple[date, time]:
+    # `run_at` is optional (JOBS.common.md): a section can legitimately mix an entry
+    # that has it with one that doesn't. Comparing raw datetimes would then mix
+    # offset-aware and offset-naive values and crash `max()`. Sorting on (run date,
+    # time-of-day) instead sidesteps tzinfo comparison entirely -- `run` is already the
+    # authoritative day, and time-of-day is only a same-day tiebreaker.
+    time_of_day = entry.run_at.time() if entry.run_at is not None else time.min
+    return (entry.run, time_of_day)
 
 
 def entry_label(entry: JobLogEntry) -> str:
@@ -149,20 +155,24 @@ def latest_run_label(lines: list[str]) -> str:
 
 
 def contains_current_week(lines: list[str], today: date) -> bool:
-    # Due-ness depends only on the latest structured entry's `period`/`status` —
+    # Due-ness depends only on the latest structured entry for the current period --
     # never on incidental dates elsewhere in the section (e.g. a `refs:` wikilink
     # or `run_at:` timestamp that happens to fall in the current week but says
-    # nothing about whether the job itself ran).
+    # nothing about whether the job itself ran), and never on an older `done` entry
+    # that a later `partial`/`in_progress`/`skipped` entry for the same period
+    # superseded.
     current = f"{today.isocalendar().year}-W{today.isocalendar().week:02d}"
-    entries = parse_job_entries(lines)
-    return any(entry.period == current and entry.status == "done" for entry in entries)
+    period_entries = [entry for entry in parse_job_entries(lines) if entry.period == current]
+    latest = latest_entry(period_entries)
+    return latest is not None and latest.status == "done"
 
 
 def contains_current_month(lines: list[str], today: date) -> bool:
-    # Same rationale as contains_current_week: structured entry only.
+    # Same rationale as contains_current_week: latest structured entry only.
     current = f"{today.year}-{today.month:02d}"
-    entries = parse_job_entries(lines)
-    return any(entry.period == current and entry.status == "done" for entry in entries)
+    period_entries = [entry for entry in parse_job_entries(lines) if entry.period == current]
+    latest = latest_entry(period_entries)
+    return latest is not None and latest.status == "done"
 
 
 def yearly_state(lines: list[str], today: date) -> tuple[str, str, str]:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from maintenance_scheduler import summarize_due_jobs
 from session_digest import SessionDigestRequest, SessionDigestState
-from source_scheduler import summarize_due_sources
+from source_scheduler import registry_activated, summarize_due_sources
 from session_open_discovery import (
     find_existing_session_note,
     is_session_open,
@@ -141,11 +141,11 @@ def collect_session_digest_state(
         wip_context = tuple(extract_wip_context(wip_path, request.cwd))
         task_types = tuple(extract_task_types(task_types_path))
         maintenance_jobs = tuple(summarize_due_jobs(brain_root, date.fromisoformat(today)))
-        # Source ingestion is an optional capability (RULES-OPTIONAL-CAPABILITIES.common.md):
-        # dormant unless WIP.md's cwd-matching section actually links the source registry.
-        # extract_wip_context already restricts to that section, so checking its text is
-        # the same activation gate every other optional capability uses, no extra parsing.
-        if "sources.registry" in "\n".join(wip_context):
+        # Source ingestion is a brain-scoped optional capability
+        # (RULES-OPTIONAL-CAPABILITIES.common.md -> "Scopes"): activation depends on
+        # whether WIP.md links the registry anywhere, never on the current directory --
+        # unlike wip_context above, which is deliberately cwd-filtered for presentation.
+        if registry_activated(brain_root):
             sources_due = tuple(summarize_due_sources(brain_root, date.fromisoformat(today)))
         else:
             sources_due = ()

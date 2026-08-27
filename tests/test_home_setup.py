@@ -444,5 +444,96 @@ class HomeSetupTests(unittest.TestCase):
         self.assertEqual(git_subprocesses, [])
 
 
+class HomeSetupRealSourceCatalogTests(unittest.TestCase):
+    """End-to-end against the real model/SOURCE_TYPES catalog (7 files), not a
+    synthetic one-file fixture -- proves the wrapper-wiring fix (a20bdc9) generalizes
+    to the actual catalog shipped in this repo, and that model_check_brain_compat
+    catches a real missing wrapper for it."""
+
+    def test_real_source_types_are_generated_and_strictly_validated_end_to_end(self) -> None:
+        from model_check_brain_compat import compatibility_report, scan_brain_compatibility
+
+        source_type_names = sorted(
+            path.name for path in (MODEL_DIR / "SOURCE_TYPES").glob("*.common.md")
+        )
+        self.assertGreaterEqual(len(source_type_names), 6)  # index + at least 5 guides
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            brain.mkdir()
+            reporter = Reporter(root / "home-setup.log")
+
+            with redirect_stdout(io.StringIO()):
+                apply(brain, MODEL_DIR, True, True, reporter)
+
+            for common_name in source_type_names:
+                local_name = common_name.removesuffix(".common.md") + ".md"
+                local_path = brain / "SOURCE_TYPES" / local_name
+                self.assertTrue(local_path.is_file(), local_name)
+                self.assertIn(
+                    f"_COMMON/SOURCE_TYPES/{common_name}", local_path.read_text(encoding="utf-8")
+                )
+
+            exit_code, payload = compatibility_report(
+                brain, MODEL_DIR, MODEL_DIR / "OPERATING-MODEL.json", strict=True
+            )
+            self.assertEqual(exit_code, 0)
+            source_type_findings = [
+                row for row in payload["findings"] if row["path"].startswith("SOURCE_TYPES/")
+            ]
+            self.assertEqual(source_type_findings, [])
+
+            # Remove one real local wrapper and confirm the exact finding fires.
+            (brain / "SOURCE_TYPES" / "calendar.md").unlink()
+            findings = scan_brain_compatibility(brain, MODEL_DIR, MODEL_DIR / "OPERATING-MODEL.json")
+            codes = {
+                finding.code for finding in findings if finding.path == "SOURCE_TYPES/calendar.md"
+            }
+
+        self.assertEqual(codes, {"brain-wrapper-missing"})
+
+
+class SourceTypeWrapperReferenceTests(unittest.TestCase):
+    """Instantiate the real source-registry/descriptor templates and confirm their
+    SOURCE_TYPES reference resolves through the brain-local wrapper path
+    (SOURCE_TYPES/<type>.md), not the unreachable common path
+    (SOURCE_TYPES/<type>.common.md, which only exists under _COMMON/)."""
+
+    def test_instantiated_descriptor_targets_local_source_type_wrapper(self) -> None:
+        registry_template = (
+            MODEL_DIR / "TEMPLATES" / "TEMPLATE.source-registry.common.md"
+        ).read_text(encoding="utf-8")
+        descriptor_template = (
+            MODEL_DIR / "TEMPLATES" / "TEMPLATE.source-descriptor.common.md"
+        ).read_text(encoding="utf-8")
+
+        for template_text in (registry_template, descriptor_template):
+            self.assertIn("SOURCE_TYPES/<type>.md", template_text)
+            self.assertNotIn("SOURCE_TYPES/<type>.common.md", template_text)
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            brain.mkdir()
+            common = create_common(root)
+            source_types = common / "SOURCE_TYPES"
+            source_types.mkdir(exist_ok=True)
+            (source_types / "messaging-tool.common.md").write_text("# messaging-tool\n", encoding="utf-8")
+            reporter = Reporter(root / "home-setup.log")
+            with redirect_stdout(io.StringIO()):
+                apply(brain, common, True, True, reporter)
+
+            instantiated = descriptor_template.replace("<type>", "messaging-tool")
+            (brain / "WIP" / "SOURCES").mkdir(parents=True)
+            (brain / "WIP" / "SOURCES" / "sources.slack-eng.md").write_text(
+                instantiated, encoding="utf-8"
+            )
+
+            referenced_path = brain / "SOURCE_TYPES" / "messaging-tool.md"
+            self.assertTrue(referenced_path.is_file())
+            self.assertIn("SOURCE_TYPES/messaging-tool.md", instantiated)
+
+
 if __name__ == "__main__":
     unittest.main()

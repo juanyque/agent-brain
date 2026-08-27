@@ -1,5 +1,5 @@
 # SOURCE_TYPES
-<!-- content-boundary: {"kind":"task-index","owner":"model/SOURCE_TYPES/SOURCE_TYPES.common.md"} -->
+<!-- content-boundary: {"kind":"source-index","owner":"model/SOURCE_TYPES/SOURCE_TYPES.common.md"} -->
 
 How-to-investigate guides for kinds of external source, used by source ingestion
 (`RULES-OPTIONAL-CAPABILITIES.common.md` → "Source ingestion"). When a source descriptor

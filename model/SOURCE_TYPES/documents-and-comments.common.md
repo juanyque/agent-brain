@@ -1,5 +1,5 @@
 # Documents and their comments
-<!-- content-boundary: {"kind":"task-index-entry","owner":"model/SOURCE_TYPES/SOURCE_TYPES.common.md"} -->
+<!-- content-boundary: {"kind":"source-type","owner":"model/SOURCE_TYPES/SOURCE_TYPES.common.md"} -->
 
 ## What this covers
 
