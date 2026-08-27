@@ -46,3 +46,4 @@ Promote a brain-local task-type to common only when the same procedure would app
 - [[brag-report]] — Generate a brag report from the evidence store for a date range, then curate it into a narrative for performance review. Adapted from Julia Evans's concept.
 - [[feedback-report]] — Generate structured feedback for a peer (given or received) from the evidence store, filtered by person and cycle. Linked to `MEMORY/People/`.
 - [[complaint-report]] — Generate a factual, dated evidence report for a complaint or escalation from the evidence store, filtered by topic. Facts separated from interpretations, `sensitive` tag mandatory.
+- [[feature-development]] — Generic idea-to-review-request lifecycle (PRD, design, ADRs, adversarial verification before implementation, TDD) for environments with no broader development-lifecycle definition of their own. Draft, expect it to evolve with use.
