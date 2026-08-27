@@ -122,6 +122,24 @@ class HomeSetupTests(unittest.TestCase):
             for local_name in ("AGENTS.md", "BRAIN.md", "JOBS.md"):
                 self.assertTrue((brain / local_name).is_file(), local_name)
 
+    def test_discovers_source_type_wrappers(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            brain = root / "brain"
+            brain.mkdir()
+            common = create_common(root)
+            source_types = common / "SOURCE_TYPES"
+            source_types.mkdir(exist_ok=True)
+            (source_types / "example.common.md").write_text("# example\n", encoding="utf-8")
+            reporter = Reporter(root / "home-setup.log")
+
+            with redirect_stdout(io.StringIO()):
+                apply(brain, common, True, True, reporter)
+
+            local_path = brain / "SOURCE_TYPES" / "example.md"
+            self.assertTrue(local_path.is_file())
+            self.assertIn("_COMMON/SOURCE_TYPES/example.common.md", local_path.read_text(encoding="utf-8"))
+
     def test_custom_wrapper_is_preserved(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

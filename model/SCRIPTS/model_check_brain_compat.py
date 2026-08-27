@@ -74,6 +74,11 @@ def discover_wrappers(common: Path) -> dict[str, str]:
         for source in sorted(task_dir.glob("*.common.md")):
             local = source.stem.removesuffix(".common") + ".md"
             wrappers[f"TASK_TYPES/{local}"] = f"TASK_TYPES/{source.name}"
+    source_types_dir = common / "SOURCE_TYPES"
+    if source_types_dir.is_dir():
+        for source in sorted(source_types_dir.glob("*.common.md")):
+            local = source.stem.removesuffix(".common") + ".md"
+            wrappers[f"SOURCE_TYPES/{local}"] = f"SOURCE_TYPES/{source.name}"
     return wrappers
 
 

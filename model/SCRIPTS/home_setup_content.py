@@ -73,6 +73,8 @@ def wrapper_kind_for(local_name: str) -> str:
     path = Path(local_name)
     if path.parts and path.parts[0] == "TASK_TYPES":
         return "task-type"
+    if path.parts and path.parts[0] == "SOURCE_TYPES":
+        return "source-type"
     if path.name.startswith("RULES-"):
         return "rule"
     return "model"
@@ -101,11 +103,27 @@ def discover_task_type_wrappers(common: Path) -> dict[str, str]:
     return result
 
 
+def discover_source_type_wrappers(common: Path) -> dict[str, str]:
+    result: dict[str, str] = {}
+    source_types_dir = common / "SOURCE_TYPES"
+    if not source_types_dir.is_dir():
+        return result
+    for source in sorted(source_types_dir.glob("*.common.md")):
+        common_rel = f"SOURCE_TYPES/{source.name}"
+        local_basename = source.stem
+        if local_basename.endswith(".common"):
+            local_basename = local_basename[: -len(".common")]
+        local_rel = f"SOURCE_TYPES/{local_basename}.md"
+        result[local_rel] = common_rel
+    return result
+
+
 def discover_wrappers(common: Path) -> dict[str, str]:
     return {
         **WRAPPERS,
         **discover_rule_wrappers(common),
         **discover_task_type_wrappers(common),
+        **discover_source_type_wrappers(common),
     }
 
 

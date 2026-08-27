@@ -24,6 +24,7 @@ from _common import Reporter  # noqa: E402
 from home_setup import apply  # noqa: E402
 from model_check_brain_compat import (  # noqa: E402
     compatibility_report,
+    discover_wrappers,
     run,
     scan_brain_compatibility,
 )
@@ -150,6 +151,39 @@ class BrainCompatibilityCaseTests(unittest.TestCase):
             {"error": 7, "info": 2, "warning": 2},
             {level: sum(1 for item in findings if item.severity == level) for level in ("error", "info", "warning")},
         )
+
+    def test_discover_wrappers_includes_source_types(self) -> None:
+        # Isolated fixture (not write_common()) so this doesn't perturb the
+        # hardcoded finding counts in the other tests in this class.
+        with tempfile.TemporaryDirectory() as raw:
+            common = Path(raw) / "model"
+            source_types = common / "SOURCE_TYPES"
+            source_types.mkdir(parents=True)
+            (source_types / "example.common.md").write_text("# Example\n", encoding="utf-8")
+
+            wrappers = discover_wrappers(common)
+
+        self.assertEqual(
+            wrappers.get("SOURCE_TYPES/example.md"),
+            "SOURCE_TYPES/example.common.md",
+        )
+
+    def test_missing_source_type_wrapper_is_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            common = write_common(root)
+            source_types = common / "SOURCE_TYPES"
+            source_types.mkdir(parents=True, exist_ok=True)
+            (source_types / "example.common.md").write_text("# Example\n", encoding="utf-8")
+            brain = root / "brain"
+            brain.mkdir()
+            (brain / "_COMMON").symlink_to(common)
+            # Deliberately do not create the local SOURCE_TYPES/example.md wrapper.
+
+            findings = scan_brain_compatibility(brain, common, ROOT / "model/OPERATING-MODEL.json")
+            codes = [finding.code for finding in findings if finding.path == "SOURCE_TYPES/example.md"]
+
+        self.assertIn("brain-wrapper-missing", codes)
 
     def test_fresh_generated_brain_has_no_strict_failures(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
