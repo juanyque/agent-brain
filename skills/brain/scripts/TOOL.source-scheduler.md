@@ -25,7 +25,9 @@ selector. It never scopes which sources are evaluated.
   directory component), unreadable (any `OSError`, not only a decode failure), or not
   valid UTF-8; a slug is registered more than once -- including one `enabled` and one
   `disabled` section for the same slug, or two `disabled` sections, or a registry entry
-  with a duplicated field (e.g. two `Descriptor:` lines); a registry `Descriptor:` field
+  with a duplicated field (e.g. two `Descriptor:` lines); a `Status:` field is missing or
+  holds any value other than exactly `enabled`/`disabled` (a typo is a fourth,
+  indeterminable state, not a silent opt-out); a registry `Descriptor:` field
   is missing, or does not name exactly this slug (naming this slug PLUS a second,
   conflicting target is also rejected -- the field must be unambiguous, not merely
   "matches somewhere"); the descriptor is missing, symlinked (leaf or parent),
@@ -44,13 +46,18 @@ selector. It never scopes which sources are evaluated.
   lines) is reported regardless of that entry's `Status:`, including two `disabled`
   sections. Fail-closed by design: an indeterminable case is never guessed open.
   `list-due` itself also checks activation (a real, local, rendered link to
-  `sources.registry`, excluding HTML comments -- an unclosed comment runs to end of
+  `sources.registry` -- a wikilink requires an actual closing `]]`, not just the
+  opening `[[` -- excluding HTML comments -- an unclosed comment runs to end of
   document, matching CommonMark's own raw-HTML-block semantics -- fenced or inline
   code of any backtick/tilde run length (code-span delimiters must be exactly
-  matching, maximal runs; a shorter run does not close a longer one), and external
-  (any URI scheme, not only `scheme://`) or protocol-relative URLs, with an optional
-  CommonMark title tolerated after the destination) before evaluating anything --
-  see "Usage" below.
+  matching, maximal runs; a shorter run does not close a longer one, and both the
+  opener and closer may carry CommonMark's 0-3-space indentation allowance), and
+  external (any URI scheme, not only `scheme://`) or protocol-relative URLs, with an
+  optional CommonMark title tolerated after the destination and a backslash-escaped
+  ASCII punctuation character in the destination unescaped before comparison) before
+  evaluating anything -- see "Usage" below. A malformed or unresolvable `--cwd` (e.g.
+  a symlink loop) is likewise blocked rather than raised, both from the CLI and from
+  `capability_routes()` internally.
 
 Capability validation is static only (a profile-document lookup, no live provider call).
 The subagent that actually investigates a due source resolves the capability live (e.g.
@@ -91,9 +98,9 @@ python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-d
 - `mark-checked` is dry-run by default; it only prints the plan. `--apply` is required to
   write.
 - Both subcommands fail cleanly on malformed input or environment errors -- an invalid
-  `--date`, or a write failure `mark-checked --apply` hits mid-operation (e.g. a
-  non-writable `SOURCES/` directory) -- with a diagnostic and a nonzero exit, never an
-  uncaught Python traceback.
+  `--date` or `--cwd` (e.g. a symlink loop), or a write failure `mark-checked --apply`
+  hits mid-operation (e.g. a non-writable `SOURCES/` directory) -- with a diagnostic
+  and a nonzero exit, never an uncaught Python traceback.
 - The source slug is validated before any path is constructed; a slug outside
   `^[a-z0-9][a-z0-9._-]*$` (e.g. containing `/`, or not starting with a letter or digit)
   is rejected, not resolved. This blocks path separators; it does not forbid a literal

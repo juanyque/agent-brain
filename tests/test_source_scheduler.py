@@ -367,6 +367,61 @@ class RegistryActivatedTests(unittest.TestCase):
             )
             self.assertTrue(ss.registry_activated(brain))
 
+    def test_unclosed_wikilink_does_not_activate(self) -> None:
+        # Seventh-round review finding: WIKILINK_TARGET_RE only required the
+        # opening "[[" and captured through end-of-input, never verifying a
+        # closing "]]" existed at all -- a malformed, unrendered token like
+        # "[[sources.registry" (no closing brackets anywhere) was extracted as if
+        # it were a real, rendered wikilink.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## Anything\n\n[[sources.registry\n")
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_indented_unclosed_fence_does_not_activate(self) -> None:
+        # Seventh-round review finding: CommonMark permits a fenced-code opener to
+        # be indented by 0-3 spaces. An unclosed, indented fence around a link
+        # still runs through EOF as code -- but the old fence regex only
+        # recognized an opener at column zero, so an indented opener with no
+        # closer left the fence unrecognized and the unrendered link inside it
+        # activated.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n   ```\n[[sources.registry]]\n",
+            )
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_indented_closing_fence_still_closes_and_reveals_the_next_link(self) -> None:
+        # Seventh-round review finding: CommonMark also permits up to three
+        # leading spaces on a CLOSING fence. The old regex didn't recognize an
+        # indented closer, so it fell through to its unclosed-to-EOF alternative
+        # and swallowed a valid, rendered link that actually comes AFTER the
+        # fence closes.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n```\nhidden\n   ```\n[registry](WIP/SOURCES/sources.registry.md)\n",
+            )
+            self.assertTrue(ss.registry_activated(brain))
+
+    def test_backslash_escaped_local_link_destination_activates(self) -> None:
+        # Seventh-round review finding: CommonMark permits a backslash to escape
+        # ASCII punctuation anywhere, including in a link destination.
+        # "sources\.registry.md" renders with the backslash removed, but the
+        # scheduler compared the still-escaped text against the registry's plain
+        # basename and never matched, leaving a valid, rendered local link
+        # unrecognized.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n[registry](WIP/SOURCES/sources\\.registry.md)\n",
+            )
+            self.assertTrue(ss.registry_activated(brain))
+
     def test_fifo_leaf_does_not_hang_registry_activated(self) -> None:
         # Fifth-round review finding: the leaf open used a plain blocking O_RDONLY,
         # so a FIFO with no writer blocked inside open() itself, well before the
@@ -923,6 +978,50 @@ class RegistryLevelBlockedTests(unittest.TestCase):
         self.assertEqual(len(decisions), 1)
         self.assertTrue(decisions[0].blocked)
         self.assertIn("duplicate field", decisions[0].reason)
+
+    def test_missing_status_field_is_blocked_not_silently_disabled(self) -> None:
+        # Seventh-round review finding: a missing "Status:" field defaulted to
+        # "disabled", indistinguishable from an entry that explicitly opted out --
+        # the operator got neither a due result nor a blocked diagnostic for a
+        # source whose Status line was simply dropped.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## Anything\n\n- [[sources.registry]]\n")
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(
+                    "### slack-eng\n- Type: messaging-tool\n"
+                    "- Descriptor: [[sources.slack-eng]]\n\n"
+                ),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("Status", decisions[0].reason)
+
+    def test_misspelled_status_value_is_blocked_not_silently_disabled(self) -> None:
+        # Seventh-round review finding: any Status value other than the literal
+        # "enabled" was treated as equivalent to "disabled", so a typo like
+        # "enabld" silently dropped a source from ingestion with no diagnostic.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## Anything\n\n- [[sources.registry]]\n")
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(_entry("slack-eng", "enabld", "messaging-tool")),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("Status", decisions[0].reason)
 
     def test_unreadable_registry_is_blocked_not_a_crash(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -1503,6 +1602,21 @@ class ListDueCliTests(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
         self.assertIn("Invalid --date", result.stdout)
 
+    def test_symlink_loop_cwd_argument_is_a_clean_failure_not_a_traceback(self) -> None:
+        # Seventh-round review finding: main() resolved --cwd with a bare
+        # Path.resolve() outside any error handler, so a symlink-loop cwd raised
+        # an uncaught RuntimeError and printed a Python traceback.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            loop = brain / "loop"
+            loop.symlink_to(loop)
+
+            result = self._run("--brain-root", str(brain), "list-due", "--cwd", str(loop))
+
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn("Invalid --cwd", result.stdout)
+
 
 class MarkCheckedCliTests(unittest.TestCase):
     """CLI-level tests: exercise main() via subprocess, the actual published contract,
@@ -1708,6 +1822,23 @@ class ProfileSelectionConsistencyTests(unittest.TestCase):
         self.assertFalse(from_brain_root.blocked)
         self.assertTrue(from_project_cwd.blocked)
         self.assertIn("not routed", from_project_cwd.reason)
+
+    def test_symlink_loop_cwd_is_blocked_not_an_uncaught_runtimeerror(self) -> None:
+        # Seventh-round review finding: resolve_profile() normalizes `cwd` with
+        # Path.resolve(), which raises RuntimeError (not ProfileError) on a
+        # symlink loop. capability_routes() only caught ProfileError, so a
+        # malformed or raced cwd escaped as an uncaught exception instead of the
+        # blocked decision this function otherwise guarantees for any
+        # indeterminable profile-selection input.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            loop = brain / "loop"
+            loop.symlink_to(loop)
+
+            routed_capabilities, profile_error = ss.capability_routes(brain, cwd=loop)
+
+        self.assertIsNone(routed_capabilities)
+        self.assertIsNotNone(profile_error)
 
 
 if __name__ == "__main__":

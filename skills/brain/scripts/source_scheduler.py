@@ -63,7 +63,13 @@ FIELD_RE = re.compile(r"^-\s+([A-Za-z][A-Za-z0-9 ()]*):\s*(.*?)\s*$")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 CAPABILITY_RE = re.compile(r"^[a-z][a-z0-9_.-]*$")
 SOURCE_TYPE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
-WIKILINK_TARGET_RE = re.compile(r"\[\[([^\]|#]+)")
+# Requires an actual closing "]]": the old pattern only required the opening "[["
+# and stopped capturing at "]"/"|"/"#", which never verified a closing "]]" existed
+# at all -- an unclosed, malformed token like "[[sources.registry" (no closing
+# brackets anywhere) was extracted as if it were a real, rendered wikilink. The
+# interior may still carry a "|alias" and/or "#fragment"; those are split off by
+# the caller after the full "[[...]]" shape is confirmed, not excluded here.
+WIKILINK_TARGET_RE = re.compile(r"\[\[([^\[\]\n]+)\]\]")
 # A Markdown link destination: either <...>-bracketed (CommonMark's form for a
 # destination containing spaces) or a bare run of non-whitespace, non-")" characters
 # (matching up to a "#fragment" is handled by the caller, not this regex, so both
@@ -84,8 +90,12 @@ HTML_COMMENT_RE = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
 # trailing spaces/tabs -- CommonMark ignores those but requires nothing else), or
 # unclosed through end of string (CommonMark still treats an unclosed fence as code,
 # not prose). A line that merely STARTS with the delimiter but has other content
-# after it (e.g. a longer fence, or an info string) is not a valid close.
-FENCED_CODE_RE = re.compile(r"^(`{3,}|~{3,}).*?(?:^\1[ \t]*$|\Z)", re.DOTALL | re.MULTILINE)
+# after it (e.g. a longer fence, or an info string) is not a valid close. Both the
+# opener and the closer may be indented by 0-3 leading spaces (CommonMark's own
+# fence-indentation allowance); indentation isn't otherwise significant here since
+# 4+ leading spaces would be a different construct (an indented code block) this
+# module doesn't need to model separately.
+FENCED_CODE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1[ \t]*$|\Z)", re.DOTALL | re.MULTILINE)
 # An inline code span: N backticks, content, the same N backticks again (CommonMark
 # allows any run length, e.g. double backticks to embed a literal single backtick).
 # Both delimiter runs must be MAXIMAL (not preceded/followed by another backtick):
@@ -100,6 +110,13 @@ INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)", re.DOTALL)
 # `://`-only check and be misread as local once its scheme was ignored.
 URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 PROTOCOL_RELATIVE_RE = re.compile(r"^//")
+# CommonMark allows a backslash to escape ASCII punctuation anywhere, including in a
+# link destination; the escaped form (e.g. "sources\.registry.md") renders with the
+# backslash removed, but the raw source text still has it, so a basename comparison
+# against the un-unescaped text can never match. Not full URL-decoding, just this
+# one specific, narrow CommonMark rule.
+BACKSLASH_ESCAPE_RE = re.compile(r"\\(.)", re.DOTALL)
+_ESCAPABLE_PUNCTUATION = frozenset("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
 REGISTRY_LINK_BASENAMES = {"sources.registry", "sources.registry.md"}
 
 VALID_STATUS = ("ok", "no_activity", "degraded")
@@ -155,7 +172,11 @@ def parse_registry_entries(text: str) -> list[SourceEntry]:
         entries.append(
             SourceEntry(
                 slug=current_slug,
-                status=fields.get("status", "disabled").casefold(),
+                # "" (not "disabled") when the field is absent, so a missing
+                # Status: is distinguishable from an explicit "Status: disabled" --
+                # both are currently indeterminable to decide_sources() and must be
+                # blocked and visible, not silently treated as an ordinary opt-out.
+                status=fields.get("status", "").casefold(),
                 source_type=fields.get("type", ""),
                 descriptor=fields.get("descriptor", ""),
                 purpose=fields.get("purpose", ""),
@@ -251,6 +272,14 @@ def _read_source_file_or_issue(brain_root: Path, path: Path, label: str) -> tupl
         return None, f"{label} is not safely readable: {error}"
 
 
+def _unescape_commonmark_punctuation(text: str) -> str:
+    def repl(match: re.Match[str]) -> str:
+        char = match.group(1)
+        return char if char in _ESCAPABLE_PUNCTUATION else match.group(0)
+
+    return BACKSLASH_ESCAPE_RE.sub(repl, text)
+
+
 def _link_target_basenames(text: str) -> list[str]:
     """Every link target's basename in `text` -- wikilink and local Markdown links,
     alias/heading/fragment stripped -- so activation can compare exact filenames
@@ -266,14 +295,22 @@ def _link_target_basenames(text: str) -> list[str]:
     destination containing spaces) is unwrapped by `MARKDOWN_LINK_TARGET_RE` itself,
     before the external/protocol-relative classification runs -- classifying the
     still-bracketed form first would let `(<https://...>)` slip past both checks
-    (neither regex matches a leading `<`) and be misread as a local path.
+    (neither regex matches a leading `<`) and be misread as a local path. A
+    backslash-escaped ASCII punctuation character (e.g. `` sources\\.registry.md ``) is
+    unescaped before that same classification, since CommonMark renders the
+    destination with the backslash removed -- comparing the still-escaped text could
+    never match the registry's actual basename.
     """
     stripped = HTML_COMMENT_RE.sub("", text)
     stripped = FENCED_CODE_RE.sub("", stripped)
     stripped = INLINE_CODE_RE.sub("", stripped)
-    targets = [match.group(1).strip() for match in WIKILINK_TARGET_RE.finditer(stripped)]
+    targets = [
+        match.group(1).split("|", 1)[0].split("#", 1)[0].strip()
+        for match in WIKILINK_TARGET_RE.finditer(stripped)
+    ]
     for match in MARKDOWN_LINK_TARGET_RE.finditer(stripped):
         raw_target = match.group("angle") if match.group("angle") is not None else match.group("bare")
+        raw_target = _unescape_commonmark_punctuation(raw_target)
         # Fragment stripping happens here, uniformly for both destination forms,
         # rather than excluding "#" from the regex's character classes -- the bare
         # alternative must still be able to stop at a title's leading whitespace.
@@ -326,6 +363,14 @@ def capability_routes(brain_root: Path, cwd: Path | None = None) -> tuple[set[st
         resolved = resolve_profile(brain_root, cwd=cwd or brain_root)
     except ProfileError as error:
         return None, str(error)
+    except (RuntimeError, OSError) as error:
+        # resolve_profile() normalizes `cwd` with Path.resolve(), which raises
+        # RuntimeError (not ProfileError) on a symlink loop, and can raise other
+        # OSError subclasses on comparable path-resolution failures. A malformed
+        # or raced `cwd` is exactly the kind of indeterminable input this function
+        # already exists to turn into a blocked decision instead of an escaping
+        # exception -- ProfileError alone doesn't cover it.
+        return None, f"could not resolve session cwd: {error}"
     return set(resolved.document.get("capability_routes", {})), None
 
 
@@ -530,6 +575,21 @@ def decide_sources(brain_root: Path, today: date, cwd: Path | None = None) -> li
                 SourceDecision(
                     entry.slug, entry.source_type, False, True,
                     "duplicate registry entry for this slug", "none", 0,
+                )
+            )
+            continue
+        if entry.status not in ("enabled", "disabled"):
+            # A missing Status: field (now parsed as "", not defaulted to
+            # "disabled") or an unrecognized value (e.g. a typo like "enabld") is
+            # a fourth, indeterminable state the enabled/disabled filter below
+            # would otherwise skip in total silence -- neither due nor visibly
+            # blocked, so a mistyped field could stop ingestion for a source with
+            # no diagnostic at all.
+            decisions.append(
+                SourceDecision(
+                    entry.slug, entry.source_type, False, True,
+                    f"missing or invalid registry 'Status': {entry.status!r}",
+                    "none", 0,
                 )
             )
             continue
@@ -820,7 +880,13 @@ def main() -> int:
     # dispatch a dormant brain's sources just because a caller bypassed the WIP.md
     # link check.
     activated = registry_activated(brain_root)
-    cwd = Path(args.cwd).expanduser().resolve() if args.cwd else None
+    cwd = None
+    if args.cwd:
+        try:
+            cwd = Path(args.cwd).expanduser().resolve()
+        except (RuntimeError, OSError) as error:
+            print(f"Invalid --cwd value: {args.cwd!r} ({error})")
+            return 1
     decisions = decide_sources(brain_root, today, cwd) if activated else []
     if args.json:
         print(json.dumps(
