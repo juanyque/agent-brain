@@ -7,6 +7,7 @@ import os
 import sys
 import unittest
 from contextlib import redirect_stdout
+from itertools import groupby
 from pathlib import Path
 from typing import TypeAlias
 
@@ -92,7 +93,21 @@ def main() -> int:
     ]
     initial_sys_path = list(sys.path)
     loader = unittest.TestLoader()
-    suite = loader.loadTestsFromNames(ids)
+    # Load one module group at a time, purging the cached `_common` module
+    # between groups. Two different tracked files are both importable under
+    # that bare name (model/SCRIPTS/_common.py and skills/brain/scripts/
+    # _common.py), and each test module inserts its own script directory at
+    # sys.path[0] before doing `import _common`. Loading every id in one
+    # loadTestsFromNames() batch lets whichever module imports _common first
+    # cache it in sys.modules for the rest of this process, silently handing
+    # every later module the wrong file. ids is already sorted (enforced by
+    # run_baseline_tests.py), so same-module ids are contiguous and groupby
+    # is safe without re-sorting.
+    suites = []
+    for _module, group in groupby(ids, key=_module_name):
+        sys.modules.pop("_common", None)
+        suites.append(loader.loadTestsFromNames(list(group)))
+    suite = unittest.TestSuite(suites)
     loaded = sorted(test.id() for group in suite for test in _flatten(group))
     stream = io.StringIO()
     if loaded == ids:

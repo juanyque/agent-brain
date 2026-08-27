@@ -37,7 +37,7 @@ IDS = ROOT / "tests" / "fixtures" / "baseline-test-ids.txt"
 FINAL_LANE_COMMANDS = (
     ROOT / "tests" / "fixtures" / "operating-model-final-lane-commands.json"
 )
-MODEL_BASELINE, TEST_BASELINE = "993247b2850ac86993c7c6dd18e6c4fd9ec6df7c", "2e420205d3dbc5b91e5188b90950043e44a4a054"
+MODEL_BASELINE, TEST_BASELINE = "993247b2850ac86993c7c6dd18e6c4fd9ec6df7c", "6373436ab4a16170cd4d1911f255a14430e367ca"
 ROOT_AGENTS = ROOT / "AGENTS.md"
 
 
