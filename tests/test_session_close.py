@@ -364,6 +364,68 @@ class SessionCloseTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("session id not found", result.stdout)
 
+    def test_journal_registration_resolves_full_id_from_resume_command_for_a_prefix(
+        self,
+    ) -> None:
+        # Round-2 review finding: find_session_note() accepts a documented
+        # unambiguous PREFIX, but checking the journal for that prefix as a whole
+        # token false-negatived against the note's own longer full id.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            (brain / "_COMMON").symlink_to(MODEL_ROOT, target_is_directory=True)
+            note = brain / "WIP" / "SESSIONS" / "2026-07-21-session-abc123-full-uuid-test.md"
+            note.parent.mkdir(parents=True)
+            note.write_text(
+                "---\ntags: [session, wip]\n---\n"
+                "# Session abc123-full-uuid\n\n"
+                "## State\n- Status: open\n\n"
+                "## Resume command\n"
+                "- `cd /repo && claude --resume abc123-full-uuid`\n\n"
+                "## Immediate next step\n- none\n",
+                encoding="utf-8",
+            )
+            journal_dir = brain / "JOURNAL"
+            journal_dir.mkdir(parents=True)
+            (journal_dir / "2026-07-21.md").write_text(
+                "# Sessions\n- `cd /repo && claude --resume abc123-full-uuid` — topic.\n",
+                encoding="utf-8",
+            )
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "abc123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("verified: session id found", result.stdout)
+
+    def test_journal_registration_finds_notes_archived_under_a_year_subfolder(self) -> None:
+        # Round-2 review finding: a hardcoded, non-recursive "JOURNAL/*.md" glob
+        # missed daily notes yearly maintenance already moved to JOURNAL/<year>/
+        # per RULES-DAILY-NOTES.common.md's "Journal archive and classification".
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            create_note(brain, "session-123")
+            year_dir = brain / "JOURNAL" / "2025"
+            year_dir.mkdir(parents=True)
+            (year_dir / "2025-07-21.md").write_text(
+                "# Sessions\n- `cd /repo && claude --resume session-123` — topic.\n",
+                encoding="utf-8",
+            )
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "session-123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("verified: session id found in", result.stdout)
+        self.assertIn("2025", result.stdout)
+
     def test_apply_refuses_bad_cwd_before_mutating_note(self) -> None:
         # Second-round review finding: --cwd was resolved after patch_status() had
         # already written "consolidated" to disk, so a symlink-loop cwd crashed with

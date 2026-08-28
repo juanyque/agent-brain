@@ -30,6 +30,11 @@ if str(MODEL_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(MODEL_SCRIPTS))
 
 from brain_state import current_brain_status, current_model_root  # noqa: E402
+from session_open_discovery import (  # noqa: E402
+    JournalConfigError,
+    list_daily_notes,
+    load_journal_folder,
+)
 from source_scheduler import registry_activated, summarize_due_sources  # noqa: E402
 
 
@@ -205,45 +210,84 @@ def remove_wip_tag(note_path: Path, apply: bool) -> bool:
     return True
 
 
-def _sessions_section(text: str) -> str | None:
-    """Return the body of the '# Sessions' block, or None if the note has none.
+def _heading_section(text: str, heading: str) -> str | None:
+    """Return the body of the block under `heading` (an exact stripped line match,
+    e.g. '# Sessions' or '## Resume command'), or None if the note has none.
 
     Mirrors model_check_session_ownership.py's _ownership_block() heading-scope
-    parsing: the block ends at the next top-level heading or end of file.
+    parsing: the block ends at the next heading of the same or higher level.
     """
     lines = text.splitlines()
+    level = len(heading) - len(heading.lstrip("#"))
     for index, line in enumerate(lines):
-        if line.strip() != "# Sessions":
+        if line.strip() != heading:
             continue
         end = next(
-            (cursor for cursor in range(index + 1, len(lines)) if lines[cursor].startswith("# ")),
+            (
+                cursor
+                for cursor in range(index + 1, len(lines))
+                if lines[cursor].startswith("#")
+                and len(lines[cursor]) - len(lines[cursor].lstrip("#")) <= level
+            ),
             len(lines),
         )
         return "\n".join(lines[index + 1 : end])
     return None
 
 
+RESUME_ID_RE = re.compile(r"(?:--resume|--conversation|\bresume)\s+(\S+)")
+
+
+def resolve_full_session_id(note_path: Path, fallback: str) -> str:
+    """Best-effort: extract the real full session id from the note's own
+    '## Resume command' section (present in every real session note per
+    RULES-SESSION-LIFECYCLE.common.md's "Session notes"), so a CLI-supplied
+    unambiguous *prefix* still matches its own full-id registration in the
+    journal exactly, instead of failing a whole-token match against a longer
+    string. Falls back to the CLI-supplied value when no resume command is
+    present (e.g. a minimal or hand-written note) rather than guessing.
+    """
+    try:
+        text = note_path.read_text(encoding="utf-8")
+    except OSError:
+        return fallback
+    section = _heading_section(text, "## Resume command")
+    if section is None:
+        return fallback
+    match = RESUME_ID_RE.search(section)
+    if match is None:
+        return fallback
+    return match.group(1).strip("`")
+
+
 def find_journal_registration(brain_root: Path, session_id: str) -> Path | None:
-    """Return the first JOURNAL/*.md daily note whose '# Sessions' block registers
-    session_id as a whole token, or None.
+    """Return the first daily note whose '# Sessions' block registers session_id
+    as a whole token, or None.
 
     Verifies the consolidation checklist's "Session ID written in daily note" item
     against the actual daily notes on disk instead of trusting the session note's
     own self-reported checkbox. Scoped to the '# Sessions' block specifically (not
     the whole note) and matched on word boundaries -- a plain substring search
     would let "session-123" false-match inside an unrelated "session-1234", or
-    inside a bare textual mention elsewhere in the day's prose.
+    inside a bare textual mention elsewhere in the day's prose. Discovers daily
+    notes the same way session_open.py does (load_journal_folder() for a
+    configured folder name, list_daily_notes()'s recursive rglob for notes
+    archived under JOURNAL/<year>/ by yearly maintenance) instead of a hardcoded,
+    non-recursive "JOURNAL/*.md" glob that would miss both.
     """
-    journal_dir = brain_root / "JOURNAL"
-    if not journal_dir.is_dir():
+    try:
+        journal_root = brain_root / load_journal_folder(brain_root)
+    except JournalConfigError:
+        return None
+    if not journal_root.is_dir():
         return None
     pattern = re.compile(rf"(?<![\w-]){re.escape(session_id)}(?![\w-])")
-    for path in sorted(journal_dir.glob("*.md")):
+    for path in list_daily_notes(journal_root):
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        section = _sessions_section(text)
+        section = _heading_section(text, "# Sessions")
         if section is not None and pattern.search(section):
             return path
     return None
@@ -382,7 +426,8 @@ def main() -> int:
             return 1
 
     if subcommand == "consolidate":
-        registration = find_journal_registration(brain_root, session_id)
+        full_session_id = resolve_full_session_id(note_path, session_id)
+        registration = find_journal_registration(brain_root, full_session_id)
         if registration is not None:
             print(
                 f"  verified: session id found in {registration.relative_to(brain_root)} "
