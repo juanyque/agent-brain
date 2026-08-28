@@ -30,7 +30,7 @@ if str(MODEL_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(MODEL_SCRIPTS))
 
 from brain_state import current_brain_status, current_model_root  # noqa: E402
-from source_scheduler import decide_sources  # noqa: E402
+from source_scheduler import registry_activated, summarize_due_sources  # noqa: E402
 
 
 VALID_TRANSITIONS: dict[str, list[str]] = {
@@ -205,22 +205,46 @@ def remove_wip_tag(note_path: Path, apply: bool) -> bool:
     return True
 
 
-def find_journal_registration(brain_root: Path, session_id: str) -> Path | None:
-    """Return the first JOURNAL/*.md daily note that mentions session_id, or None.
+def _sessions_section(text: str) -> str | None:
+    """Return the body of the '# Sessions' block, or None if the note has none.
 
-    Verifies the consolidation checklist's "Session ID written in daily note"
-    item against the actual daily notes on disk instead of trusting the
-    session note's own self-reported checkbox.
+    Mirrors model_check_session_ownership.py's _ownership_block() heading-scope
+    parsing: the block ends at the next top-level heading or end of file.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() != "# Sessions":
+            continue
+        end = next(
+            (cursor for cursor in range(index + 1, len(lines)) if lines[cursor].startswith("# ")),
+            len(lines),
+        )
+        return "\n".join(lines[index + 1 : end])
+    return None
+
+
+def find_journal_registration(brain_root: Path, session_id: str) -> Path | None:
+    """Return the first JOURNAL/*.md daily note whose '# Sessions' block registers
+    session_id as a whole token, or None.
+
+    Verifies the consolidation checklist's "Session ID written in daily note" item
+    against the actual daily notes on disk instead of trusting the session note's
+    own self-reported checkbox. Scoped to the '# Sessions' block specifically (not
+    the whole note) and matched on word boundaries -- a plain substring search
+    would let "session-123" false-match inside an unrelated "session-1234", or
+    inside a bare textual mention elsewhere in the day's prose.
     """
     journal_dir = brain_root / "JOURNAL"
     if not journal_dir.is_dir():
         return None
+    pattern = re.compile(rf"(?<![\w-]){re.escape(session_id)}(?![\w-])")
     for path in sorted(journal_dir.glob("*.md")):
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        if session_id in text:
+        section = _sessions_section(text)
+        if section is not None and pattern.search(section):
             return path
     return None
 
@@ -289,6 +313,14 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+
+    cwd_arg: Path | None = None
+    if args.cwd:
+        try:
+            cwd_arg = Path(args.cwd).expanduser().resolve()
+        except (RuntimeError, OSError) as error:
+            print(f"ERROR: invalid --cwd value: {args.cwd!r} ({error})", file=sys.stderr)
+            return 1
 
     mode = "apply" if args.apply else "dry-run"
     subcommand: str = args.subcommand
@@ -363,18 +395,15 @@ def main() -> int:
                 "cannot be confirmed from disk; verify manually before archiving"
             )
 
-        cwd_arg = Path(args.cwd).expanduser().resolve() if args.cwd else None
-        still_due = [
-            decision
-            for decision in decide_sources(brain_root, date.today(), cwd_arg)
-            if decision.due and not decision.blocked
-        ]
-        if still_due:
-            names = ", ".join(decision.slug for decision in still_due)
-            print(
-                f"  WARNING: still due at close, uninvestigated: {names} -- "
-                "confirm this was intentional, or investigate before consolidating"
-            )
+        pending_sources = (
+            summarize_due_sources(brain_root, date.today(), cwd_arg)
+            if registry_activated(brain_root)
+            else []
+        )
+        if pending_sources:
+            print("  WARNING: source(s) need attention before consolidating (WIP/SOURCES/):")
+            for line in pending_sources:
+                print(f"  {line}")
         else:
             print("  verified: no sources are still due (checked against WIP/SOURCES/ on disk)")
 

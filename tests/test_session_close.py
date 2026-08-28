@@ -10,7 +10,14 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.test_source_scheduler import _build_working_brain
+from tests.test_source_scheduler import (
+    _build_working_brain,
+    _entry,
+    _registry,
+    _write,
+    _write_guide,
+    _write_profile,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -225,6 +232,7 @@ class SessionCloseTests(unittest.TestCase):
     def test_consolidate_reports_still_due_sources(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = _build_working_brain(raw)
+            _write(brain / "WIP" / "WIP.md", "## Fuentes externas\n\n- [[sources.registry|registry]]\n")
             create_note(brain, "session-123")
 
             result = run(
@@ -236,8 +244,8 @@ class SessionCloseTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("WARNING", result.stdout)
-        self.assertIn("still due", result.stdout)
         self.assertIn("slack-eng", result.stdout)
+        self.assertIn("never checked", result.stdout)
 
     def test_consolidate_verifies_no_sources_due(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -246,6 +254,7 @@ class SessionCloseTests(unittest.TestCase):
                 last_checked=date.today().isoformat(),
                 cadence="9999",
             )
+            _write(brain / "WIP" / "WIP.md", "## Fuentes externas\n\n- [[sources.registry|registry]]\n")
             create_note(brain, "session-123")
 
             result = run(
@@ -257,7 +266,129 @@ class SessionCloseTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("verified: no sources are still due", result.stdout)
-        self.assertNotIn("still due", result.stdout.replace("no sources are still due", ""))
+
+    def test_consolidate_does_not_infer_activation_from_leftover_sources_dir(self) -> None:
+        # Second-round review finding: WIP/SOURCES/ can linger on disk after a
+        # capability is disabled by removing its WIP.md link. decide_sources() alone
+        # doesn't know about activation -- only registry_activated() does (the same
+        # gate session_open_context.py already applies before calling
+        # summarize_due_sources()) -- so this must not warn just because the
+        # directory still exists.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)  # no WIP/WIP.md activation link written
+            create_note(brain, "session-123")
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "session-123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("verified: no sources are still due", result.stdout)
+
+    def test_consolidate_reports_blocked_sources_instead_of_silently_verifying(self) -> None:
+        # Second-round review finding: a corrupt/unresolvable registry entry comes
+        # back from decide_sources() as blocked, not due. Filtering to "due and not
+        # blocked" alone silently dropped it, turning an indeterminate state into a
+        # false "verified: nothing pending" instead of the fail-closed report
+        # RULES-OPTIONAL-CAPABILITIES.common.md's activation doctrine requires.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## Fuentes externas\n\n- [[sources.registry|registry]]\n")
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(_entry("slack-eng", "enabled")),
+            )
+            _write_guide(brain)
+            _write_profile(brain)
+            # Deliberately no sources.slack-eng.md descriptor -> blocked, not due.
+            create_note(brain, "session-123")
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "session-123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("WARNING", result.stdout)
+        self.assertIn("blocked", result.stdout)
+        self.assertNotIn("verified: no sources are still due", result.stdout)
+
+    def test_journal_registration_rejects_a_longer_colliding_id(self) -> None:
+        # Second-round review finding: a plain substring search let "session-123"
+        # false-match inside an unrelated "session-1234" registration.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            create_note(brain, "session-123")
+            journal_dir = brain / "JOURNAL"
+            journal_dir.mkdir(parents=True)
+            (journal_dir / "2026-07-21.md").write_text(
+                "# Sessions\n- `cd /repo && claude --resume session-1234` — topic.\n",
+                encoding="utf-8",
+            )
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "session-123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("session id not found", result.stdout)
+
+    def test_journal_registration_ignores_mentions_outside_sessions_section(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            create_note(brain, "session-123")
+            journal_dir = brain / "JOURNAL"
+            journal_dir.mkdir(parents=True)
+            (journal_dir / "2026-07-21.md").write_text(
+                "# Sessions\n- some unrelated entry\n"
+                "# Actions\n"
+                "* [[WORK]]:\n  * mentioned session-123 in passing, not a registration\n",
+                encoding="utf-8",
+            )
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "session-123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("session id not found", result.stdout)
+
+    def test_apply_refuses_bad_cwd_before_mutating_note(self) -> None:
+        # Second-round review finding: --cwd was resolved after patch_status() had
+        # already written "consolidated" to disk, so a symlink-loop cwd crashed with
+        # a traceback and left the note half-closed, with no rollback.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            note = create_note(brain, "session-123")
+            original = note.read_text(encoding="utf-8")
+            loop = brain / "loop"
+            loop.symlink_to(loop)
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "--cwd",
+                str(loop),
+                "--apply",
+                "consolidate",
+                "session-123",
+            )
+            content = note.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("invalid --cwd value", result.stderr)
+        self.assertEqual(content, original)
 
     def test_archive_refuses_untracked_note_without_mutating_it(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
