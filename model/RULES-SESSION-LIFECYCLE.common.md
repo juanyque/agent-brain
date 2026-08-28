@@ -63,6 +63,15 @@ Before moving a previous session note out of `WIP/SESSIONS/`, an agent must veri
 
 If any gate is uncertain, leave the note in `WIP/SESSIONS/`, mark it `stale-follow-up`, and report the exact uncertainty. Do not infer closure from age alone.
 
+### Session-close dump: two roles
+
+Closing gate item 1 ("durable state has been preserved") splits into two roles, not one:
+
+- **Drafting the summary is never delegated.** The calling agent is the only one with the full context of what happened this session and why it matters; handing that judgment to a subagent risks losing the exact nuance a compressed instruction can't carry. Draft it — what happened, why it matters — before moving to the next step.
+- **Deciding where it goes and how it's formatted is delegated.** Spawn one subagent using the runtime's subagent mechanism when available and permitted by the active instructions; otherwise do this step inline in the parent. Give it the drafted summary and let it decide the destination(s) and exact formatting by reading `BRAIN.common.md`'s "Information Maturity Model", `RULES-DAILY-NOTES.common.md`, and `RULES-FILE-NAMING.common.md` — `MEMORY/` for stable reusable knowledge, `WIP/` for active operational state, the daily note under the matching `# Actions` category otherwise, or a finalised issue working doc per "Consolidation rules" below if a tracker ticket was implemented this session. A single dispatch writing once carries no concurrent-writer risk from this session itself, but the subagent still follows "Multi-session coordination" for any file another session might also be touching (append under a unique heading, never rewrite a section it doesn't own). It reports back exactly which files it touched.
+
+This is the closing-time mirror of source ingestion's own split: there, the router carries only a reference and the subagent carries the domain knowledge needed to investigate; here, the calling agent carries the one thing that can't be delegated (why this session's work matters) and hands off the one thing that can (where this vault's own filing conventions say it belongs).
+
 ## Daily note session tracking
 
 Daily note structure (sections `# Actions`, `# Sessions`, work organization by project/context) is defined in `RULES-DAILY-NOTES.md`.
