@@ -407,6 +407,64 @@ class RegistryActivatedTests(unittest.TestCase):
             )
             self.assertTrue(ss.registry_activated(brain))
 
+    def test_longer_closing_fence_still_closes_and_reveals_the_next_link(self) -> None:
+        # Eighth-round review finding: CommonMark permits a closing fence to have
+        # MORE delimiter characters than the opener, not just the same count. A
+        # static regex backreference (`\1`) can only express "exactly equal,"
+        # which correctly rejects a too-short closer but ALSO incorrectly rejects
+        # a valid longer one -- falling through to the unclosed-to-EOF case and
+        # swallowing a genuinely rendered link after the fence actually closes.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n````\nhidden\n`````\n[[sources.registry]]\n",
+            )
+            self.assertTrue(ss.registry_activated(brain))
+
+    def test_shorter_closing_fence_still_does_not_close(self) -> None:
+        # Guards the case above: a closer SHORTER than the opener must still not
+        # close it (the third-round finding this was originally about), even
+        # after switching from a backreference to a length-aware scan.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## Anything\n\n````\nhidden\n```\n[[sources.registry]]\n",
+            )
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_indented_wikilink_example_at_document_start_does_not_activate(self) -> None:
+        # Eighth-round review finding: a line indented by 4+ spaces (or a tab) is
+        # a CommonMark indented code block, rendered as code, not as a link --
+        # but the scheduler only stripped fenced and inline code, not indented
+        # code, so an indented example still activated.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "    [[sources.registry]]\n")
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_tab_indented_wikilink_example_does_not_activate(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "\t[[sources.registry]]\n")
+            self.assertFalse(ss.registry_activated(brain))
+
+    def test_indented_line_continuing_a_paragraph_is_not_code_and_still_activates(self) -> None:
+        # Guards against over-correcting the finding above: CommonMark's own rule
+        # is that an indented code block cannot INTERRUPT a paragraph -- a
+        # 4-space-indented line immediately following non-blank prose, with no
+        # blank line between them, is a lazy CONTINUATION of that paragraph, not
+        # code. Naively treating every indented line as code would hide a
+        # legitimately rendered link that merely wraps onto an indented line.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "See the source setup notes below:\n    [[sources.registry]]\n",
+            )
+            self.assertTrue(ss.registry_activated(brain))
+
     def test_backslash_escaped_local_link_destination_activates(self) -> None:
         # Seventh-round review finding: CommonMark permits a backslash to escape
         # ASCII punctuation anywhere, including in a link destination.
@@ -1013,6 +1071,28 @@ class RegistryLevelBlockedTests(unittest.TestCase):
             _write(
                 brain / "WIP" / "SOURCES" / "sources.registry.md",
                 _registry(_entry("slack-eng", "enabld", "messaging-tool")),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertEqual(len(decisions), 1)
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("Status", decisions[0].reason)
+
+    def test_noncanonical_status_casing_is_blocked_not_case_folded_into_enabled(self) -> None:
+        # Eighth-round review finding: parse_registry_entries() case-folded the
+        # Status VALUE (not just field names) before the exact-value validation
+        # added in the seventh round ran, so "Status: ENABLED" normalized to
+        # "enabled" and passed the check trivially -- the exact-match validation
+        # could never actually observe a non-canonical spelling to reject it.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## Anything\n\n- [[sources.registry]]\n")
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(_entry("slack-eng", "ENABLED", "messaging-tool")),
             )
             _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
             _write_guide(brain)

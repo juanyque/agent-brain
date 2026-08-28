@@ -26,8 +26,9 @@ selector. It never scopes which sources are evaluated.
   valid UTF-8; a slug is registered more than once -- including one `enabled` and one
   `disabled` section for the same slug, or two `disabled` sections, or a registry entry
   with a duplicated field (e.g. two `Descriptor:` lines); a `Status:` field is missing or
-  holds any value other than exactly `enabled`/`disabled` (a typo is a fourth,
-  indeterminable state, not a silent opt-out); a registry `Descriptor:` field
+  holds any value other than exactly `enabled`/`disabled`, case included -- a typo or a
+  non-canonical casing like `ENABLED` is a fourth, indeterminable state, not a silent
+  opt-in or opt-out; a registry `Descriptor:` field
   is missing, or does not name exactly this slug (naming this slug PLUS a second,
   conflicting target is also rejected -- the field must be unambiguous, not merely
   "matches somewhere"); the descriptor is missing, symlinked (leaf or parent),
@@ -48,14 +49,18 @@ selector. It never scopes which sources are evaluated.
   `list-due` itself also checks activation (a real, local, rendered link to
   `sources.registry` -- a wikilink requires an actual closing `]]`, not just the
   opening `[[` -- excluding HTML comments -- an unclosed comment runs to end of
-  document, matching CommonMark's own raw-HTML-block semantics -- fenced or inline
-  code of any backtick/tilde run length (code-span delimiters must be exactly
-  matching, maximal runs; a shorter run does not close a longer one, and both the
-  opener and closer may carry CommonMark's 0-3-space indentation allowance), and
-  external (any URI scheme, not only `scheme://`) or protocol-relative URLs, with an
-  optional CommonMark title tolerated after the destination and a backslash-escaped
-  ASCII punctuation character in the destination unescaped before comparison) before
-  evaluating anything -- see "Usage" below. A malformed or unresolvable `--cwd` (e.g.
+  document, matching CommonMark's own raw-HTML-block semantics -- fenced code of
+  any backtick/tilde run length (a closing run must be AT LEAST as long as the
+  opener's, not exactly equal, and both the opener and closer may carry
+  CommonMark's 0-3-space indentation allowance), indented code (4+ leading spaces
+  or a tab, unless the indentation is a paragraph's lazy continuation line rather
+  than a genuine new code block), and inline code of any backtick run length
+  (delimiters must be exactly matching, maximal runs; a shorter run does not
+  close a longer one), and external (any URI scheme, not only `scheme://`) or
+  protocol-relative URLs, with an optional CommonMark title tolerated after the
+  destination and a backslash-escaped ASCII punctuation character in the
+  destination unescaped before comparison) before evaluating anything -- see
+  "Usage" below. A malformed or unresolvable `--cwd` (e.g.
   a symlink loop) is likewise blocked rather than raised, both from the CLI and from
   `capability_routes()` internally.
 

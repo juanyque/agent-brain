@@ -85,17 +85,13 @@ MARKDOWN_LINK_TARGET_RE = re.compile(
 # comments only" pattern would leave a later, unrendered Markdown link in place
 # for the extractor to pick up as if it were live text.
 HTML_COMMENT_RE = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
-# A fenced block: 3+ backticks or tildes opening a line, closed by a same-character
-# run of at least that length on a line by itself (optionally followed only by
-# trailing spaces/tabs -- CommonMark ignores those but requires nothing else), or
-# unclosed through end of string (CommonMark still treats an unclosed fence as code,
-# not prose). A line that merely STARTS with the delimiter but has other content
-# after it (e.g. a longer fence, or an info string) is not a valid close. Both the
-# opener and the closer may be indented by 0-3 leading spaces (CommonMark's own
-# fence-indentation allowance); indentation isn't otherwise significant here since
-# 4+ leading spaces would be a different construct (an indented code block) this
-# module doesn't need to model separately.
-FENCED_CODE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1[ \t]*$|\Z)", re.DOTALL | re.MULTILINE)
+# A fenced block opener: 3+ backticks or tildes, optionally indented 0-3 spaces
+# (CommonMark's own fence-indentation allowance). Matching and removing an entire
+# fenced region needs a length-aware CLOSING scan (a closer must have length >=
+# the opener's, not exactly equal -- a single static regex backreference can only
+# express "exactly equal", which incorrectly leaves a valid longer closer
+# unrecognized) -- see `_strip_fenced_code()`.
+FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 # An inline code span: N backticks, content, the same N backticks again (CommonMark
 # allows any run length, e.g. double backticks to embed a literal single backtick).
 # Both delimiter runs must be MAXIMAL (not preceded/followed by another backtick):
@@ -176,7 +172,11 @@ def parse_registry_entries(text: str) -> list[SourceEntry]:
                 # Status: is distinguishable from an explicit "Status: disabled" --
                 # both are currently indeterminable to decide_sources() and must be
                 # blocked and visible, not silently treated as an ordinary opt-out.
-                status=fields.get("status", "").casefold(),
+                # NOT casefolded: the contract requires the exact value "enabled"
+                # or "disabled", and casefolding here would silently normalize a
+                # non-canonical spelling like "ENABLED" into the canonical one
+                # before decide_sources() ever got a chance to reject it.
+                status=fields.get("status", "").strip(),
                 source_type=fields.get("type", ""),
                 descriptor=fields.get("descriptor", ""),
                 purpose=fields.get("purpose", ""),
@@ -272,6 +272,83 @@ def _read_source_file_or_issue(brain_root: Path, path: Path, label: str) -> tupl
         return None, f"{label} is not safely readable: {error}"
 
 
+def _strip_fenced_code(text: str) -> str:
+    """Remove every CommonMark fenced code block from `text`, line by line.
+
+    A single static regex can express a closing fence's CHARACTER matching the
+    opener's (backtick or tilde), but not its LENGTH constraint: CommonMark
+    requires the closer to have at least as many characters as the opener, not
+    exactly the same count. A backreference (`\\1`) can only express "exactly
+    equal," which correctly rejects a too-short closer but also incorrectly
+    rejects a valid, longer one -- leaving it to fall through to the "unclosed"
+    case and swallow a genuinely rendered link after it. Scanning line by line
+    lets the closing pattern be rebuilt per-opener with its actual length.
+    """
+    lines = text.split("\n")
+    out: list[str] = []
+    index = 0
+    total = len(lines)
+    while index < total:
+        opener = FENCE_OPEN_RE.match(lines[index])
+        if opener is None:
+            out.append(lines[index])
+            index += 1
+            continue
+        fence_char = opener.group(1)[0]
+        fence_length = len(opener.group(1))
+        closing_re = re.compile(rf"^ {{0,3}}{re.escape(fence_char)}{{{fence_length},}}[ \t]*$")
+        closing_index = index + 1
+        while closing_index < total and not closing_re.match(lines[closing_index]):
+            closing_index += 1
+        out.append("")
+        # Unclosed (closing_index reached EOF without a match): the rest of the
+        # document is code, per CommonMark's own unclosed-fence-to-EOF rule.
+        index = closing_index + 1 if closing_index < total else total
+    return "\n".join(out)
+
+
+def _strip_indented_code(text: str) -> str:
+    """Remove every CommonMark indented code block (4+ leading spaces, or a
+    leading tab) from `text`, line by line.
+
+    Not every 4-space-indented line is code: CommonMark's own rule is that an
+    indented code block cannot INTERRUPT a paragraph -- a "    line" immediately
+    following ordinary prose with no intervening blank line is a lazy
+    continuation of that paragraph, rendered as ordinary text, not code. Only a
+    blank line (or the start of the document, or an already-open code block)
+    lets an indented line start a new code block. Treating every indented line
+    as code regardless of context would hide a legitimately rendered link that
+    merely happens to follow non-blank prose in the same paragraph.
+    """
+    lines = text.split("\n")
+    out: list[str] = []
+    in_code = False
+    boundary = True
+    for line in lines:
+        is_blank = line.strip() == ""
+        is_indented = line.startswith("    ") or line.startswith("\t")
+        if in_code:
+            if is_blank:
+                out.append(line)
+                continue
+            if is_indented:
+                out.append("")
+                continue
+            in_code = False
+            boundary = False
+        if is_blank:
+            out.append(line)
+            boundary = True
+            continue
+        if is_indented and boundary:
+            in_code = True
+            out.append("")
+            continue
+        out.append(line)
+        boundary = False
+    return "\n".join(out)
+
+
 def _unescape_commonmark_punctuation(text: str) -> str:
     def repl(match: re.Match[str]) -> str:
         char = match.group(1)
@@ -286,9 +363,12 @@ def _link_target_basenames(text: str) -> list[str]:
     instead of a raw substring match (which would also match `not-sources.registry.md`
     or `sources.registry.backup`, and miss a valid link with a `#fragment`).
 
-    Excludes: HTML comments, fenced code blocks (backtick or tilde, closed or running
-    to end of file), and inline code spans of any backtick-run length (a link shown
-    only as example text is not a rendered link). Excludes external Markdown link
+    Excludes: HTML comments, fenced code blocks (backtick or tilde, closed by a
+    same-character run at least as long as the opener, or running to end of file
+    if unclosed), indented code blocks (4+ leading spaces or a tab, unless the
+    indentation is merely a paragraph's lazy continuation line), and inline code
+    spans of any backtick-run length (a link shown only as example text is not a
+    rendered link). Excludes external Markdown link
     destinations, both `scheme://...` and protocol-relative `//host/...` forms -- an
     external link that merely ends in a filename matching the registry's is not a
     local link to it. A `<...>`-bracketed destination (CommonMark's syntax for a
@@ -302,7 +382,8 @@ def _link_target_basenames(text: str) -> list[str]:
     never match the registry's actual basename.
     """
     stripped = HTML_COMMENT_RE.sub("", text)
-    stripped = FENCED_CODE_RE.sub("", stripped)
+    stripped = _strip_fenced_code(stripped)
+    stripped = _strip_indented_code(stripped)
     stripped = INLINE_CODE_RE.sub("", stripped)
     targets = [
         match.group(1).split("|", 1)[0].split("#", 1)[0].strip()
