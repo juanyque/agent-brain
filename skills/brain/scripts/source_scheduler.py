@@ -921,7 +921,14 @@ def _parse_target_list(raw: str) -> tuple[tuple[str, ...] | None, str | None]:
         return None, "empty value"
     tokens: list[str] = []
     for piece in raw.split(","):
-        token = piece.strip()
+        # strip(" \t"), not a bare strip(): a bare strip() removes every character
+        # str.isspace() considers whitespace, which includes non-printable ones
+        # like U+0085 NEXT LINE -- silently trimming exactly the kind of character
+        # the isprintable() check below exists to reject, instead of rejecting it.
+        # Only the two ASCII characters the "tolerate surrounding whitespace"
+        # convenience actually needs to handle (a space or tab after a comma) are
+        # trimmed; anything else non-printable stays in the token to be caught.
+        token = piece.strip(" \t")
         if not token:
             return None, "an identifier in the list is empty"
         # str.isprintable(), not an ASCII-only control-character regex: the ASCII
@@ -959,11 +966,17 @@ def _coverage_issue(declared: tuple[str, ...] | None, scanned: str | None, statu
     untouched. Coverage must be a SUPERSET of the declared set: scanning more than
     required is fine, scanning less is exactly the gap this feature exists to catch.
     """
+    # Checked before the "no manifest declared" branch below, not after: degraded
+    # must be exempt from every coverage rule regardless of whether a manifest
+    # exists, not just when one does -- a descriptor with no `Scan targets:` at all
+    # incorrectly rejected `degraded --scanned <anything>` when this order was
+    # reversed, contradicting the documented "degraded never requires or validates
+    # --scanned" contract.
+    if status not in WATERMARK_STATUSES:
+        return None
     if declared is None:
         if scanned is not None:
             return "descriptor declares no 'Scan targets': --scanned is not accepted"
-        return None
-    if status not in WATERMARK_STATUSES:
         return None
     if scanned is None:
         return f"descriptor declares 'Scan targets': --scanned is required for status {status!r}"
@@ -1186,14 +1199,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _single_line(text: str) -> str:
-    """Escape any control character (in particular a newline) to a visible `\\xHH`
-    sequence before writing untrusted text to the audit log. `build_command_string()`
-    shell-quotes each argument, but `shlex.quote()` only makes a value shell-safe to
-    RE-RUN -- it does not strip an embedded newline, so an unvalidated `--scanned`
-    (echoed here before its own validation ever runs) could otherwise make the
-    logged command line span multiple lines and forge what looks like a distinct,
-    later, successful log entry."""
-    return "".join(f"\\x{ord(char):02x}" if ord(char) < 0x20 or ord(char) == 0x7F else char for char in text)
+    """Escape `text` to a single, unambiguous log line before writing untrusted
+    content to the audit log. `build_command_string()` shell-quotes each argument,
+    but `shlex.quote()` only makes a value shell-safe to RE-RUN -- it does not strip
+    an embedded newline, so an unvalidated `--scanned` (echoed here before its own
+    validation ever runs) could otherwise make the logged command line span
+    multiple lines and read as a distinct, later, successful log entry.
+
+    `char.isprintable()`, not an ASCII-only range: the ASCII C0/DEL range alone
+    misses Unicode line/paragraph separators (U+2028, U+2029) and other
+    non-printables (e.g. U+0085 NEXT LINE), which a strict ASCII check would let
+    through to still fragment the line. A literal backslash is escaped FIRST, so
+    the escaped output stays injective: without it, real byte 0x0a and the four
+    literal characters `\\`, `x`, `0`, `a` both render as the identical text
+    `\\x0a`, and a reader could never tell which one actually appeared.
+    """
+    out: list[str] = []
+    for char in text:
+        if char == "\\":
+            out.append("\\\\")
+        elif char.isprintable():
+            out.append(char)
+        else:
+            code = ord(char)
+            out.append(f"\\x{code:02x}" if code <= 0xFF else f"\\u{code:04x}")
+    return "".join(out)
 
 
 def run_mark_checked(

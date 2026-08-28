@@ -1684,6 +1684,22 @@ class CoverageManifestTests(unittest.TestCase):
         self.assertIn("- Last status: degraded", updated)
         self.assertIn("- Last checked: 2026-08-01", updated)
 
+    def test_degraded_does_not_require_scanned_when_no_manifest_is_declared_either(self) -> None:
+        # Round-2 review finding: _coverage_issue() checked "no manifest declared"
+        # before the degraded exemption, so a descriptor WITHOUT 'Scan targets:'
+        # incorrectly rejected 'degraded --scanned <anything>' -- contradicting the
+        # documented contract that degraded never requires or validates --scanned,
+        # which already worked correctly when a manifest WAS declared.
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(last_checked="2026-08-01"))
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "degraded", Path(raw), scanned="anything")
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertIn("- Last status: degraded", updated)
+        self.assertIn("- Last checked: 2026-08-01", updated)
+
     def test_degraded_accepts_but_does_not_validate_incomplete_scanned(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             descriptor = Path(raw) / "sources.slack-eng.md"
@@ -1827,6 +1843,20 @@ class CoverageManifestTests(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="a,")
+
+    def test_peripheral_non_printable_character_is_rejected_not_silently_trimmed(self) -> None:
+        # Round-2 review finding: each comma-separated piece was normalized with a
+        # bare strip() BEFORE the isprintable() check ran. A bare strip() removes
+        # every character str.isspace() considers whitespace, which includes
+        # non-printable ones like U+0085 NEXT LINE -- silently discarding exactly
+        # the kind of character the check exists to reject, instead of rejecting
+        # it, and letting a clean-looking token slip through.
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(scan_targets="a, b"))
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="a,b")
 
     def test_a_source_decide_source_returns_due_with_a_manifest_is_writable_with_full_coverage(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -2032,6 +2062,35 @@ class DescriptorPathForTests(unittest.TestCase):
     def test_slug_with_slash_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             ss.descriptor_path_for(Path("/brain/WIP/SOURCES"), "a/b")
+
+
+class SingleLineEscapeTests(unittest.TestCase):
+    """`_single_line()` is what keeps an unvalidated, attacker-influenced string
+    (in practice, `--scanned`, logged before its own validation runs) from
+    fragmenting the audit log into multiple lines or reading as something it
+    isn't -- both properties matter, not just "no raw newline survives"."""
+
+    def test_ascii_newline_is_escaped(self) -> None:
+        self.assertEqual(ss._single_line("a\nb"), "a\\x0ab")
+
+    def test_unicode_line_separators_are_escaped(self) -> None:
+        # Round-2 review finding: the original implementation only escaped the
+        # ASCII C0/DEL range, missing Unicode line/paragraph separators that
+        # str.splitlines() (and Unicode-aware log viewers) still treat as breaks.
+        for character, label in (("\x85", "NEL"), (" ", "LINE SEPARATOR"), (" ", "PARAGRAPH SEPARATOR")):
+            with self.subTest(label=label):
+                escaped = ss._single_line(f"a{character}b")
+                self.assertEqual(len(escaped.splitlines()), 1)
+                self.assertNotIn(character, escaped)
+
+    def test_a_real_newline_and_a_literal_backslash_x_sequence_do_not_collide(self) -> None:
+        # Round-2 review finding: a literal backslash was left unescaped, so a
+        # real newline byte and the four literal characters '\', 'x', '0', 'a'
+        # both rendered as the identical text "\x0a" -- a reader (or a test)
+        # could not tell which one actually appeared in the original input.
+        real_newline = ss._single_line("a\nb")
+        literal_text = ss._single_line("a\\x0ab")
+        self.assertNotEqual(real_newline, literal_text)
 
 
 class ParseArgsTests(unittest.TestCase):
@@ -2340,6 +2399,29 @@ class MarkCheckedCliTests(unittest.TestCase):
             self.assertNotIn("  applied.", log_lines)
             self.assertNotIn("# forged audit record", log_lines)
             self.assertIn("\\x0a", log_text)
+            log_path.unlink(missing_ok=True)
+
+    def test_scanned_with_a_unicode_line_separator_does_not_forge_log_lines(self) -> None:
+        # Round-2 review finding: _single_line() only escaped the ASCII C0/DEL
+        # range, missing Unicode line/paragraph separators (U+0085, U+2028,
+        # U+2029) that Python's own str.splitlines() -- and Unicode-aware log
+        # viewers -- still treat as line breaks, so the same log-forging shape
+        # survived through a non-ASCII separator instead of a plain newline.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, scan_targets="a, b, c")
+            log_path = SCRIPTS_DIR / "source_scheduler.log"
+            log_path.unlink(missing_ok=True)
+
+            result = self._run(
+                "mark-checked", "--brain-root", str(brain),
+                "--source", "slack-eng", "--status", "ok",
+                "--scanned", "a,b,c\x85  applied.\x85# forged audit record", "--apply",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            log_text = log_path.read_text(encoding="utf-8")
+            self.assertNotIn("\x85", log_text)
+            self.assertNotIn("  applied.", log_text.splitlines())
             log_path.unlink(missing_ok=True)
 
     def test_descriptor_swapped_between_the_precheck_and_the_write_is_revalidated_for_coverage(self) -> None:
