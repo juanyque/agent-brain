@@ -1213,6 +1213,14 @@ def _single_line(text: str) -> str:
     the escaped output stays injective: without it, real byte 0x0a and the four
     literal characters `\\`, `x`, `0`, `a` both render as the identical text
     `\\x0a`, and a reader could never tell which one actually appeared.
+
+    Each escape form is FIXED-width (2/4/8 hex digits for `\\x`/`\\u`/`\\U`,
+    matching Python's own escape-sequence convention), not a minimum width: a
+    variable-width `\\u` could otherwise run together with a following printable
+    hex digit -- U+10C6 followed by the literal character "0" and the single
+    supplementary-plane codepoint U+10C60 would both render as `\\u10c60` with no
+    way to tell them apart, defeating the same injectivity guarantee the
+    backslash-escaping above exists to provide.
     """
     out: list[str] = []
     for char in text:
@@ -1222,7 +1230,12 @@ def _single_line(text: str) -> str:
             out.append(char)
         else:
             code = ord(char)
-            out.append(f"\\x{code:02x}" if code <= 0xFF else f"\\u{code:04x}")
+            if code <= 0xFF:
+                out.append(f"\\x{code:02x}")
+            elif code <= 0xFFFF:
+                out.append(f"\\u{code:04x}")
+            else:
+                out.append(f"\\U{code:08x}")
     return "".join(out)
 
 

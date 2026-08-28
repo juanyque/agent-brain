@@ -2092,6 +2092,17 @@ class SingleLineEscapeTests(unittest.TestCase):
         literal_text = ss._single_line("a\\x0ab")
         self.assertNotEqual(real_newline, literal_text)
 
+    def test_a_bmp_escape_and_a_supplementary_plane_escape_do_not_collide(self) -> None:
+        # Round-3 review finding: a variable-width `\uHHHH` (minimum 4 digits, no
+        # upper bound) let a BMP escape run together with a following printable
+        # hex digit: U+10C6 followed by the literal character "0" and the single
+        # supplementary-plane codepoint U+10C60 both rendered as the identical
+        # text "჆0". Fixed-width escapes per range (2/4/8 hex digits for
+        # \x/\u/\U, matching Python's own convention) keep the two distinguishable.
+        two_codepoints = ss._single_line("჆" + "0")
+        one_codepoint = ss._single_line("\U00010c60")
+        self.assertNotEqual(two_codepoints, one_codepoint)
+
 
 class ParseArgsTests(unittest.TestCase):
     def test_documented_skill_argument_order_parses(self) -> None:
