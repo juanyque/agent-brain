@@ -196,6 +196,26 @@ def remove_wip_tag(note_path: Path, apply: bool) -> bool:
     return True
 
 
+def find_journal_registration(brain_root: Path, session_id: str) -> Path | None:
+    """Return the first JOURNAL/*.md daily note that mentions session_id, or None.
+
+    Verifies the consolidation checklist's "Session ID written in daily note"
+    item against the actual daily notes on disk instead of trusting the
+    session note's own self-reported checkbox.
+    """
+    journal_dir = brain_root / "JOURNAL"
+    if not journal_dir.is_dir():
+        return None
+    for path in sorted(journal_dir.glob("*.md")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if session_id in text:
+            return path
+    return None
+
+
 def archive_preflight(brain_root: Path, src: Path, dst: Path) -> tuple[bool, str]:
     """Refuse an archive that git cannot perform before mutating the note."""
     if dst.exists() or dst.is_symlink():
@@ -321,6 +341,19 @@ def main() -> int:
             return 1
 
     if subcommand == "consolidate":
+        registration = find_journal_registration(brain_root, session_id)
+        if registration is not None:
+            print(
+                f"  verified: session id found in {registration.relative_to(brain_root)} "
+                "(JOURNAL registration confirmed on disk)"
+            )
+        else:
+            print(
+                "  WARNING: session id not found in any JOURNAL/*.md daily note -- "
+                "the 'Session ID written in daily note' consolidation-checklist item "
+                "cannot be confirmed from disk; verify manually before archiving"
+            )
+
         wip_changed = remove_wip_tag(note_path, apply=args.apply)
         if wip_changed:
             action = "removed" if args.apply else "would remove"

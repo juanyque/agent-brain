@@ -178,6 +178,47 @@ class SessionCloseTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("- Status: handoff-only", content)
 
+    def test_consolidate_reports_missing_journal_registration(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            create_note(brain, "session-123")
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "session-123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("WARNING", result.stdout)
+        self.assertIn("session id not found", result.stdout)
+
+    def test_consolidate_verifies_journal_registration_against_disk(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            create_note(brain, "session-123")
+            journal_dir = brain / "JOURNAL"
+            journal_dir.mkdir(parents=True)
+            daily = journal_dir / "2026-07-21.md"
+            daily.write_text(
+                "# Sessions\n"
+                "- `cd /repo && claude --resume session-123` — topic. "
+                "Session note: [[...]]\n",
+                encoding="utf-8",
+            )
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "session-123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("verified", result.stdout)
+        self.assertIn("2026-07-21.md", result.stdout)
+
     def test_archive_refuses_untracked_note_without_mutating_it(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)
