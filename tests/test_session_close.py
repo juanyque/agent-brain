@@ -516,6 +516,81 @@ class SessionCloseTests(unittest.TestCase):
         self.assertIn("invalid --cwd value", result.stderr)
         self.assertEqual(content, original)
 
+    def test_apply_refuses_nonexistent_cwd_before_mutating_note(self) -> None:
+        # Round-5 review finding, verified directly against a real Python 3.14
+        # interpreter on this machine: 3.14 changed Path.resolve() to no longer
+        # raise for a symlink loop, so the try/except above alone stops being
+        # enough on that version -- a looping --cwd would silently "resolve" and
+        # sail through. A nonexistent --cwd exercises the same is_dir() guard on
+        # any Python version, since resolve() doesn't require the path to exist
+        # either way.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            note = create_note(brain, "session-123")
+            original = note.read_text(encoding="utf-8")
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "--cwd",
+                str(brain / "does-not-exist"),
+                "--apply",
+                "consolidate",
+                "session-123",
+            )
+            content = note.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("not a directory", result.stderr)
+        self.assertEqual(content, original)
+
+    def test_resolve_full_session_id_falls_back_to_bare_generic_runtime_id(self) -> None:
+        # Round-5 review finding: session_digest.resume_command() returns the
+        # bare session id with no verb at all for an unrecognized/generic
+        # runtime, so the verb-based regex alone can't extract anything from it.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            note = brain / "WIP" / "SESSIONS" / "2026-07-21-session-abc123full-test.md"
+            note.parent.mkdir(parents=True)
+            note.write_text(
+                "---\ntags: [session, wip]\n---\n"
+                "# Session abc123full\n\n"
+                "## State\n- Status: open\n\n"
+                "## Resume command\n"
+                "- `abc123full`\n\n"
+                "## Immediate next step\n- none\n",
+                encoding="utf-8",
+            )
+
+            resolved = session_close.resolve_full_session_id(note, "abc123")
+
+        self.assertEqual(resolved, "abc123full")
+
+    def test_resolve_full_session_id_ignores_double_ampersand_inside_quoted_cwd(
+        self,
+    ) -> None:
+        # Round-5 review finding: a plain, quote-unaware split on the first
+        # "&&" stopped inside a quoted cwd that itself happened to contain that
+        # literal two-character sequence, before ever reaching the real
+        # command separator later on the line.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            note = brain / "WIP" / "SESSIONS" / "2026-07-21-session-abc123full-test.md"
+            note.parent.mkdir(parents=True)
+            note.write_text(
+                "---\ntags: [session, wip]\n---\n"
+                "# Session abc123full\n\n"
+                "## State\n- Status: open\n\n"
+                "## Resume command\n"
+                "- `cd '/tmp/a&&resume project' && claude --resume abc123full`\n\n"
+                "## Immediate next step\n- none\n",
+                encoding="utf-8",
+            )
+
+            resolved = session_close.resolve_full_session_id(note, "abc123")
+
+        self.assertEqual(resolved, "abc123full")
+
     def test_archive_refuses_untracked_note_without_mutating_it(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)

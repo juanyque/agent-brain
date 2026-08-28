@@ -238,6 +238,32 @@ def _heading_section(text: str, heading: str) -> str | None:
 RESUME_ID_RE = re.compile(r"(?:--resume|--conversation|\bresume|(?<!\S)-s)\s+(\S+)")
 
 
+def _split_unquoted(line: str, sep: str) -> str | None:
+    """Return the text after the first `sep` that appears outside any quoted
+    span, or None if `sep` never appears unquoted.
+
+    session_digest.py's resume_command() always builds the recovery command as
+    'cd {shlex.quote(cwd)} && <command>' -- shlex.quote() quotes the cwd whenever
+    it contains a shell metacharacter, so a real '&&' separator is never itself
+    inside quotes. But a plain, quote-unaware split on the first '&&' would still
+    stop early if the quoted cwd's own text happens to contain that literal
+    two-character sequence (e.g. a directory named '.../a&&resume project').
+    """
+    quote: str | None = None
+    seplen = len(sep)
+    for index, char in enumerate(line):
+        if quote:
+            if char == quote:
+                quote = None
+            continue
+        if char in "'\"":
+            quote = char
+            continue
+        if line[index : index + seplen] == sep:
+            return line[index + seplen :]
+    return None
+
+
 def _command_after_cwd(text: str) -> str:
     """Drop a leading 'cd <dir> && ' prefix from each line before scanning for a
     resume verb. Every canonical recovery command has this shape (see
@@ -248,9 +274,28 @@ def _command_after_cwd(text: str) -> str:
     """
     lines = []
     for line in text.splitlines():
-        _, sep, remainder = line.partition("&&")
-        lines.append(remainder if sep else line)
+        remainder = _split_unquoted(line, "&&")
+        lines.append(remainder if remainder is not None else line)
     return "\n".join(lines)
+
+
+def _bare_resume_id(section: str) -> str | None:
+    """Fallback for a runtime with no known resume-command template.
+
+    session_digest.py's resume_command() returns the bare session id itself
+    (no verb, no 'cd ... &&' prefix at all) when the runtime isn't one of the
+    ones with a known template (e.g. '--runtime generic'), matching this
+    model's own documented "leave a clearly-marked placeholder... for other
+    runtimes" fallback. If the whole '## Resume command' section is just one
+    bulleted, backtick-quoted bare token, that token is the id.
+    """
+    lines = [line.strip() for line in section.splitlines() if line.strip()]
+    if len(lines) != 1:
+        return None
+    candidate = lines[0].lstrip("-").strip().strip("`").strip()
+    if candidate and " " not in candidate:
+        return candidate
+    return None
 
 
 def resolve_full_session_id(note_path: Path, fallback: str) -> str:
@@ -270,9 +315,12 @@ def resolve_full_session_id(note_path: Path, fallback: str) -> str:
     if section is None:
         return fallback
     match = RESUME_ID_RE.search(_command_after_cwd(section))
-    if match is None:
-        return fallback
-    return match.group(1).strip("`")
+    if match is not None:
+        return match.group(1).strip("`")
+    bare = _bare_resume_id(section)
+    if bare is not None:
+        return bare
+    return fallback
 
 
 def find_journal_registration(brain_root: Path, session_id: str) -> Path | None:
@@ -379,6 +427,17 @@ def main() -> int:
             cwd_arg = Path(args.cwd).expanduser().resolve()
         except (RuntimeError, OSError) as error:
             print(f"ERROR: invalid --cwd value: {args.cwd!r} ({error})", file=sys.stderr)
+            return 1
+        if not cwd_arg.is_dir():
+            # Belt-and-suspenders past the try/except above: Python 3.14 changed
+            # Path.resolve() to no longer raise on a symlink loop (verified
+            # directly against a real loop on this machine), so a looping --cwd
+            # would otherwise sail through as a "resolved" path that is not
+            # actually a usable directory. is_dir() still correctly reports
+            # False for it on every Python version, since the underlying stat()
+            # call still fails with ELOOP regardless of resolve()'s own
+            # raise-or-not behavior.
+            print(f"ERROR: invalid --cwd value: {args.cwd!r} (not a directory)", file=sys.stderr)
             return 1
 
     mode = "apply" if args.apply else "dry-run"
