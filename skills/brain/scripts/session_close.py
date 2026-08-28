@@ -20,6 +20,7 @@ import argparse
 import re
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 
@@ -29,6 +30,7 @@ if str(MODEL_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(MODEL_SCRIPTS))
 
 from brain_state import current_brain_status, current_model_root  # noqa: E402
+from source_scheduler import decide_sources  # noqa: E402
 
 
 VALID_TRANSITIONS: dict[str, list[str]] = {
@@ -65,6 +67,13 @@ def parse_args() -> argparse.Namespace:
         "--apply",
         action="store_true",
         help="Write changes. Default is dry-run.",
+    )
+    parser.add_argument(
+        "--cwd",
+        default="",
+        help="Session cwd used only to select an environment profile for the "
+        "still-due-sources check (default: brain root). Never affects which "
+        "sources are evaluated -- source ingestion is brain-scoped.",
     )
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
 
@@ -353,6 +362,21 @@ def main() -> int:
                 "the 'Session ID written in daily note' consolidation-checklist item "
                 "cannot be confirmed from disk; verify manually before archiving"
             )
+
+        cwd_arg = Path(args.cwd).expanduser().resolve() if args.cwd else None
+        still_due = [
+            decision
+            for decision in decide_sources(brain_root, date.today(), cwd_arg)
+            if decision.due and not decision.blocked
+        ]
+        if still_due:
+            names = ", ".join(decision.slug for decision in still_due)
+            print(
+                f"  WARNING: still due at close, uninvestigated: {names} -- "
+                "confirm this was intentional, or investigate before consolidating"
+            )
+        else:
+            print("  verified: no sources are still due (checked against WIP/SOURCES/ on disk)")
 
         wip_changed = remove_wip_tag(note_path, apply=args.apply)
         if wip_changed:

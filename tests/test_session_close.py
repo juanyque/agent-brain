@@ -6,8 +6,11 @@ import tempfile
 import unittest
 import io
 from contextlib import redirect_stderr, redirect_stdout
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
+
+from tests.test_source_scheduler import _build_working_brain
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -218,6 +221,43 @@ class SessionCloseTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("verified", result.stdout)
         self.assertIn("2026-07-21.md", result.stdout)
+
+    def test_consolidate_reports_still_due_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            create_note(brain, "session-123")
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "session-123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("WARNING", result.stdout)
+        self.assertIn("still due", result.stdout)
+        self.assertIn("slack-eng", result.stdout)
+
+    def test_consolidate_verifies_no_sources_due(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(
+                raw,
+                last_checked=date.today().isoformat(),
+                cadence="9999",
+            )
+            create_note(brain, "session-123")
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "session-123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("verified: no sources are still due", result.stdout)
+        self.assertNotIn("still due", result.stdout.replace("no sources are still due", ""))
 
     def test_archive_refuses_untracked_note_without_mutating_it(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
