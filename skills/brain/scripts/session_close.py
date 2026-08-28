@@ -235,7 +235,7 @@ def _heading_section(text: str, heading: str) -> str | None:
     return None
 
 
-RESUME_ID_RE = re.compile(r"(?:--resume|--conversation|\bresume)\s+(\S+)")
+RESUME_ID_RE = re.compile(r"(?:--resume|--conversation|\bresume|(?<!\S)-s)\s+(\S+)")
 
 
 def resolve_full_session_id(note_path: Path, fallback: str) -> str:

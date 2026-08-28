@@ -401,6 +401,44 @@ class SessionCloseTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("verified: session id found", result.stdout)
 
+    def test_journal_registration_resolves_full_id_from_opencode_resume_command(
+        self,
+    ) -> None:
+        # Round-3 review finding: resolve_full_session_id()'s regex recognized
+        # --resume/--conversation/resume but not OpenCode's own canonical form,
+        # "opencode -s <full-id>" (session_digest.py's RESUME_COMMANDS), so an
+        # OpenCode session closed via prefix still false-negatived.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            (brain / "_COMMON").symlink_to(MODEL_ROOT, target_is_directory=True)
+            note = brain / "WIP" / "SESSIONS" / "2026-07-21-session-ses-abc123full-test.md"
+            note.parent.mkdir(parents=True)
+            note.write_text(
+                "---\ntags: [session, wip]\n---\n"
+                "# Session ses-abc123full\n\n"
+                "## State\n- Status: open\n\n"
+                "## Resume command\n"
+                "- `cd /repo && opencode -s ses-abc123full`\n\n"
+                "## Immediate next step\n- none\n",
+                encoding="utf-8",
+            )
+            journal_dir = brain / "JOURNAL"
+            journal_dir.mkdir(parents=True)
+            (journal_dir / "2026-07-21.md").write_text(
+                "# Sessions\n- `cd /repo && opencode -s ses-abc123full` — topic.\n",
+                encoding="utf-8",
+            )
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "ses-abc123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("verified: session id found", result.stdout)
+
     def test_journal_registration_finds_notes_archived_under_a_year_subfolder(self) -> None:
         # Round-2 review finding: a hardcoded, non-recursive "JOURNAL/*.md" glob
         # missed daily notes yearly maintenance already moved to JOURNAL/<year>/
