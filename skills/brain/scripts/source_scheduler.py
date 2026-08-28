@@ -119,6 +119,22 @@ VALID_STATUS = ("ok", "no_activity", "degraded")
 WATERMARK_STATUSES = ("ok", "no_activity")
 NEVER_CHECKED_SENTINELS = {"", "not checked", "none"}
 
+# `Scan targets:` (optional, descriptor-authored) and `Quiet streak (checks):` (script-owned,
+# like the two watermark fields) -- see mark_checked()/decide_source()/check-health.
+SCAN_TARGETS_FIELD = "scan targets"
+QUIET_STREAK_FIELD = "quiet streak (checks)"
+# A hardcoded constant, not a per-source configurable field: keeps the advisory's scope to "one
+# reasonable default" rather than one more thing every descriptor has to think about.
+QUIET_STREAK_ADVISORY_THRESHOLD = 10
+# A plain, unsigned, bounded decimal -- not whatever int() would accept (leading '+', a sign,
+# underscores as digit separators, non-ASCII digits, or an arbitrarily long run of them). A
+# corrupted counter must fail closed as "malformed", not be silently reinterpreted.
+QUIET_STREAK_VALUE_RE = re.compile(r"^\d{1,9}$")
+# Rejected in both a declared scan-target identifier and a --scanned value: a control character
+# (in particular a newline) could otherwise forge an extra line in the mark-checked log output,
+# or -- if a future change ever persisted --scanned -- forge a descriptor field.
+FORBIDDEN_IDENTIFIER_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
+
 
 @dataclass
 class SourceEntry:
@@ -141,17 +157,21 @@ class SourceDecision:
     cadence_days: int
 
 
+def _strip_one_backtick_pair(value: str) -> str:
+    """A field value is often written as inline code (`` `issues.search` ``,
+    `` `always` ``) -- natural Markdown style for a technical token. Strip one
+    surrounding pair so parsing doesn't depend on the author's styling."""
+    if len(value) >= 2 and value.startswith("`") and value.endswith("`"):
+        return value[1:-1].strip()
+    return value
+
+
 def parse_fields(lines: list[str]) -> dict[str, str]:
     fields: dict[str, str] = {}
     for line in lines:
         match = FIELD_RE.match(line)
         if match:
-            value = match.group(2).strip()
-            # A field value is often written as inline code (`issues.search`,
-            # `always`) -- natural Markdown style for a technical token. Strip one
-            # surrounding pair so parsing doesn't depend on the author's styling.
-            if len(value) >= 2 and value.startswith("`") and value.endswith("`"):
-                value = value[1:-1].strip()
+            value = _strip_one_backtick_pair(match.group(2).strip())
             fields[match.group(1).strip().casefold()] = value
     return fields
 
@@ -557,6 +577,10 @@ def decide_source(
     if not fields.get("locator", "").strip():
         return blocked("missing 'Locator'")
 
+    _, targets_issue = _declared_scan_targets(fields)
+    if targets_issue is not None:
+        return blocked(targets_issue)
+
     cadence_raw = fields.get("check cadence (days)", "").strip()
     if not cadence_raw:
         return blocked("missing 'Check cadence (days)'")
@@ -576,6 +600,15 @@ def decide_source(
         return blocked("missing 'Last checked'")
     last_checked_raw = fields["last checked"].strip()
     never_checked = last_checked_raw.casefold() in NEVER_CHECKED_SENTINELS
+
+    # Before the `always`-cadence early return below, not after: an `always` source
+    # with a corrupted counter must be blocked here rather than dispatched forever --
+    # mark_checked() would refuse to write the same malformed value, so leaving this
+    # check only in the non-`always` path would make such a source perpetually due
+    # and permanently unmarkable.
+    _, streak_issue = _parse_quiet_streak(fields)
+    if streak_issue is not None:
+        return blocked(streak_issue)
 
     if cadence_days == 0:
         if never_checked:
@@ -706,6 +739,93 @@ def summarize_due_sources(brain_root: Path, today: date, cwd: Path | None = None
     return lines
 
 
+@dataclass
+class SourceHealth:
+    slug: str
+    source_type: str
+    quiet_streak: int | None
+    advisory: bool
+    issue: str | None
+
+
+def source_health(brain_root: Path) -> list[SourceHealth]:
+    """Every enabled source's quiet-streak advisory state -- purely informational,
+    descriptor-local, and read-only: no capability/profile resolution (an advisory
+    has nothing to do with which environment profile a session's cwd selects), and
+    nothing here ever writes, blocks a session, or disables a source.
+
+    Mirrors `decide_sources()`'s own visibility doctrine (an unreadable registry, a
+    duplicate slug, or an invalid `Status:` is reported rather than silently
+    dropped) without duplicating its due/blocked decision logic, which is entirely
+    irrelevant to a quiet-streak advisory.
+    """
+    sources_dir = brain_root / "WIP" / "SOURCES"
+    registry_path = sources_dir / "sources.registry.md"
+
+    registry_text, registry_issue = _read_source_file_or_issue(brain_root, registry_path, "sources.registry.md")
+    if registry_issue is not None:
+        return [SourceHealth("(registry)", "", None, False, registry_issue)]
+
+    all_entries = parse_registry_entries(registry_text)
+    duplicate_slugs = {
+        slug for slug in {entry.slug for entry in all_entries}
+        if sum(1 for entry in all_entries if entry.slug == slug) > 1
+    }
+
+    results: list[SourceHealth] = []
+    reported_duplicates: set[str] = set()
+    for entry in all_entries:
+        if entry.slug in duplicate_slugs:
+            if entry.slug in reported_duplicates:
+                continue
+            reported_duplicates.add(entry.slug)
+            results.append(
+                SourceHealth(entry.slug, entry.source_type, None, False, "duplicate registry entry for this slug")
+            )
+            continue
+        if entry.status not in ("enabled", "disabled"):
+            results.append(
+                SourceHealth(
+                    entry.slug, entry.source_type, None, False,
+                    f"missing or invalid registry 'Status': {entry.status!r}",
+                )
+            )
+            continue
+        if entry.status != "enabled":
+            continue
+        descriptor_path = descriptor_path_for(sources_dir, entry.slug)
+        descriptor_text, descriptor_issue = _read_source_file_or_issue(brain_root, descriptor_path, "descriptor")
+        if descriptor_issue is not None:
+            results.append(SourceHealth(entry.slug, entry.source_type, None, False, descriptor_issue))
+            continue
+        if entry.duplicate_fields:
+            results.append(
+                SourceHealth(
+                    entry.slug, entry.source_type, None, False,
+                    f"duplicate field(s) in registry entry: {', '.join(sorted(entry.duplicate_fields))}",
+                )
+            )
+            continue
+        fields = parse_fields(descriptor_text.splitlines())
+        duplicates = _duplicate_field_keys(descriptor_text.splitlines())
+        if duplicates:
+            results.append(
+                SourceHealth(
+                    entry.slug, entry.source_type, None, False,
+                    f"duplicate field(s) in descriptor: {', '.join(sorted(duplicates))}",
+                )
+            )
+            continue
+        streak, streak_issue = _parse_quiet_streak(fields)
+        if streak_issue is not None:
+            results.append(SourceHealth(entry.slug, entry.source_type, None, False, streak_issue))
+            continue
+        results.append(
+            SourceHealth(entry.slug, entry.source_type, streak, streak >= QUIET_STREAK_ADVISORY_THRESHOLD, None)
+        )
+    return results
+
+
 def _atomic_write(path: Path, content: str, brain_root: Path) -> None:
     """Write `content` to `path` via a uniquely named temp file created with
     O_EXCL|O_CREAT in the same directory, then an atomic rename -- all relative to a
@@ -766,9 +886,128 @@ def _atomic_write(path: Path, content: str, brain_root: Path) -> None:
 # decide_source() returns as due becomes one mark_checked() refuses to write.
 LAST_CHECKED_LINE_RE = re.compile(r"(?mi)^-\s+Last checked:.*$")
 LAST_STATUS_LINE_RE = re.compile(r"(?mi)^-\s+Last status:.*$")
+# Same `-\s+` tolerance, for the same reason, applied to the third script-owned field.
+QUIET_STREAK_LINE_RE = re.compile(r"(?mi)^-\s+Quiet streak \(checks\):.*$")
 
 
-def _mark_checked_content_issue(text: str) -> str | None:
+def _parse_target_list(raw: str) -> tuple[tuple[str, ...] | None, str | None]:
+    """Split a comma-separated list of opaque scan-target identifiers, tolerating
+    surrounding whitespace around each one. Returns `(tokens, None)` or
+    `(None, issue)`. Used for both a descriptor's declared `Scan targets:` and a
+    `--scanned` claim -- the same shape, the same rules.
+
+    No per-token backtick handling here: a declared `Scan targets:` value already
+    gets ONE backtick pair stripped from the WHOLE field by `parse_fields()` (the
+    same convenience every other field value gets, e.g. `` `issues.search` ``), so
+    wrapping the entire list once (`` `a, b, c` ``) already works for free. Wrapping
+    each identifier individually would collide with that whole-value stripping
+    (the first and last identifier's backticks would be consumed as the field's
+    own pair, not each token's), so it is intentionally not supported.
+    """
+    if not raw.strip():
+        return None, "empty value"
+    tokens: list[str] = []
+    for piece in raw.split(","):
+        token = piece.strip()
+        if not token:
+            return None, "an identifier in the list is empty"
+        if FORBIDDEN_IDENTIFIER_CHAR_RE.search(token):
+            return None, "an identifier contains a control character"
+        tokens.append(token)
+    return tuple(tokens), None
+
+
+def _declared_scan_targets(fields: dict[str, str]) -> tuple[tuple[str, ...] | None, str | None]:
+    """`(None, None)` when `Scan targets:` is absent -- the source does not fan out
+    to multiple targets, and every coverage rule below is simply skipped, unchanged
+    from before this feature existed. `(tokens, None)` for a valid declaration.
+    `(None, issue)` when the field is present but malformed."""
+    raw = fields.get(SCAN_TARGETS_FIELD)
+    if raw is None:
+        return None, None
+    tokens, issue = _parse_target_list(raw)
+    if issue is not None:
+        return None, f"malformed 'Scan targets': {issue}"
+    return tokens, None
+
+
+def _coverage_issue(declared: tuple[str, ...] | None, scanned: str | None, status: str) -> str | None:
+    """Whether a `--scanned` claim satisfies a descriptor's declared `Scan targets:`
+    for the given status -- the whole of the coverage-manifest policy, in one place,
+    so the dry-run preview and the actual write can never disagree about it.
+
+    `ok`/`no_activity` are completeness claims ("I checked and here's what I found");
+    `degraded` is not ("I could not complete this check"), so it never requires or
+    validates `--scanned` -- consistent with `degraded` already leaving the watermark
+    untouched. Coverage must be a SUPERSET of the declared set: scanning more than
+    required is fine, scanning less is exactly the gap this feature exists to catch.
+    """
+    if declared is None:
+        if scanned is not None:
+            return "descriptor declares no 'Scan targets': --scanned is not accepted"
+        return None
+    if status not in WATERMARK_STATUSES:
+        return None
+    if scanned is None:
+        return f"descriptor declares 'Scan targets': --scanned is required for status {status!r}"
+    scanned_tokens, issue = _parse_target_list(scanned)
+    if issue is not None:
+        return f"malformed --scanned: {issue}"
+    missing = sorted(target for target in declared if target not in scanned_tokens)
+    if missing:
+        return "incomplete coverage: --scanned is missing declared scan target(s): " + ", ".join(missing)
+    return None
+
+
+def _parse_quiet_streak(fields: dict[str, str]) -> tuple[int, str | None]:
+    """`(0, None)` when `Quiet streak (checks):` is absent -- absent means zero,
+    the same as a freshly templated descriptor. `(n, None)` for a valid counter.
+    `(0, issue)` when the field is present but not a plain, bounded, unsigned
+    decimal -- not whatever `int()` would otherwise accept (a leading sign,
+    underscore digit separators, non-ASCII digits, an unbounded number of digits)."""
+    raw = fields.get(QUIET_STREAK_FIELD)
+    if raw is None:
+        return 0, None
+    if not QUIET_STREAK_VALUE_RE.match(raw):
+        return 0, f"malformed 'Quiet streak (checks)': {raw!r}"
+    return int(raw), None
+
+
+def _next_quiet_streak(current: int, status: str) -> int | None:
+    """The streak value after this check, or `None` to leave the field completely
+    untouched -- a `degraded` check tells us nothing about actual activity, so it
+    must not reset OR advance the streak, matching its existing watermark behavior."""
+    if status == "no_activity":
+        return current + 1
+    if status == "ok":
+        return 0
+    return None
+
+
+def _quiet_streak_needs_write(next_streak: int | None, fields: dict[str, str]) -> bool:
+    """Whether writing the streak has anything to say: `None` means `degraded`
+    (never written); otherwise skip only when there is no prior field AND nothing
+    to reset it to, so an ordinary descriptor that has never gone quiet stays
+    byte-identical after an `ok` check. Shared by `mark_checked()`'s actual write
+    and `run_mark_checked()`'s dry-run preview so the two can never disagree about
+    whether a line would change."""
+    return next_streak is not None and (next_streak != 0 or QUIET_STREAK_FIELD in fields)
+
+
+def _set_or_insert_quiet_streak(text: str, value: int) -> str:
+    """Write `value` into the descriptor's `Quiet streak (checks):` line: update it
+    in place if present, or insert a new line immediately after `Last status:` if
+    absent -- an anchor guaranteed to exist and be unique by the time this runs
+    (`_mark_checked_content_issue()` already required exactly one). A function
+    replacement, never a template string, so `value` (always a plain int here) can
+    never be misread as a regex backreference."""
+    replacement = f"- Quiet streak (checks): {value}"
+    if QUIET_STREAK_LINE_RE.search(text):
+        return QUIET_STREAK_LINE_RE.sub(lambda _match: replacement, text, count=1)
+    return LAST_STATUS_LINE_RE.sub(lambda match: match.group(0) + f"\n{replacement}", text, count=1)
+
+
+def _mark_checked_content_issue(text: str, status: str, scanned: str | None) -> str | None:
     """Whatever would make `mark_checked()` fail on this descriptor content, computed
     without writing anything -- shared by the dry-run and apply paths so a dry-run
     plan can never claim success where apply would deterministically fail.
@@ -782,10 +1021,21 @@ def _mark_checked_content_issue(text: str) -> str | None:
     status_matches = LAST_STATUS_LINE_RE.findall(text)
     if len(checked_matches) != 1 or len(status_matches) != 1:
         return "descriptor must have exactly one 'Last checked:'/'Last status:' line"
-    return None
+    if len(QUIET_STREAK_LINE_RE.findall(text)) > 1:
+        return "descriptor must have at most one 'Quiet streak (checks):' line"
+    fields = parse_fields(text.splitlines())
+    _, streak_issue = _parse_quiet_streak(fields)
+    if streak_issue is not None:
+        return streak_issue
+    declared, targets_issue = _declared_scan_targets(fields)
+    if targets_issue is not None:
+        return targets_issue
+    return _coverage_issue(declared, scanned, status)
 
 
-def mark_checked(descriptor_path: Path, today: date, status: str, brain_root: Path) -> None:
+def mark_checked(
+    descriptor_path: Path, today: date, status: str, brain_root: Path, scanned: str | None = None
+) -> None:
     if status not in VALID_STATUS:
         raise ValueError(f"invalid status: {status!r} (expected one of {VALID_STATUS})")
     # _read_no_follow(), not an exists()/is_symlink() pre-check plus a plain
@@ -799,14 +1049,23 @@ def mark_checked(descriptor_path: Path, today: date, status: str, brain_root: Pa
         raise FileNotFoundError(f"descriptor not found: {descriptor_path}") from error
     except OSError as error:
         raise ValueError(f"descriptor is not safely readable: {descriptor_path}: {error}") from error
-    issue = _mark_checked_content_issue(text)
+    issue = _mark_checked_content_issue(text, status, scanned)
     if issue is not None:
         raise ValueError(f"{issue}: {descriptor_path}")
+    # Recomputed from THIS read, not passed in from a caller's earlier snapshot (e.g.
+    # run_mark_checked()'s dry-run preview): the same independent-read discipline
+    # `_read_no_follow()` itself follows, so a descriptor swapped between an earlier
+    # check and this write is judged on what is actually about to be written.
+    fields = parse_fields(text.splitlines())
+    current_streak, _ = _parse_quiet_streak(fields)
+    next_streak = _next_quiet_streak(current_streak, status)
     text, _ = LAST_STATUS_LINE_RE.subn(f"- Last status: {status}", text, count=1)
     if status in WATERMARK_STATUSES:
         text, _ = LAST_CHECKED_LINE_RE.subn(f"- Last checked: {today.isoformat()}", text, count=1)
     # else: degraded leaves the watermark untouched so the source stays due for retry
     # and no unread window is silently skipped.
+    if _quiet_streak_needs_write(next_streak, fields):
+        text = _set_or_insert_quiet_streak(text, next_streak)
     _atomic_write(descriptor_path, text, brain_root)
 
 
@@ -831,6 +1090,19 @@ def build_parser() -> argparse.ArgumentParser:
     mark.add_argument("--status", required=True, choices=VALID_STATUS)
     mark.add_argument("--date", help="Override today's date as YYYY-MM-DD")
     mark.add_argument("--apply", action="store_true", help="Apply the update. Default is dry-run.")
+    mark.add_argument(
+        "--scanned",
+        help="Comma-separated identifiers actually covered by this check. Required when the "
+        "descriptor declares 'Scan targets:' and --status is ok or no_activity; must cover "
+        "every declared target (covering more is fine). Never written to the descriptor.",
+    )
+
+    health = subparsers.add_parser(
+        "check-health",
+        help="Report enabled sources whose quiet streak has reached the advisory threshold "
+        "(read-only, informational only -- never blocks or disables a source)",
+    )
+    health.add_argument("--json", action="store_true", help="Print machine-readable JSON")
 
     return parser
 
@@ -875,7 +1147,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def run_mark_checked(brain_root: Path, today: date, source: str, status: str, apply: bool) -> int:
+def run_mark_checked(
+    brain_root: Path, today: date, source: str, status: str, apply: bool, scanned: str | None = None
+) -> int:
     log_path = SCRIPT_DIR / "source_scheduler.log"
     reporter = Reporter(log_path)
     reporter.write("# Source scheduler: mark-checked")
@@ -901,7 +1175,7 @@ def run_mark_checked(brain_root: Path, today: date, source: str, status: str, ap
         reporter.write(f"mark-checked failed: {descriptor_issue}")
         reporter.flush()
         return 1
-    content_issue = _mark_checked_content_issue(descriptor_text)
+    content_issue = _mark_checked_content_issue(descriptor_text, status, scanned)
     if content_issue is not None:
         # Checked before the dry-run/apply branch so a dry-run plan can never claim
         # success where apply would deterministically fail on the same input.
@@ -915,6 +1189,33 @@ def run_mark_checked(brain_root: Path, today: date, source: str, status: str, ap
     )
     reporter.write(f"  {source}: set Last status: {status} ({watermark_note})")
 
+    # Preview only -- computed from this snapshot for the reporter's benefit; the
+    # authoritative recomputation happens again inside mark_checked() from its own
+    # independent read, and that is the one that actually governs the write.
+    fields = parse_fields(descriptor_text.splitlines())
+    declared, _ = _declared_scan_targets(fields)
+    if declared is not None:
+        if status in WATERMARK_STATUSES:
+            scanned_tokens, _ = _parse_target_list(scanned)
+            extra = len(set(scanned_tokens) - set(declared))
+            line = f"  coverage: {len(declared)}/{len(declared)} declared scan target(s) covered"
+            if extra:
+                line += f" ({extra} additional identifier(s) reported)"
+            reporter.write(line)
+        else:
+            reporter.write("  coverage: not required (degraded)")
+            if scanned is not None:
+                scanned_tokens, scanned_issue = _parse_target_list(scanned)
+                if scanned_issue is None:
+                    reporter.write(f"  reported scanned: {len(scanned_tokens)} identifier(s)")
+    current_streak, _ = _parse_quiet_streak(fields)
+    next_streak = _next_quiet_streak(current_streak, status)
+    if next_streak is None:
+        reporter.write("  Quiet streak (checks): unchanged (degraded)")
+    elif _quiet_streak_needs_write(next_streak, fields):
+        reset_note = " (reset)" if next_streak == 0 else ""
+        reporter.write(f"  Quiet streak (checks): {current_streak} -> {next_streak}{reset_note}")
+
     if not apply:
         reporter.write("")
         reporter.write("(dry-run: no file changed. Re-run with --apply.)")
@@ -922,7 +1223,7 @@ def run_mark_checked(brain_root: Path, today: date, source: str, status: str, ap
         return 0
 
     try:
-        mark_checked(descriptor_path, today, status, brain_root)
+        mark_checked(descriptor_path, today, status, brain_root, scanned)
     except (OSError, ValueError) as error:
         # OSError, not just the FileNotFoundError/ValueError mark_checked() itself
         # raises deliberately: an environmental write failure (e.g. a non-writable
@@ -938,12 +1239,74 @@ def run_mark_checked(brain_root: Path, today: date, source: str, status: str, ap
     return 0
 
 
+def run_check_health(brain_root: Path, as_json: bool) -> int:
+    """Read-only, informational only: never writes, never advances a watermark,
+    never disables a source, always exits 0 (barring an unusable brain root).
+    Dormant/`--json` contract mirrors `list-due`'s exactly."""
+    activated = registry_activated(brain_root)
+    sources = source_health(brain_root) if activated else []
+
+    if as_json:
+        print(json.dumps(
+            {
+                "activated": activated,
+                "threshold": QUIET_STREAK_ADVISORY_THRESHOLD,
+                "sources": [health.__dict__ for health in sources],
+            },
+            ensure_ascii=False, indent=2,
+        ))
+        return 0
+
+    print("# Source scheduler: health")
+    print(f"brain_root: {brain_root}")
+    print(f"threshold: {QUIET_STREAK_ADVISORY_THRESHOLD} consecutive quiet checks")
+    if not activated:
+        print("dormant: no link to sources.registry in WIP/WIP.md")
+        return 0
+
+    advisories = [health for health in sources if health.advisory]
+    unknown = [health for health in sources if health.issue is not None]
+    if not advisories and not unknown:
+        print(f"no advisories: no enabled source has reached {QUIET_STREAK_ADVISORY_THRESHOLD} consecutive quiet checks.")
+        return 0
+
+    if advisories:
+        print()
+        print("## Advisories")
+        for health in advisories:
+            type_label = health.source_type or "unknown type"
+            print(
+                f"- {health.slug} ({type_label}): quiet streak {health.quiet_streak} checks "
+                f"(threshold {QUIET_STREAK_ADVISORY_THRESHOLD})"
+            )
+            print(
+                f"  advisory: nothing has been found here for {health.quiet_streak} consecutive "
+                "checks -- reconsider whether this source is still worth checking, or whether its "
+                "Locator has gone stale. No action taken."
+            )
+    if unknown:
+        print()
+        print("## Health unknown")
+        for health in unknown:
+            print(f"- {health.slug}: {health.issue}")
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     brain_root = Path(args.brain_root).expanduser().resolve()
     if not brain_root.is_dir():
         print(f"Brain root not found: {brain_root}")
         return 1
+
+    # Dispatched before any --date parsing: check-health needs neither `today` nor
+    # `--cwd` (it is descriptor-local, read-only advice), and its subparser defines
+    # no --date argument at all -- reading `args.date` for it would raise
+    # AttributeError, exactly the uncaught-traceback failure mode every other
+    # subcommand here is already guarded against.
+    if args.command == "check-health":
+        return run_check_health(brain_root, args.json)
+
     if args.date:
         try:
             today = date.fromisoformat(args.date)
@@ -954,7 +1317,7 @@ def main() -> int:
         today = datetime.now().date()
 
     if args.command == "mark-checked":
-        return run_mark_checked(brain_root, today, args.source, args.status, args.apply)
+        return run_mark_checked(brain_root, today, args.source, args.status, args.apply, args.scanned)
 
     # The published contract is that this script also decides whether the capability
     # is active at all (TOOL.source-scheduler.md's own "Purpose"); list-due must not

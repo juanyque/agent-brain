@@ -160,6 +160,13 @@ without a written guide yet is not investigated until one exists — do not impr
   by hand. A `degraded` result (the source was reachable but the check could not
   meaningfully complete) records `Last status: degraded` but leaves `Last checked:`
   untouched, so the source stays due for retry and no unread window is silently skipped.
+- A descriptor may declare `Scan targets:` when its `Locator:` fans out to several
+  distinct targets. `ok`/`no_activity` then require `--scanned` naming every declared
+  target, or the write is refused and the watermark does not advance — a partial check
+  must never be recorded as a complete one.
+- `mark-checked` also maintains `Quiet streak (checks):` (incremented on `no_activity`,
+  reset on `ok`, untouched by `degraded`). `check-health` reports a source whose streak
+  reaches the tool's threshold as advice to reconsider it; it never disables a source.
 
 ### Access
 

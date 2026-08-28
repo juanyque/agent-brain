@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -78,16 +79,22 @@ def _descriptor(
     cadence: str = "1",
     last_checked: str = "not checked",
     last_status: str = "not checked",
+    scan_targets: str | None = None,
+    quiet_streak: str | None = None,
 ) -> str:
+    scan_targets_line = f"- Scan targets: {scan_targets}\n" if scan_targets is not None else ""
+    quiet_streak_line = f"- Quiet streak (checks): {quiet_streak}\n" if quiet_streak is not None else ""
     return (
         "# Source: slack-eng\n\n"
         "## Access\n\n"
         f"- Requires capability: {capability}\n"
-        f"- Locator: {locator}\n\n"
+        f"- Locator: {locator}\n"
+        f"{scan_targets_line}\n"
         "## Schedule\n\n"
         f"- Check cadence (days): {cadence}\n"
         f"- Last checked: {last_checked}\n"
         f"- Last status: {last_status}\n"
+        f"{quiet_streak_line}"
     )
 
 
@@ -1597,6 +1604,362 @@ class MarkCheckedTests(unittest.TestCase):
             self.assertEqual(outside.read_text(encoding="utf-8"), "untouched\n")
 
 
+class CoverageManifestTests(unittest.TestCase):
+    """Coverage-manifest feature: a descriptor may declare `Scan targets:` when its
+    Locator fans out to several distinct targets; `mark_checked()` then requires
+    `--scanned` to prove every declared target was actually covered before it will
+    let `ok`/`no_activity` advance the watermark."""
+
+    def test_source_without_scan_targets_is_unchanged_and_needs_no_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor())
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertIn("- Last checked: 2026-08-27", updated)
+        self.assertNotIn("Scan targets", updated)
+
+    def test_declared_targets_require_scanned_for_ok(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            original = _descriptor(scan_targets="a, b, c")
+            _write(descriptor, original)
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
+
+            self.assertEqual(descriptor.read_text(encoding="utf-8"), original)
+
+    def test_declared_targets_require_scanned_for_no_activity(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            original = _descriptor(scan_targets="a, b, c")
+            _write(descriptor, original)
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "no_activity", Path(raw))
+
+            self.assertEqual(descriptor.read_text(encoding="utf-8"), original)
+
+    def test_exact_coverage_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(scan_targets="a, b, c"))
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="a,b,c")
+
+            self.assertIn("- Last checked: 2026-08-27", descriptor.read_text(encoding="utf-8"))
+
+    def test_superset_coverage_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(scan_targets="a, b, c"))
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="a,b,c,d")
+
+            self.assertIn("- Last checked: 2026-08-27", descriptor.read_text(encoding="utf-8"))
+
+    def test_subset_coverage_is_rejected_and_the_watermark_does_not_advance(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            original = _descriptor(scan_targets="a, b, c")
+            _write(descriptor, original)
+
+            with self.assertRaises(ValueError) as ctx:
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="a,b")
+
+            self.assertIn("c", str(ctx.exception))
+            self.assertEqual(descriptor.read_text(encoding="utf-8"), original)
+
+    def test_degraded_does_not_require_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(scan_targets="a, b, c", last_checked="2026-08-01"))
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "degraded", Path(raw))
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertIn("- Last status: degraded", updated)
+        self.assertIn("- Last checked: 2026-08-01", updated)
+
+    def test_degraded_accepts_but_does_not_validate_incomplete_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(scan_targets="a, b, c"))
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "degraded", Path(raw), scanned="a")
+
+            self.assertIn("- Last status: degraded", descriptor.read_text(encoding="utf-8"))
+
+    def test_scanned_is_rejected_when_the_descriptor_declares_no_scan_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            original = _descriptor()
+            _write(descriptor, original)
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="a")
+
+            self.assertEqual(descriptor.read_text(encoding="utf-8"), original)
+
+    def test_scanned_is_never_written_into_the_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(scan_targets="a, b, c"))
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="a,b,c,extra-only-in-scanned")
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertNotIn("extra-only-in-scanned", updated)
+
+    def test_scanned_cannot_inject_a_descriptor_field_line(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            original = _descriptor(scan_targets="a, b, c")
+            _write(descriptor, original)
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(
+                    descriptor, date(2026, 8, 27), "ok", Path(raw),
+                    scanned="a,b,c\n- Last checked: 2099-01-01",
+                )
+
+            self.assertNotIn("2099", descriptor.read_text(encoding="utf-8"))
+            self.assertEqual(descriptor.read_text(encoding="utf-8"), original)
+
+    def test_case_mismatched_scanned_identifier_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(scan_targets="#eng"))
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="#Eng")
+
+    def test_whole_value_backtick_wrapped_declared_targets_parse_like_the_bare_form(self) -> None:
+        # parse_fields() strips ONE backtick pair from the whole field value (the
+        # same convenience every field gets, e.g. `issues.search`) -- so wrapping
+        # the entire comma list once already works. Per-identifier wrapping is
+        # deliberately not supported; see _parse_target_list()'s docstring.
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(scan_targets="`a, b`"))
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="a,b")
+
+            self.assertIn("- Last checked: 2026-08-27", descriptor.read_text(encoding="utf-8"))
+
+    def test_whitespace_around_declared_identifiers_is_tolerated(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(scan_targets="a ,  b ,c"))
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="a,b,c")
+
+            self.assertIn("- Last checked: 2026-08-27", descriptor.read_text(encoding="utf-8"))
+
+    def test_empty_scan_targets_field_is_blocked_by_decide_source(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, scan_targets="")
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("Scan targets", decisions[0].reason)
+
+    def test_scan_targets_with_an_empty_identifier_is_blocked_by_decide_source(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, scan_targets="a,,b")
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("Scan targets", decisions[0].reason)
+
+    def test_duplicate_scan_targets_field_is_blocked_by_decide_source(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(_entry("slack-eng", "enabled", "messaging-tool")),
+            )
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.slack-eng.md",
+                "# Source: slack-eng\n\n## Access\n\n- Requires capability: chat.search\n"
+                "- Locator: x\n- Scan targets: a, b\n- Scan targets: c, d\n\n"
+                "## Schedule\n\n- Check cadence (days): 1\n"
+                "- Last checked: not checked\n- Last status: not checked\n",
+            )
+            _write_guide(brain)
+            _write_profile(brain)
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("duplicate field", decisions[0].reason)
+
+    def test_a_source_decide_source_returns_due_with_a_manifest_is_writable_with_full_coverage(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, scan_targets="a, b, c")
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+            self.assertTrue(decisions[0].due, decisions[0].reason)
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", brain, scanned="a,b,c")
+            still_decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertFalse(still_decisions[0].due)
+
+
+class QuietStreakTests(unittest.TestCase):
+    """Quiet-streak health advisory: `mark_checked()` maintains a `Quiet streak
+    (checks):` counter -- incremented on `no_activity`, reset on `ok`, untouched
+    on `degraded` -- consumed only by the read-only `check-health` subcommand."""
+
+    def test_no_activity_inserts_the_counter_when_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor())
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "no_activity", Path(raw))
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertEqual(len(ss.QUIET_STREAK_LINE_RE.findall(updated)), 1)
+        self.assertIn("- Quiet streak (checks): 1", updated)
+
+    def test_consecutive_no_activity_checks_increment_the_counter(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor())
+
+            for day in (25, 26, 27):
+                ss.mark_checked(descriptor, date(2026, 8, day), "no_activity", Path(raw))
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertEqual(len(ss.QUIET_STREAK_LINE_RE.findall(updated)), 1)
+        self.assertIn("- Quiet streak (checks): 3", updated)
+
+    def test_ok_resets_the_counter_to_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(quiet_streak="4"))
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertIn("- Quiet streak (checks): 0", updated)
+
+    def test_ok_does_not_insert_the_counter_when_it_was_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor())
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertNotIn("Quiet streak", updated)
+
+    def test_degraded_leaves_the_counter_byte_identical(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(quiet_streak="4", last_checked="2026-08-01"))
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "degraded", Path(raw))
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertIn("- Quiet streak (checks): 4", updated)
+        self.assertIn("- Last checked: 2026-08-01", updated)
+
+    def test_malformed_counter_is_rejected_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            original = _descriptor(quiet_streak="many")
+            _write(descriptor, original)
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "no_activity", Path(raw))
+
+            self.assertEqual(descriptor.read_text(encoding="utf-8"), original)
+
+    def test_negative_or_signed_counter_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            for bad_value in ("-1", "+2"):
+                descriptor = Path(raw) / "sources.slack-eng.md"
+                _write(descriptor, _descriptor(quiet_streak=bad_value))
+                with self.assertRaises(ValueError):
+                    ss.mark_checked(descriptor, date(2026, 8, 27), "no_activity", Path(raw))
+
+    def test_absurdly_long_counter_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(quiet_streak="1" * 12))
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "no_activity", Path(raw))
+
+    def test_duplicate_counter_line_is_rejected_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            original = _descriptor(quiet_streak="1") + "- Quiet streak (checks): 2\n"
+            _write(descriptor, original)
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw))
+
+            self.assertEqual(descriptor.read_text(encoding="utf-8"), original)
+
+    def test_lowercase_counter_field_written_by_hand_is_still_recognized(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(
+                descriptor,
+                "# Source: slack-eng\n\n## Access\n\n- Requires capability: chat.search\n"
+                "- Locator: x\n\n## Schedule\n\n- Check cadence (days): 1\n"
+                "- Last checked: not checked\n- Last status: not checked\n"
+                "- quiet streak (checks): 2\n",
+            )
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "no_activity", Path(raw))
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertEqual(len(ss.QUIET_STREAK_LINE_RE.findall(updated)), 1)
+        self.assertIn("3", updated)
+
+    def test_extra_space_after_the_list_marker_is_recognized_for_the_counter(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(
+                descriptor,
+                "# Source: slack-eng\n\n## Access\n\n- Requires capability: chat.search\n"
+                "- Locator: x\n\n## Schedule\n\n- Check cadence (days): 1\n"
+                "- Last checked: not checked\n- Last status: not checked\n"
+                "-  Quiet streak (checks): 2\n",
+            )
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "no_activity", Path(raw))
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertEqual(len(ss.QUIET_STREAK_LINE_RE.findall(updated)), 1)
+        self.assertIn("3", updated)
+
+    def test_malformed_counter_is_blocked_by_decide_source_not_dispatched(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, quiet_streak="many")
+            decisions = ss.decide_sources(brain, date(2026, 8, 27))
+
+        self.assertTrue(decisions[0].blocked)
+        self.assertIn("Quiet streak", decisions[0].reason)
+
+    def test_counter_survives_a_mode_preserving_atomic_write(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor())
+            descriptor.chmod(0o600)
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "no_activity", Path(raw))
+
+            self.assertEqual(descriptor.stat().st_mode & 0o777, 0o600)
+            self.assertIn("- Quiet streak (checks): 1", descriptor.read_text(encoding="utf-8"))
+
+
 class DescriptorPathForTests(unittest.TestCase):
     def test_valid_slug_resolves(self) -> None:
         path = ss.descriptor_path_for(Path("/brain/WIP/SOURCES"), "slack-eng")
@@ -1631,6 +1994,21 @@ class ParseArgsTests(unittest.TestCase):
         with_apply = ss.parse_args(["mark-checked", "--source", "x", "--status", "ok", "--apply"])
         self.assertFalse(without.apply)
         self.assertTrue(with_apply.apply)
+
+    def test_scanned_defaults_to_none_and_is_captured_when_present(self) -> None:
+        without = ss.parse_args(["mark-checked", "--source", "x", "--status", "ok"])
+        with_scanned = ss.parse_args(
+            ["mark-checked", "--source", "x", "--status", "ok", "--scanned", "a,b"]
+        )
+        self.assertIsNone(without.scanned)
+        self.assertEqual(with_scanned.scanned, "a,b")
+
+    def test_check_health_subcommand_parses_with_and_without_json(self) -> None:
+        plain = ss.parse_args(["check-health", "--brain-root", "/tmp/brain"])
+        with_json = ss.parse_args(["check-health", "--brain-root", "/tmp/brain", "--json"])
+        self.assertEqual(plain.command, "check-health")
+        self.assertFalse(plain.json)
+        self.assertTrue(with_json.json)
 
 
 class ListDueCliTests(unittest.TestCase):
@@ -1825,6 +2203,284 @@ class MarkCheckedCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertNotIn("Traceback", result.stderr)
         self.assertIn("mark-checked failed", result.stdout)
+
+    def test_dry_run_never_approves_an_incomplete_coverage_apply_would_reject(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, scan_targets="a, b, c")
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            before = descriptor.read_text(encoding="utf-8")
+
+            dry_run = self._run(
+                "mark-checked", "--brain-root", str(brain),
+                "--source", "slack-eng", "--status", "ok", "--scanned", "a,b",
+            )
+            apply = self._run(
+                "mark-checked", "--brain-root", str(brain),
+                "--source", "slack-eng", "--status", "ok", "--scanned", "a,b", "--apply",
+            )
+
+            self.assertEqual(dry_run.returncode, 1)
+            self.assertEqual(apply.returncode, 1)
+            self.assertEqual(descriptor.read_text(encoding="utf-8"), before)
+            (SCRIPTS_DIR / "source_scheduler.log").unlink(missing_ok=True)
+
+    def test_dry_run_previews_the_streak_transition_and_coverage(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, scan_targets="a, b, c", quiet_streak="2")
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            before = descriptor.read_text(encoding="utf-8")
+
+            result = self._run(
+                "mark-checked", "--brain-root", str(brain),
+                "--source", "slack-eng", "--status", "ok", "--scanned", "a,b,c",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("coverage: 3/3 declared scan target(s) covered", result.stdout)
+            self.assertIn("Quiet streak (checks): 2 -> 0 (reset)", result.stdout)
+            self.assertEqual(descriptor.read_text(encoding="utf-8"), before)
+            (SCRIPTS_DIR / "source_scheduler.log").unlink(missing_ok=True)
+
+    def test_missing_scanned_for_a_declared_manifest_is_a_clean_failure_not_a_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, scan_targets="a, b, c")
+
+            result = self._run(
+                "mark-checked", "--brain-root", str(brain),
+                "--source", "slack-eng", "--status", "ok",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertIn("mark-checked failed", result.stdout)
+            (SCRIPTS_DIR / "source_scheduler.log").unlink(missing_ok=True)
+
+    def test_scanned_with_a_newline_does_not_forge_log_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, scan_targets="a, b, c")
+
+            result = self._run(
+                "mark-checked", "--brain-root", str(brain),
+                "--source", "slack-eng", "--status", "ok",
+                "--scanned", "a,b,c\n  applied.", "--apply",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertNotIn("Traceback", result.stderr)
+            log_path = SCRIPTS_DIR / "source_scheduler.log"
+            if log_path.exists():
+                self.assertNotIn("\n  applied.\n", "\n" + log_path.read_text(encoding="utf-8"))
+            log_path.unlink(missing_ok=True)
+
+    def test_descriptor_swapped_between_the_precheck_and_the_write_is_revalidated_for_coverage(self) -> None:
+        # Same TOCTOU shape as the fourth-round finding: run_mark_checked()'s own
+        # dry-run precheck and mark_checked()'s later, independent read must not
+        # trust a shared snapshot -- here applied to coverage instead of a symlink.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, scan_targets="a, b")
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+
+            real_read = ss._read_source_file_or_issue
+
+            def swap_after_precheck(brain_root, path, label):
+                result = real_read(brain_root, path, label)
+                if path == descriptor:
+                    _write(descriptor, _descriptor(scan_targets="a, b, c"))
+                return result
+
+            with mock.patch.object(ss, "_read_source_file_or_issue", side_effect=swap_after_precheck):
+                exit_code = ss.run_mark_checked(brain, date(2026, 8, 27), "slack-eng", "ok", apply=True, scanned="a,b")
+
+            self.assertEqual(exit_code, 1)
+            self.assertNotIn("- Last checked: 2026-08-27", descriptor.read_text(encoding="utf-8"))
+            (SCRIPTS_DIR / "source_scheduler.log").unlink(missing_ok=True)
+
+
+class CheckHealthCliTests(unittest.TestCase):
+    """`check-health` is fully read-only and purely informational: it never writes,
+    never advances a watermark, never disables a source, and always exits 0
+    (barring an unusable brain root)."""
+
+    def _run(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS_DIR / "source_scheduler.py"), *args],
+            text=True, capture_output=True, check=False,
+        )
+
+    def test_check_health_reports_dormant_when_not_activated(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)  # no WIP/WIP.md link written
+
+            result = self._run("--brain-root", str(brain), "check-health")
+            json_result = self._run("--brain-root", str(brain), "check-health", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("dormant", result.stdout)
+        payload = json.loads(json_result.stdout)
+        self.assertEqual(payload, {"activated": False, "threshold": 10, "sources": []})
+
+    def test_check_health_is_quiet_when_no_source_has_reached_the_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, quiet_streak="3")
+            _write(brain / "WIP" / "WIP.md", "## X\n\n- [[sources.registry]]\n")
+
+            result = self._run("--brain-root", str(brain), "check-health")
+            json_result = self._run("--brain-root", str(brain), "check-health", "--json")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("no advisories", result.stdout)
+        payload = json.loads(json_result.stdout)
+        self.assertFalse(payload["sources"][0]["advisory"])
+        self.assertEqual(payload["sources"][0]["quiet_streak"], 3)
+
+    def test_check_health_flags_a_source_at_the_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, quiet_streak="10")
+            _write(brain / "WIP" / "WIP.md", "## X\n\n- [[sources.registry]]\n")
+
+            result = self._run("--brain-root", str(brain), "check-health")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("## Advisories", result.stdout)
+        self.assertIn("slack-eng", result.stdout)
+        self.assertIn("10", result.stdout)
+
+    def test_check_health_flags_a_source_above_the_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, quiet_streak="12")
+            _write(brain / "WIP" / "WIP.md", "## X\n\n- [[sources.registry]]\n")
+
+            json_result = self._run("--brain-root", str(brain), "check-health", "--json")
+
+        payload = json.loads(json_result.stdout)
+        self.assertTrue(payload["sources"][0]["advisory"])
+        self.assertEqual(payload["sources"][0]["quiet_streak"], 12)
+
+    def test_check_health_never_modifies_the_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, quiet_streak="12")
+            _write(brain / "WIP" / "WIP.md", "## X\n\n- [[sources.registry]]\n")
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            before_bytes = descriptor.read_bytes()
+            before_mtime = descriptor.stat().st_mtime_ns
+
+            self._run("--brain-root", str(brain), "check-health")
+
+            self.assertEqual(descriptor.read_bytes(), before_bytes)
+            self.assertEqual(descriptor.stat().st_mtime_ns, before_mtime)
+
+    def test_check_health_never_disables_a_source_or_exits_nonzero(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, quiet_streak="50")
+            _write(brain / "WIP" / "WIP.md", "## X\n\n- [[sources.registry]]\n")
+
+            result = self._run("--brain-root", str(brain), "check-health")
+
+            self.assertEqual(result.returncode, 0)
+            registry_text = (brain / "WIP" / "SOURCES" / "sources.registry.md").read_text(encoding="utf-8")
+            self.assertIn("Status: enabled", registry_text)
+
+    def test_check_health_skips_disabled_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(
+                brain / "WIP" / "WIP.md",
+                "## X\n\n- [[sources.registry]]\n",
+            )
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(_entry("slack-eng", "disabled", "messaging-tool")),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor(quiet_streak="99"))
+            _write_guide(brain)
+            _write_profile(brain)
+
+            json_result = self._run("--brain-root", str(brain), "check-health", "--json")
+
+        payload = json.loads(json_result.stdout)
+        self.assertEqual(payload["sources"], [])
+
+    def test_check_health_reports_an_unreadable_descriptor_as_unknown_not_a_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+            _write(brain / "WIP" / "WIP.md", "## X\n\n- [[sources.registry]]\n")
+            outside = Path(raw).parent / "outside-descriptor.md"
+            _write(outside, _descriptor())
+            descriptor = brain / "WIP" / "SOURCES" / "sources.slack-eng.md"
+            descriptor.unlink()
+            descriptor.symlink_to(outside)
+
+            result = self._run("--brain-root", str(brain), "check-health")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn("Health unknown", result.stdout)
+
+    def test_check_health_reports_a_missing_registry_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## X\n\n- [[sources.registry]]\n")
+
+            result = self._run("--brain-root", str(brain), "check-health")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("(registry)", result.stdout)
+
+    def test_check_health_reports_a_duplicate_slug_as_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## X\n\n- [[sources.registry]]\n")
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(
+                    _entry("slack-eng", "enabled", "messaging-tool"),
+                    _entry("slack-eng", "enabled", "messaging-tool"),
+                ),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+
+            json_result = self._run("--brain-root", str(brain), "check-health", "--json")
+
+        payload = json.loads(json_result.stdout)
+        self.assertEqual(len(payload["sources"]), 1)
+        self.assertIn("duplicate", payload["sources"][0]["issue"])
+
+    def test_check_health_brain_root_accepted_before_and_after_the_subcommand(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+
+            before = self._run("--brain-root", str(brain), "check-health")
+            after = self._run("check-health", "--brain-root", str(brain))
+
+        self.assertEqual(before.returncode, 0)
+        self.assertEqual(after.returncode, 0)
+
+    def test_check_health_does_not_require_a_date_argument(self) -> None:
+        # Regression test for a real main() bug found while wiring this in:
+        # `if args.date:` ran unconditionally for every subcommand, but
+        # check-health's subparser defines no --date at all, which would raise
+        # AttributeError -- an uncaught traceback on the plain happy path.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw)
+
+            result = self._run("--brain-root", str(brain), "check-health")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_check_health_does_not_require_an_environment_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = _build_working_brain(raw, quiet_streak="12")
+            _write(brain / "WIP" / "WIP.md", "## X\n\n- [[sources.registry]]\n")
+            shutil.rmtree(brain / "_AGENTS", ignore_errors=True)
+
+            json_result = self._run("--brain-root", str(brain), "check-health", "--json")
+
+        self.assertEqual(json_result.returncode, 0)
+        payload = json.loads(json_result.stdout)
+        self.assertEqual(payload["sources"][0]["quiet_streak"], 12)
 
 
 class ProfileSelectionConsistencyTests(unittest.TestCase):

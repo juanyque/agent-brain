@@ -7,6 +7,8 @@
   Markdown link to `sources.registry`, resolved by exact target basename, anywhere in
   `WIP/WIP.md`).
 - Record the watermark after a source has actually been investigated.
+- Report, read-only, which sources have gone quiet for many consecutive checks --
+  advisory only; it never blocks, disables a source, or writes anything.
 
 ## Scope
 Source ingestion is brain-scoped, not project-scoped: every enabled registry entry is
@@ -37,7 +39,11 @@ selector. It never scopes which sources are evaluated.
   empty/whitespace-only, or itself unreadable (including an unreadable
   `SOURCE_TYPES/` directory itself, not only the guide file); `Requires capability`
   is missing, malformed, or unroutable by the active environment profile; `Locator`
-  or `Last status` is missing; a leaf path (registry, descriptor, or guide) resolves
+  or `Last status` is missing; a present `Scan targets:` is empty, contains an empty
+  identifier, or contains a control character; a present `Quiet streak (checks):`
+  is not a plain 1-9-digit decimal (both fields simply *absent* is the normal case
+  and changes nothing -- see "Coverage manifest" and "Quiet-streak health advisory"
+  below); a leaf path (registry, descriptor, or guide) resolves
   to something other than a regular file (a FIFO, device, or directory); or
   `Check cadence (days)` / `Last checked` is missing, malformed, or arithmetically
   out of range (a `Last checked` near `date.max` plus even a small cadence overflows
@@ -68,6 +74,24 @@ Capability validation is static only (a profile-document lookup, no live provide
 The subagent that actually investigates a due source resolves the capability live (e.g.
 via `profile_context.py`) and reports `degraded` if that live resolution fails.
 
+### Coverage manifest
+A source whose `Locator:` fans out to several distinct targets (several channels, labels,
+or queries) can optionally declare them as a `Scan targets:` list in its descriptor. Once
+declared, `mark-checked --status ok|no_activity` -- both being completeness claims -- must
+be given `--scanned` naming every declared target actually covered; covering more than
+declared is fine, covering less is not. An incomplete or missing claim makes the write
+refuse outright, exactly like an invalid status or a duplicated field: the watermark does
+not advance, and the source stays due for retry. `degraded` never requires or validates
+`--scanned` -- it already leaves the watermark untouched, so there is nothing to certify as
+complete. `--scanned` is validated but never written into the descriptor.
+
+### Quiet-streak health advisory
+`mark-checked` also maintains `Quiet streak (checks):` in the descriptor: `+1` on
+`no_activity`, reset to `0` on `ok`, left untouched on `degraded`. `check-health` reports,
+read-only, every enabled source whose streak has reached the tool's threshold, as a
+recommendation for the user to reconsider whether that source is still worth checking --
+it never disables a source, blocks a session, or writes anything.
+
 ## Usage
 
 ### List due/blocked sources
@@ -92,6 +116,19 @@ write:
 python3 ~/.agents/skills/brain/scripts/source_scheduler.py mark-checked \
   --brain-root . --source <slug> --status ok --apply
 ```
+If the descriptor declares `Scan targets:`, `ok`/`no_activity` also need `--scanned`:
+```bash
+python3 ~/.agents/skills/brain/scripts/source_scheduler.py mark-checked \
+  --brain-root . --source <slug> --status ok --scanned <target-1>,<target-2>,<target-3> --apply
+```
+
+### Report source health (read-only)
+```bash
+python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . check-health
+python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . check-health --json
+```
+Never writes, never disables a source, never affects exit code beyond an unusable brain
+root. `--json`'s shape is always `{"activated": <bool>, "threshold": <int>, "sources": [...]}`.
 
 ### Test with a fixed date
 ```bash
@@ -99,9 +136,15 @@ python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-d
 ```
 
 ## Safety model
-- `list-due` is fully read-only.
+- `list-due` is fully read-only. `check-health` is fully read-only too: it never writes,
+  never advances a watermark, never disables a source, and always exits 0 (barring an
+  unusable brain root).
 - `mark-checked` is dry-run by default; it only prints the plan. `--apply` is required to
   write.
+- An incomplete or missing `--scanned` for a source that declares `Scan targets:` rejects
+  the whole write, dry-run and apply alike: `Last status:`/`Last checked:` both stay as
+  they were and the source stays due -- the same fail-closed shape as an invalid status or
+  a duplicated field. `--scanned` is validated but never persisted into the descriptor.
 - Both subcommands fail cleanly on malformed input or environment errors -- an invalid
   `--date` or `--cwd` (e.g. a symlink loop), or a write failure `mark-checked --apply`
   hits mid-operation (e.g. a non-writable `SOURCES/` directory) -- with a diagnostic
@@ -145,8 +188,13 @@ python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-d
   same slug or the entry is blocked -- it never picks a different file.
 - `sources.<slug>.md` descriptor fields read by this script: `Type:` (via the registry
   entry, not the descriptor), `Requires capability:`, `Locator:`, `Check cadence (days):`,
-  `Last checked:`, `Last status:`. `Locator` and `Last status` must be present (their
-  content is otherwise the investigating subagent's / `mark-checked`'s concern, not
+  `Last checked:`, `Last status:`, and two optional fields: `Scan targets:` (descriptor-
+  authored, opaque comma-separated identifiers, exact-match/case-sensitive; the whole
+  value may be wrapped in one backtick pair like any other field, but each identifier
+  individually may not -- that would collide with the whole-value stripping) and
+  `Quiet streak (checks):` (script-owned like the two watermark fields -- never
+  hand-edit it). `Locator` and `Last status` must be present
+  (their content is otherwise the investigating subagent's / `mark-checked`'s concern, not
   validated here beyond presence).
 - `Check cadence (days): always` is the sentinel for a source that is inherently
   time-sensitive per session (a calendar), represented internally as `cadence_days == 0`.
@@ -167,4 +215,14 @@ python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-d
 - Two concurrent `mark-checked --apply` calls for the same source are not coordinated:
   each write is atomic and self-consistent, but whichever completes its rename last
   wins. Not expected in normal use (nothing else runs `mark-checked` for a source
-  outside its own investigation), so no locking is implemented.
+  outside its own investigation), so no locking is implemented. The same applies to
+  `Quiet streak (checks):` (a read-modify-write counter): a lost update loses at most one
+  increment, which has no safety consequence for a purely advisory signal.
+- The `check-health` threshold is a hardcoded constant, not a per-source configurable
+  field. The streak counts *checks*, not elapsed time, so a long-cadence source takes
+  proportionally longer to trip it; a source alternating `degraded`/`no_activity` accrues
+  slowly by design (`degraded` never advances the streak).
+- `Scan targets:` identifiers are opaque strings the script never resolves or verifies
+  against anything real -- it can only enforce that a declared manifest was reported
+  covered, not that the manifest itself is complete or accurate. An under-declared
+  manifest is a gap this feature cannot close.

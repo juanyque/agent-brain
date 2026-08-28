@@ -32,20 +32,34 @@ If the named capability cannot be resolved (missing, unroutable, or the subagent
 resolution fails at investigation time), the source is `degraded` or blocked, never
 guessed open.
 
+Optional, only when `Locator` fans out to several distinct targets (e.g. several channels,
+labels, or queries):
+
+- Scan targets: <target-1>, <target-2>, <target-3>
+
+When declared, `mark-checked --status ok|no_activity` then requires `--scanned` naming
+every listed target actually covered (covering more is fine, covering less refuses the
+write outright, so a partial check can never be recorded as a complete one). Leave this
+field out entirely for a source with a single target — most sources don't need it.
+
 ## Schedule
 
 - Check cadence (days): 1
 - Last checked: not checked
 - Last status: not checked
+- Quiet streak (checks): 0
 
 Use `always` instead of a number for a source type that is inherently time-sensitive per
 session rather than "changed since last check" (see `SOURCE_TYPES/calendar.md`).
 
 `not checked` above is the initialization sentinel, not a status value: it means this
 source has never been investigated. Once it has, `Last status:` holds one of `ok`,
-`no_activity`, `degraded`. `source_scheduler.py mark-checked` owns the last two fields —
+`no_activity`, `degraded`. `source_scheduler.py mark-checked` owns the last three fields —
 never edit them by hand. `degraded` never advances `Last checked:`; only `ok`/`no_activity`
-do.
+do. `Quiet streak (checks):` counts consecutive `no_activity` results (reset to `0` by
+`ok`, left untouched by `degraded`); `source_scheduler.py check-health` flags a source
+once its streak reaches the tool's threshold, purely as advice for the user to reconsider
+it — it never disables a source or blocks a session on its own.
 
 ## Capture
 
