@@ -1796,6 +1796,38 @@ class CoverageManifestTests(unittest.TestCase):
         self.assertTrue(decisions[0].blocked)
         self.assertIn("duplicate field", decisions[0].reason)
 
+    def test_duplicate_scan_targets_line_is_rejected_by_mark_checked_not_only_decide_source(self) -> None:
+        # Ninth-round review finding: decide_source() already blocks a duplicated
+        # 'Scan targets:' field via the generic _duplicate_field_keys() sweep, but
+        # mark_checked() is independently callable and had no equivalent check --
+        # it silently accepted coverage validated against only the LAST of two
+        # ambiguous manifests and advanced the watermark anyway.
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            original = (
+                "# Source: slack-eng\n\n## Access\n\n- Requires capability: chat.search\n"
+                "- Locator: x\n- Scan targets: a, b\n- Scan targets: c, d\n\n"
+                "## Schedule\n\n- Check cadence (days): 1\n"
+                "- Last checked: not checked\n- Last status: not checked\n"
+            )
+            _write(descriptor, original)
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="c,d")
+
+            self.assertEqual(descriptor.read_text(encoding="utf-8"), original)
+
+    def test_non_printable_scan_target_identifier_is_rejected(self) -> None:
+        # Ninth-round review finding: the control-character check only covered the
+        # ASCII C0/DEL range, missing Unicode C1 controls (e.g. U+009B, an ANSI CSI
+        # introducer) that would otherwise reach terminal/log diagnostics verbatim.
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(scan_targets="a, b"))
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "ok", Path(raw), scanned="a,")
+
     def test_a_source_decide_source_returns_due_with_a_manifest_is_writable_with_full_coverage(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = _build_working_brain(raw, scan_targets="a, b, c")
@@ -1891,6 +1923,34 @@ class QuietStreakTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             descriptor = Path(raw) / "sources.slack-eng.md"
             _write(descriptor, _descriptor(quiet_streak="1" * 12))
+
+            with self.assertRaises(ValueError):
+                ss.mark_checked(descriptor, date(2026, 8, 27), "no_activity", Path(raw))
+
+    def test_streak_saturates_at_the_maximum_representable_value_instead_of_overflowing(self) -> None:
+        # Ninth-round review finding: 999999999 is a valid counter value under the
+        # 1-9-digit grammar, but incrementing it on the next no_activity check wrote
+        # 1000000000 -- a value the parser's own grammar then rejects as malformed,
+        # making the tool's own output unmarkable on every subsequent operation.
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(quiet_streak="999999999"))
+
+            ss.mark_checked(descriptor, date(2026, 8, 27), "no_activity", Path(raw))
+            updated = descriptor.read_text(encoding="utf-8")
+
+        self.assertIn("- Quiet streak (checks): 999999999", updated)
+        fields = ss.parse_fields(updated.splitlines())
+        _, issue = ss._parse_quiet_streak(fields)
+        self.assertIsNone(issue)
+
+    def test_non_ascii_digit_counter_is_rejected(self) -> None:
+        # Ninth-round review finding: `\d` is Unicode-aware by default, so fullwidth
+        # (and other Unicode) decimal digits passed the supposedly ASCII/plain
+        # decimal grammar and int() silently normalized them.
+        with tempfile.TemporaryDirectory() as raw:
+            descriptor = Path(raw) / "sources.slack-eng.md"
+            _write(descriptor, _descriptor(quiet_streak="１２"))  # fullwidth "12"
 
             with self.assertRaises(ValueError):
                 ss.mark_checked(descriptor, date(2026, 8, 27), "no_activity", Path(raw))
@@ -2256,20 +2316,30 @@ class MarkCheckedCliTests(unittest.TestCase):
             (SCRIPTS_DIR / "source_scheduler.log").unlink(missing_ok=True)
 
     def test_scanned_with_a_newline_does_not_forge_log_lines(self) -> None:
+        # Ninth-round review finding: run_mark_checked() logs build_command_string()
+        # (shell-quoted, but a raw newline byte survives shell-quoting) BEFORE
+        # --scanned is ever validated, so a newline-bearing payload could split the
+        # single "command: ..." log entry into several real lines -- including one
+        # that reads as a convincing, standalone "applied." success marker, even
+        # though the operation is rejected and nothing was actually applied.
         with tempfile.TemporaryDirectory() as raw:
             brain = _build_working_brain(raw, scan_targets="a, b, c")
+            log_path = SCRIPTS_DIR / "source_scheduler.log"
+            log_path.unlink(missing_ok=True)
 
             result = self._run(
                 "mark-checked", "--brain-root", str(brain),
                 "--source", "slack-eng", "--status", "ok",
-                "--scanned", "a,b,c\n  applied.", "--apply",
+                "--scanned", "a,b,c\n  applied.\n# forged audit record", "--apply",
             )
 
             self.assertEqual(result.returncode, 1)
             self.assertNotIn("Traceback", result.stderr)
-            log_path = SCRIPTS_DIR / "source_scheduler.log"
-            if log_path.exists():
-                self.assertNotIn("\n  applied.\n", "\n" + log_path.read_text(encoding="utf-8"))
+            log_text = log_path.read_text(encoding="utf-8")
+            log_lines = log_text.splitlines()
+            self.assertNotIn("  applied.", log_lines)
+            self.assertNotIn("# forged audit record", log_lines)
+            self.assertIn("\\x0a", log_text)
             log_path.unlink(missing_ok=True)
 
     def test_descriptor_swapped_between_the_precheck_and_the_write_is_revalidated_for_coverage(self) -> None:
@@ -2435,6 +2505,58 @@ class CheckHealthCliTests(unittest.TestCase):
                 _registry(
                     _entry("slack-eng", "enabled", "messaging-tool"),
                     _entry("slack-eng", "enabled", "messaging-tool"),
+                ),
+            )
+            _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())
+            _write_guide(brain)
+            _write_profile(brain)
+
+            json_result = self._run("--brain-root", str(brain), "check-health", "--json")
+
+        payload = json.loads(json_result.stdout)
+        self.assertEqual(len(payload["sources"]), 1)
+        self.assertIn("duplicate", payload["sources"][0]["issue"])
+
+    def test_check_health_reports_a_malformed_slug_as_unknown_not_a_crash(self) -> None:
+        # Ninth-round review finding: a registry heading is parsed as an arbitrary
+        # string, never validated against SLUG_RE at parse time. decide_source()
+        # already guards its own descriptor_path_for() call with try/except
+        # ValueError; source_health() had no equivalent guard and raised straight
+        # out of the CLI as an uncaught traceback.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## X\n\n- [[sources.registry]]\n")
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(
+                    "### bad/slug\n- Status: enabled\n- Type: messaging-tool\n"
+                    "- Descriptor: [[sources.bad/slug]]\n\n"
+                ),
+            )
+            _write_guide(brain)
+            _write_profile(brain)
+
+            result = self._run("--brain-root", str(brain), "check-health")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn("Health unknown", result.stdout)
+
+    def test_check_health_reports_a_duplicate_status_field_on_a_disabled_entry(self) -> None:
+        # Ninth-round review finding: source_health() checked entry.duplicate_fields
+        # AFTER filtering to enabled/disabled, so an entry whose duplicated field is
+        # Status: itself (parsed as "disabled", whichever value parse_fields() kept)
+        # silently disappeared from health output instead of surfacing the
+        # ambiguity -- diverging from decide_sources(), which reports it as blocked
+        # regardless of status.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            _write(brain / "WIP" / "WIP.md", "## X\n\n- [[sources.registry]]\n")
+            _write(
+                brain / "WIP" / "SOURCES" / "sources.registry.md",
+                _registry(
+                    "### slack-eng\n- Status: enabled\n- Status: disabled\n"
+                    "- Type: messaging-tool\n- Descriptor: [[sources.slack-eng]]\n\n"
                 ),
             )
             _write(brain / "WIP" / "SOURCES" / "sources.slack-eng.md", _descriptor())

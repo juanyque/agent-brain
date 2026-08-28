@@ -128,12 +128,11 @@ QUIET_STREAK_FIELD = "quiet streak (checks)"
 QUIET_STREAK_ADVISORY_THRESHOLD = 10
 # A plain, unsigned, bounded decimal -- not whatever int() would accept (leading '+', a sign,
 # underscores as digit separators, non-ASCII digits, or an arbitrarily long run of them). A
-# corrupted counter must fail closed as "malformed", not be silently reinterpreted.
-QUIET_STREAK_VALUE_RE = re.compile(r"^\d{1,9}$")
-# Rejected in both a declared scan-target identifier and a --scanned value: a control character
-# (in particular a newline) could otherwise forge an extra line in the mark-checked log output,
-# or -- if a future change ever persisted --scanned -- forge a descriptor field.
-FORBIDDEN_IDENTIFIER_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
+# corrupted counter must fail closed as "malformed", not be silently reinterpreted. `[0-9]`,
+# not `\d`: `\d` is Unicode-aware by default and matches fullwidth/other non-ASCII decimal
+# digits, which `int()` then happily normalizes -- silently accepting exactly the kind of
+# value this pattern exists to reject.
+QUIET_STREAK_VALUE_RE = re.compile(r"^[0-9]{1,9}$")
 
 
 @dataclass
@@ -791,13 +790,12 @@ def source_health(brain_root: Path) -> list[SourceHealth]:
                 )
             )
             continue
-        if entry.status != "enabled":
-            continue
-        descriptor_path = descriptor_path_for(sources_dir, entry.slug)
-        descriptor_text, descriptor_issue = _read_source_file_or_issue(brain_root, descriptor_path, "descriptor")
-        if descriptor_issue is not None:
-            results.append(SourceHealth(entry.slug, entry.source_type, None, False, descriptor_issue))
-            continue
+        # A duplicate registry FIELD (as opposed to a duplicate slug, handled
+        # above) is reportable regardless of status -- checked before the
+        # enabled/disabled branch below, not after, so a disabled entry (or one
+        # whose duplicated field is `Status:` itself, landing on "disabled" as
+        # whichever value parse_fields() happened to keep) doesn't silently
+        # disappear from health output instead of surfacing the corruption.
         if entry.duplicate_fields:
             results.append(
                 SourceHealth(
@@ -805,6 +803,21 @@ def source_health(brain_root: Path) -> list[SourceHealth]:
                     f"duplicate field(s) in registry entry: {', '.join(sorted(entry.duplicate_fields))}",
                 )
             )
+            continue
+        if entry.status != "enabled":
+            continue
+        try:
+            descriptor_path = descriptor_path_for(sources_dir, entry.slug)
+        except ValueError as error:
+            # A registry heading is parsed as an arbitrary string, not validated
+            # against SLUG_RE anywhere upstream -- mirrors decide_source()'s own
+            # try/except around the same call, so a malformed slug is reported the
+            # same informational way here instead of raising past this function.
+            results.append(SourceHealth(entry.slug, entry.source_type, None, False, str(error)))
+            continue
+        descriptor_text, descriptor_issue = _read_source_file_or_issue(brain_root, descriptor_path, "descriptor")
+        if descriptor_issue is not None:
+            results.append(SourceHealth(entry.slug, entry.source_type, None, False, descriptor_issue))
             continue
         fields = parse_fields(descriptor_text.splitlines())
         duplicates = _duplicate_field_keys(descriptor_text.splitlines())
@@ -911,8 +924,12 @@ def _parse_target_list(raw: str) -> tuple[tuple[str, ...] | None, str | None]:
         token = piece.strip()
         if not token:
             return None, "an identifier in the list is empty"
-        if FORBIDDEN_IDENTIFIER_CHAR_RE.search(token):
-            return None, "an identifier contains a control character"
+        # str.isprintable(), not an ASCII-only control-character regex: the ASCII
+        # C0/DEL range alone misses Unicode C1 controls (e.g. U+009B, an ANSI CSI
+        # introducer), which would otherwise reach terminal/log diagnostics
+        # verbatim when a declared target goes unreported by --scanned.
+        if not token.isprintable():
+            return None, "an identifier contains a non-printable character"
         tokens.append(token)
     return tuple(tokens), None
 
@@ -973,12 +990,23 @@ def _parse_quiet_streak(fields: dict[str, str]) -> tuple[int, str | None]:
     return int(raw), None
 
 
+_QUIET_STREAK_MAX = 999_999_999  # the largest value QUIET_STREAK_VALUE_RE accepts
+
+
 def _next_quiet_streak(current: int, status: str) -> int | None:
     """The streak value after this check, or `None` to leave the field completely
     untouched -- a `degraded` check tells us nothing about actual activity, so it
-    must not reset OR advance the streak, matching its existing watermark behavior."""
+    must not reset OR advance the streak, matching its existing watermark behavior.
+
+    Saturates at `_QUIET_STREAK_MAX` rather than incrementing past it: the counter
+    is purely advisory, and every value at or above the (much lower) advisory
+    threshold already means the same thing, so there is nothing to gain from an
+    unbounded counter -- and incrementing one already at the grammar's own maximum
+    would otherwise write a value `_parse_quiet_streak()` itself then rejects as
+    malformed on the very next read.
+    """
     if status == "no_activity":
-        return current + 1
+        return min(current + 1, _QUIET_STREAK_MAX)
     if status == "ok":
         return 0
     return None
@@ -1021,7 +1049,17 @@ def _mark_checked_content_issue(text: str, status: str, scanned: str | None) -> 
     status_matches = LAST_STATUS_LINE_RE.findall(text)
     if len(checked_matches) != 1 or len(status_matches) != 1:
         return "descriptor must have exactly one 'Last checked:'/'Last status:' line"
-    if len(QUIET_STREAK_LINE_RE.findall(text)) > 1:
+    # _duplicate_field_keys(), not a second field-specific line-count regex: it
+    # already casefolds field names the same way parse_fields() does, so it also
+    # catches two case-varied lines (e.g. "Scan targets:" + "scan targets:") that a
+    # single exact-string regex count would treat as unrelated. decide_source()
+    # already rejects any duplicated field via this same helper before a source is
+    # ever dispatched; mark_checked() must reach the same conclusion independently,
+    # since it can be invoked without decide_source() ever having run.
+    duplicate_field_keys = _duplicate_field_keys(text.splitlines())
+    if SCAN_TARGETS_FIELD in duplicate_field_keys:
+        return "descriptor must have at most one 'Scan targets:' line"
+    if QUIET_STREAK_FIELD in duplicate_field_keys:
         return "descriptor must have at most one 'Quiet streak (checks):' line"
     fields = parse_fields(text.splitlines())
     _, streak_issue = _parse_quiet_streak(fields)
@@ -1147,6 +1185,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
+def _single_line(text: str) -> str:
+    """Escape any control character (in particular a newline) to a visible `\\xHH`
+    sequence before writing untrusted text to the audit log. `build_command_string()`
+    shell-quotes each argument, but `shlex.quote()` only makes a value shell-safe to
+    RE-RUN -- it does not strip an embedded newline, so an unvalidated `--scanned`
+    (echoed here before its own validation ever runs) could otherwise make the
+    logged command line span multiple lines and forge what looks like a distinct,
+    later, successful log entry."""
+    return "".join(f"\\x{ord(char):02x}" if ord(char) < 0x20 or ord(char) == 0x7F else char for char in text)
+
+
 def run_mark_checked(
     brain_root: Path, today: date, source: str, status: str, apply: bool, scanned: str | None = None
 ) -> int:
@@ -1155,7 +1204,7 @@ def run_mark_checked(
     reporter.write("# Source scheduler: mark-checked")
     reporter.write(f"mode: {'apply' if apply else 'dry-run'}")
     reporter.write(f"brain_root: {brain_root}")
-    reporter.write(f"command: {build_command_string()}")
+    reporter.write(f"command: {_single_line(build_command_string())}")
     reporter.write("")
 
     sources_dir = brain_root / "WIP" / "SOURCES"

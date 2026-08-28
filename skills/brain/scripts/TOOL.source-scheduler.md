@@ -40,7 +40,7 @@ selector. It never scopes which sources are evaluated.
   `SOURCE_TYPES/` directory itself, not only the guide file); `Requires capability`
   is missing, malformed, or unroutable by the active environment profile; `Locator`
   or `Last status` is missing; a present `Scan targets:` is empty, contains an empty
-  identifier, or contains a control character; a present `Quiet streak (checks):`
+  identifier, or contains a non-printable character; a present `Quiet streak (checks):`
   is not a plain 1-9-digit decimal (both fields simply *absent* is the normal case
   and changes nothing -- see "Coverage manifest" and "Quiet-streak health advisory"
   below); a leaf path (registry, descriptor, or guide) resolves
@@ -217,7 +217,14 @@ python3 ~/.agents/skills/brain/scripts/source_scheduler.py --brain-root . list-d
   wins. Not expected in normal use (nothing else runs `mark-checked` for a source
   outside its own investigation), so no locking is implemented. The same applies to
   `Quiet streak (checks):` (a read-modify-write counter): a lost update loses at most one
-  increment, which has no safety consequence for a purely advisory signal.
+  increment, which has no safety consequence for a purely advisory signal. This
+  extends to the coverage manifest too: `mark_checked()` validates `--scanned` against
+  its own read of the descriptor, but nothing prevents the descriptor from changing
+  again between that read and the atomic rename that commits it -- so a concurrent
+  mutation in that narrow window is, like the plain watermark case, a lost update, not
+  a guarantee the coverage check enforces under concurrency. The same "nothing else
+  writes this descriptor" assumption applies; no locking or compare-and-swap is
+  implemented for this either.
 - The `check-health` threshold is a hardcoded constant, not a per-source configurable
   field. The streak counts *checks*, not elapsed time, so a long-cadence source takes
   proportionally longer to trip it; a source alternating `degraded`/`no_activity` accrues
