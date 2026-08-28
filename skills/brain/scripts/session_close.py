@@ -238,6 +238,21 @@ def _heading_section(text: str, heading: str) -> str | None:
 RESUME_ID_RE = re.compile(r"(?:--resume|--conversation|\bresume|(?<!\S)-s)\s+(\S+)")
 
 
+def _command_after_cwd(text: str) -> str:
+    """Drop a leading 'cd <dir> && ' prefix from each line before scanning for a
+    resume verb. Every canonical recovery command has this shape (see
+    RULES-SESSION-LIFECYCLE.common.md's "Session notes"); without stripping it, an
+    arbitrary absolute cwd that happens to contain the literal word "resume"
+    followed by whitespace (e.g. '/tmp/resume project') would match before the
+    regex ever reaches the real '--resume <id>' flag later in the same line.
+    """
+    lines = []
+    for line in text.splitlines():
+        _, sep, remainder = line.partition("&&")
+        lines.append(remainder if sep else line)
+    return "\n".join(lines)
+
+
 def resolve_full_session_id(note_path: Path, fallback: str) -> str:
     """Best-effort: extract the real full session id from the note's own
     '## Resume command' section (present in every real session note per
@@ -254,7 +269,7 @@ def resolve_full_session_id(note_path: Path, fallback: str) -> str:
     section = _heading_section(text, "## Resume command")
     if section is None:
         return fallback
-    match = RESUME_ID_RE.search(section)
+    match = RESUME_ID_RE.search(_command_after_cwd(section))
     if match is None:
         return fallback
     return match.group(1).strip("`")

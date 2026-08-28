@@ -439,6 +439,32 @@ class SessionCloseTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("verified: session id found", result.stdout)
 
+    def test_resolve_full_session_id_ignores_resume_lookalike_in_cwd(self) -> None:
+        # Round-4 review finding: an unanchored regex matched the literal word
+        # "resume" inside the recorded cwd itself (e.g. "/tmp/resume project"),
+        # capturing text from the cwd instead of the real id after the actual
+        # "--resume <id>" flag later on the same line. Tested directly against
+        # resolve_full_session_id() rather than through the full CLI+journal
+        # round-trip: an end-to-end test would have the same (buggy or fixed)
+        # cwd string on both sides and self-cancel, hiding the bug either way.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            note = brain / "WIP" / "SESSIONS" / "2026-07-21-session-abc123full-test.md"
+            note.parent.mkdir(parents=True)
+            note.write_text(
+                "---\ntags: [session, wip]\n---\n"
+                "# Session abc123full\n\n"
+                "## State\n- Status: open\n\n"
+                "## Resume command\n"
+                "- `cd '/tmp/resume project' && claude --resume abc123full`\n\n"
+                "## Immediate next step\n- none\n",
+                encoding="utf-8",
+            )
+
+            resolved = session_close.resolve_full_session_id(note, "abc123")
+
+        self.assertEqual(resolved, "abc123full")
+
     def test_journal_registration_finds_notes_archived_under_a_year_subfolder(self) -> None:
         # Round-2 review finding: a hardcoded, non-recursive "JOURNAL/*.md" glob
         # missed daily notes yearly maintenance already moved to JOURNAL/<year>/
