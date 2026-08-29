@@ -134,14 +134,48 @@ class SessionStartHookTests(unittest.TestCase):
             "malformed stdin must fail closed immediately, not fall back to PWD",
         )
 
+    def test_fails_closed_on_non_object_json_even_when_pwd_is_inside_a_brain(self) -> None:
+        # `[]`, `null`, and a bare scalar are all syntactically valid JSON,
+        # so they slip past the json.loads() try/except -- resolve_cwd()
+        # then has to reject them itself, or PWD's real brain leaks through.
+        for payload in ("[]", "null", '"scalar"'):
+            with self.subTest(payload=payload):
+                with tempfile.TemporaryDirectory() as raw:
+                    brain = Path(raw) / "wrongshapevault"
+                    attach(brain)
+                    import os
+
+                    env = os.environ.copy()
+                    env["AGENT_BRAIN_HOME"] = str(REPO_ROOT)
+                    env["PWD"] = str(brain)
+                    result = subprocess.run(
+                        [sys.executable, str(HOOK), "--runtime", "claude"],
+                        input=payload,
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                        env=env,
+                    )
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout), {})
+
     def test_discovers_brain_without_agent_brain_home_env_var(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw) / "selflocatedvault"
             attach(brain)
+            fake_home = Path(raw) / "fake-home"
+            fake_home.mkdir()
             import os
 
             env = os.environ.copy()
             env.pop("AGENT_BRAIN_HOME", None)
+            # A HOME with no ~/.local/share/agent-brain makes the historical
+            # (pre-fix) Path.home()-based default fail to find anything --
+            # this is what actually proves discovery now comes from the
+            # script's own __file__ location, not a coincidence of this
+            # machine's real checkout living at the historical default path.
+            env["HOME"] = str(fake_home)
             result = subprocess.run(
                 [sys.executable, str(HOOK), "--runtime", "claude"],
                 input=json.dumps({"cwd": str(brain)}),

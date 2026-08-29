@@ -122,7 +122,12 @@ def main() -> int:
     try:
         raw = sys.stdin.read()
         hook_input = json.loads(raw) if raw.strip() else {}
-    except (json.JSONDecodeError, OSError):
+        if not isinstance(hook_input, dict):
+            # `[]`, `null`, and a bare scalar are all syntactically valid
+            # JSON but not a usable hook payload -- treat the same as a
+            # parse failure, not a payload resolve_cwd() should inspect.
+            raise ValueError("hook payload must be a JSON object")
+    except (json.JSONDecodeError, OSError, ValueError):
         # Fail closed immediately -- do not fall through to a PWD-based cwd
         # guess, which could still find a real brain and inject the
         # reminder despite the malformed input.
