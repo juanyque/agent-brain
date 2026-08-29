@@ -72,7 +72,11 @@ def resolve_agent_brain_home() -> Path:
     configured = os.environ.get("AGENT_BRAIN_HOME")
     if configured:
         return Path(configured).expanduser()
-    return Path.home() / ".local" / "share" / "agent-brain"
+    # The hook is always invoked via its own installed absolute path
+    # (model/SCRIPTS/session_start_hook.py), so that path IS the checkout --
+    # no env var needed for the common case, and no risk of guessing a
+    # different, stale checkout when AGENT_BRAIN_HOME isn't exported.
+    return Path(__file__).resolve().parents[2]
 
 
 def find_brain(cwd: str, agent_brain_home: Path) -> dict | None:
@@ -106,13 +110,24 @@ def find_brain(cwd: str, agent_brain_home: Path) -> dict | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Portable brain-connect SessionStart hook.")
     parser.add_argument("--runtime", required=True, choices=sorted(RUNTIME_MESSAGES))
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
+    except SystemExit:
+        # A misconfigured hook entry (missing/misspelled --runtime) is still
+        # a fail-safe case, not just runtime-discovery errors: a bad CLI
+        # invocation must not surface as a crashing hook on every session.
+        print("{}")
+        return 0
 
     try:
         raw = sys.stdin.read()
         hook_input = json.loads(raw) if raw.strip() else {}
     except (json.JSONDecodeError, OSError):
-        hook_input = {}
+        # Fail closed immediately -- do not fall through to a PWD-based cwd
+        # guess, which could still find a real brain and inject the
+        # reminder despite the malformed input.
+        print("{}")
+        return 0
 
     cwd = resolve_cwd(hook_input)
     brain = find_brain(cwd, resolve_agent_brain_home())

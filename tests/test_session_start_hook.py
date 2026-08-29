@@ -6,11 +6,15 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HOOK = REPO_ROOT / "model" / "SCRIPTS" / "session_start_hook.py"
 MODEL_ROOT = REPO_ROOT / "model"
+
+sys.path.insert(0, str(HOOK.parent))
+import session_start_hook  # noqa: E402
 
 
 def attach(brain: Path, model: Path = MODEL_ROOT) -> None:
@@ -105,6 +109,67 @@ class SessionStartHookTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), {})
 
+    def test_fails_closed_on_malformed_stdin_even_when_pwd_is_inside_a_brain(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw) / "malformedvault"
+            attach(brain)
+            import os
+
+            env = os.environ.copy()
+            env["AGENT_BRAIN_HOME"] = str(REPO_ROOT)
+            env["PWD"] = str(brain)
+            result = subprocess.run(
+                [sys.executable, str(HOOK), "--runtime", "claude"],
+                input="not json{{{",
+                text=True,
+                capture_output=True,
+                check=False,
+                env=env,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout),
+            {},
+            "malformed stdin must fail closed immediately, not fall back to PWD",
+        )
+
+    def test_discovers_brain_without_agent_brain_home_env_var(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw) / "selflocatedvault"
+            attach(brain)
+            import os
+
+            env = os.environ.copy()
+            env.pop("AGENT_BRAIN_HOME", None)
+            result = subprocess.run(
+                [sys.executable, str(HOOK), "--runtime", "claude"],
+                input=json.dumps({"cwd": str(brain)}),
+                text=True,
+                capture_output=True,
+                check=False,
+                env=env,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertIn("selflocatedvault", payload["hookSpecificOutput"]["additionalContext"])
+
+    def test_resolve_agent_brain_home_defaults_to_the_scripts_own_checkout(self) -> None:
+        import os
+
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.object(
+                session_start_hook,
+                "__file__",
+                "/fake/checkout/model/SCRIPTS/session_start_hook.py",
+            ),
+        ):
+            result = session_start_hook.resolve_agent_brain_home()
+
+        self.assertEqual(result, Path("/fake/checkout"))
+
     def test_emits_empty_object_when_agent_brain_home_is_wrong(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw) / "somevault"
@@ -115,16 +180,23 @@ class SessionStartHookTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), {})
 
-    def test_unknown_runtime_is_rejected_by_argparse(self) -> None:
-        result = subprocess.run(
-            [sys.executable, str(HOOK), "--runtime", "opencode"],
-            input="{}",
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+    def test_unrecognized_runtime_argument_fails_closed_instead_of_crashing(self) -> None:
+        # A misconfigured hook entry (unsupported --runtime value, or the flag
+        # itself misspelled) must not break session start any more than a
+        # missing brain does -- argparse's own SystemExit is a fail-safe case
+        # too, not just runtime-discovery errors.
+        for bad_args in (["--runtime", "opencode"], ["--runtime"], []):
+            with self.subTest(bad_args=bad_args):
+                result = subprocess.run(
+                    [sys.executable, str(HOOK), *bad_args],
+                    input="{}",
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
 
-        self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout), {})
 
 
 if __name__ == "__main__":

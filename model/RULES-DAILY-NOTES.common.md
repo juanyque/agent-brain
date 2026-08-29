@@ -44,7 +44,7 @@ Use this rule when creating, rolling over, cleaning, or correcting daily notes i
 ## TODO carryover
 
 - Unfinished `* [[TODO]]:` items are **not** simply deleted when a day closes. At day rollover they are **migrated forward** — carried into the new day's `* [[TODO]]:`, or promoted to `WIP/`/`BACKLOG/` when they are real tasks with context — so intended work is never lost in a closed day's note.
-- The migration is reviewed with the user (same review-first pattern as the Objectives review), and runs **before** the empty-category cleanup. The previous day's `* [[TODO]]:` is then cleaned only if it ends up empty.
+- The migration is reviewed with the user before being applied -- unlike the Objectives review below, which records evidence directly without an approval gate, TODO carryover keeps a review-first pattern because a wrongly-dropped or wrongly-migrated task has a real cost. It runs **before** the empty-category cleanup. The previous day's `* [[TODO]]:` is then cleaned only if it ends up empty.
 - The operational steps live in `RULES-SESSION-LIFECYCLE.md` Flow 1 (and are referenced from Flow 2 Scenario B, which closes the previous day when today's note is missing).
 
 ## Project section uniqueness
