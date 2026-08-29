@@ -593,6 +593,32 @@ class SessionCloseTests(unittest.TestCase):
 
         self.assertEqual(resolved, "abc123")
 
+    def test_resolve_full_session_id_rejects_candidate_sharing_only_a_short_prefix(
+        self,
+    ) -> None:
+        # Round-7 review finding: startswith(fallback) alone still accepted a
+        # stale candidate that merely shared a short CLI-supplied prefix with a
+        # *different* session's real id ("ses_other" vs. the CLI's "ses_"),
+        # even though it has no relation to the note actually selected
+        # (whose own filename encodes "ses_target", not "ses_other").
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            note = brain / "WIP" / "SESSIONS" / "2026-07-21-session-ses_target-test.md"
+            note.parent.mkdir(parents=True)
+            note.write_text(
+                "---\ntags: [session, wip]\n---\n"
+                "# Session ses_target\n\n"
+                "## State\n- Status: open\n\n"
+                "## Resume command\n"
+                "- `cd /repo && opencode -s ses_other`\n\n"
+                "## Immediate next step\n- none\n",
+                encoding="utf-8",
+            )
+
+            resolved = session_close.resolve_full_session_id(note, "ses_")
+
+        self.assertEqual(resolved, "ses_")
+
     def test_resolve_full_session_id_falls_back_to_bare_generic_runtime_id(self) -> None:
         # Round-5 review finding: session_digest.resume_command() returns the
         # bare session id with no verb at all for an unrecognized/generic

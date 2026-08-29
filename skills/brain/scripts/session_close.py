@@ -307,13 +307,16 @@ def resolve_full_session_id(note_path: Path, fallback: str) -> str:
     string. Falls back to the CLI-supplied value when no resume command is
     present (e.g. a minimal or hand-written note) rather than guessing.
 
-    `fallback` is either the real id or a documented unambiguous prefix of it
-    (find_session_note()'s own contract) -- the one thing already known for
-    certain to identify this session. A candidate extracted from the note's
-    prose that doesn't even start with it can't be this session's own
-    registration (a stale or mismatched Resume command section, e.g.
-    copy-pasted from a different note) and must not be trusted over the
-    fallback.
+    A candidate extracted from the note's prose is only trusted if it also
+    appears in `note_path.name` -- the exact same substring test
+    find_session_note() itself used to select this specific note. A plain
+    startswith(fallback) check isn't strong enough on its own: a stale or
+    mismatched Resume command section (e.g. copy-pasted from a different
+    note) can still share a short, currently-unambiguous CLI-supplied prefix
+    with a *different* session's real id (e.g. "ses_other" vs. the CLI's
+    "ses_") without being this note's own id at all. Tying the check to the
+    note's own filename instead ties it to the one identity already known
+    for certain: the specific note find_session_note() picked.
     """
     try:
         text = note_path.read_text(encoding="utf-8")
@@ -325,9 +328,9 @@ def resolve_full_session_id(note_path: Path, fallback: str) -> str:
     match = RESUME_ID_RE.search(_command_after_cwd(section))
     if match is not None:
         candidate = match.group(1).strip("`")
-        return candidate if candidate.startswith(fallback) else fallback
+        return candidate if candidate in note_path.name else fallback
     bare = _bare_resume_id(section)
-    if bare is not None and bare.startswith(fallback):
+    if bare is not None and bare in note_path.name:
         return bare
     return fallback
 
