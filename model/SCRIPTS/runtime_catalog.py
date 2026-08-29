@@ -34,6 +34,7 @@ RUNTIME_CONFIGS = {
         "mappings": [
             ("AGENTS.runtime.codex.md", "AGENTS.md"),
             ("config.toml", "config.toml"),
+            ("hooks.json", "hooks.json"),
         ],
         "skills_dir": Path("~/.agents/skills"),
         "private_targets": {"config.toml"},

@@ -223,6 +223,20 @@ class RuntimeManagerTests(unittest.TestCase):
         self.assertEqual(local_config.resolve(), brain_config.resolve())
         self.assertEqual(stat.S_IMODE(brain_config.stat().st_mode), 0o600)
 
+    def test_direction_b_implants_brain_hooks_json(self) -> None:
+        # hooks.json is pure behavior config (which hooks, what commands), unlike
+        # config.toml it carries no per-machine trust ledger or secrets -- no
+        # chmod 600 special-case, just a plain symlink like AGENTS.md.
+        brain_hooks = self.brain / "_AGENTS" / "CODEX" / "hooks.json"
+        brain_hooks.parent.mkdir(parents=True)
+        brain_hooks.write_text('{"hooks": {}}\n', encoding="utf-8")
+
+        self.process_codex()
+        local_hooks = self.home / ".codex" / "hooks.json"
+
+        self.assertTrue(local_hooks.is_symlink())
+        self.assertEqual(local_hooks.resolve(), brain_hooks.resolve())
+
     def test_conflict_quarantines_local_and_brain_wins(self) -> None:
         brain_config = self.brain / "_AGENTS" / "CODEX" / "config.toml"
         brain_config.parent.mkdir(parents=True)

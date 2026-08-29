@@ -67,6 +67,7 @@ AGENTS_MAP=(
 CODEX_MAP=(
   "AGENTS.runtime.codex.md:AGENTS.md"
   "config.toml:config.toml"
+  "hooks.json:hooks.json"
 )
 
 case "$RUNTIME" in
