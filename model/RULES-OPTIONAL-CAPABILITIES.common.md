@@ -87,7 +87,13 @@ For a matching descriptor:
 
 1. Verify that the descriptor status is `ready` and that its graph file exists.
 2. Compare the recorded source revision or freshness evidence with the current checkout.
-3. If the graph is usable, query it before doing broad codebase exploration.
+3. If the graph is usable, query it first -- before a broad keyword search, and before
+   digging through commit history as a last resort. This is a standing order of escalation
+   (graph -> grep -> git log/blame), not a one-off preference: a ready graph answers
+   structural questions (definitions, call sites, references) directly from parsed
+   structure, catching real matches a keyword search misses (no shared literal substring)
+   without re-scanning files on every query. Fall back to a keyword search only when the
+   graph has no answer, and to git history only when neither does.
 4. Treat graph answers as structural evidence, not as proof beyond their recorded source
    files and revision.
 5. If the graph is absent or stale, report that fact and offer the descriptor's refresh
