@@ -187,7 +187,7 @@ def main() -> int:
     if not today_exists:
         print(
             "- Today's daily note is MISSING (Scenario B): close the previous day first "
-            "(review-first TODO carry-over + Objectives review, then empty-category cleanup scoped to the previous daily -- "
+            "(review-first TODO carry-over, then a direct-record Objectives review, then empty-category cleanup scoped to the previous daily -- "
             "DEFER that cleanup if the previous day still has open session notes pending consolidation), "
             "then create today's daily note with navigation links."
         )
