@@ -3,8 +3,25 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import sys
 from pathlib import Path
+
+
+# session_digest.py (imported below, transitively) requires Python 3.10+
+# (dataclass slots=True). Rather than rely on the caller's PATH already
+# resolving `python3` to a new enough interpreter, re-exec under the newest
+# 3.10+ interpreter found on PATH before that import runs.
+if sys.version_info < (3, 10):
+    for _candidate in ("python3.13", "python3.12", "python3.11", "python3.10"):
+        _found = shutil.which(_candidate)
+        if _found:
+            os.execv(_found, [_found, *sys.argv])
+    sys.exit(
+        "session_open.py requires Python 3.10+ (dataclass slots=True); none of "
+        "python3.10/python3.11/python3.12/python3.13 found on PATH."
+    )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

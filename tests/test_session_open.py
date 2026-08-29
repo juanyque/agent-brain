@@ -328,5 +328,31 @@ class SessionDryRunTests(unittest.TestCase):
         self.assertNotIn("maintenance_jobs:", result.stdout)
 
 
+class SessionOpenInterpreterUpgradeTests(unittest.TestCase):
+    """session_open.py must keep working under an old system python3.
+
+    session_digest.py (imported transitively) needs Python 3.10+ for
+    dataclass(slots=True); the pyenv global on this machine's own PATH
+    resolves bare `python3` to 3.9, which broke this script for weeks.
+    session_open.py now re-execs itself under a newer interpreter found on
+    PATH before that import runs. This test genuinely proves the fix on a
+    machine where /usr/bin/env python3 resolves to something older than
+    3.10 (true here) -- on a machine where python3 is already 3.10+, the
+    guard's branch is a no-op and this test still passes, but it does not
+    exercise the re-exec path there.
+    """
+
+    def test_help_works_even_under_a_pre_3_10_system_python3(self) -> None:
+        result = subprocess.run(
+            ["/usr/bin/env", "python3", str(SCRIPTS_DIR / "session_open.py"), "--help"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--brain-root", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
