@@ -544,6 +544,55 @@ class SessionCloseTests(unittest.TestCase):
         self.assertIn("not a directory", result.stderr)
         self.assertEqual(content, original)
 
+    def test_consolidate_skips_undecodable_daily_without_crashing(self) -> None:
+        # Round-6 review finding: find_journal_registration()'s read loop only
+        # caught OSError, not UnicodeDecodeError, so one malformed (non-UTF-8)
+        # daily note crashed the whole close with an uncaught traceback -- after
+        # patch_status() had already mutated the note under --apply.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            create_note(brain, "session-123")
+            journal_dir = brain / "JOURNAL"
+            journal_dir.mkdir(parents=True)
+            (journal_dir / "2026-07-20.md").write_bytes(b"\xff\xfe not valid utf-8")
+            (journal_dir / "2026-07-21.md").write_text(
+                "# Sessions\n- `cd /repo && claude --resume session-123` — topic.\n",
+                encoding="utf-8",
+            )
+
+            result = run(
+                "--brain-root",
+                str(brain),
+                "consolidate",
+                "session-123",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("verified: session id found in", result.stdout)
+
+    def test_resolve_full_session_id_rejects_unrelated_resume_command(self) -> None:
+        # Round-6 review finding: a stale/mismatched '## Resume command' section
+        # (e.g. copy-pasted from a different note) was trusted blindly. If the
+        # extracted candidate doesn't even start with the CLI-supplied id/prefix,
+        # it can't be this session's own registration.
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            note = brain / "WIP" / "SESSIONS" / "2026-07-21-session-abc123-test.md"
+            note.parent.mkdir(parents=True)
+            note.write_text(
+                "---\ntags: [session, wip]\n---\n"
+                "# Session abc123\n\n"
+                "## State\n- Status: open\n\n"
+                "## Resume command\n"
+                "- `cd /repo && claude --resume other-session-entirely`\n\n"
+                "## Immediate next step\n- none\n",
+                encoding="utf-8",
+            )
+
+            resolved = session_close.resolve_full_session_id(note, "abc123")
+
+        self.assertEqual(resolved, "abc123")
+
     def test_resolve_full_session_id_falls_back_to_bare_generic_runtime_id(self) -> None:
         # Round-5 review finding: session_digest.resume_command() returns the
         # bare session id with no verb at all for an unrecognized/generic

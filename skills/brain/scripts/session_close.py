@@ -306,19 +306,28 @@ def resolve_full_session_id(note_path: Path, fallback: str) -> str:
     journal exactly, instead of failing a whole-token match against a longer
     string. Falls back to the CLI-supplied value when no resume command is
     present (e.g. a minimal or hand-written note) rather than guessing.
+
+    `fallback` is either the real id or a documented unambiguous prefix of it
+    (find_session_note()'s own contract) -- the one thing already known for
+    certain to identify this session. A candidate extracted from the note's
+    prose that doesn't even start with it can't be this session's own
+    registration (a stale or mismatched Resume command section, e.g.
+    copy-pasted from a different note) and must not be trusted over the
+    fallback.
     """
     try:
         text = note_path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return fallback
     section = _heading_section(text, "## Resume command")
     if section is None:
         return fallback
     match = RESUME_ID_RE.search(_command_after_cwd(section))
     if match is not None:
-        return match.group(1).strip("`")
+        candidate = match.group(1).strip("`")
+        return candidate if candidate.startswith(fallback) else fallback
     bare = _bare_resume_id(section)
-    if bare is not None:
+    if bare is not None and bare.startswith(fallback):
         return bare
     return fallback
 
@@ -348,7 +357,7 @@ def find_journal_registration(brain_root: Path, session_id: str) -> Path | None:
     for path in list_daily_notes(journal_root):
         try:
             text = path.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError):
             continue
         section = _heading_section(text, "# Sessions")
         if section is not None and pattern.search(section):
@@ -481,6 +490,21 @@ def main() -> int:
             print(f"ERROR: {preflight_error}", file=sys.stderr)
             return 1
 
+    # Compute both disk-verification checks before any mutation below. Reading
+    # JOURNAL/*.md and WIP/SOURCES/ is fallible (a malformed daily, an unreadable
+    # descriptor) -- if either raised here, previously, it did so *after*
+    # patch_status() had already written "consolidated" to disk, crashing the
+    # script with the note left half-closed and no rollback. Doing this first
+    # means a failure here never leaves the note mutated.
+    if subcommand == "consolidate":
+        full_session_id = resolve_full_session_id(note_path, session_id)
+        registration = find_journal_registration(brain_root, full_session_id)
+        pending_sources = (
+            summarize_due_sources(brain_root, date.today(), cwd_arg)
+            if registry_activated(brain_root)
+            else []
+        )
+
     print(f"# Session close — {subcommand}")
     print(f"mode: {mode}")
     print(f"session_note: {note_rel}")
@@ -500,8 +524,6 @@ def main() -> int:
             return 1
 
     if subcommand == "consolidate":
-        full_session_id = resolve_full_session_id(note_path, session_id)
-        registration = find_journal_registration(brain_root, full_session_id)
         if registration is not None:
             print(
                 f"  verified: session id found in {registration.relative_to(brain_root)} "
@@ -513,12 +535,6 @@ def main() -> int:
                 "the 'Session ID written in daily note' consolidation-checklist item "
                 "cannot be confirmed from disk; verify manually before archiving"
             )
-
-        pending_sources = (
-            summarize_due_sources(brain_root, date.today(), cwd_arg)
-            if registry_activated(brain_root)
-            else []
-        )
         if pending_sources:
             print("  WARNING: source(s) need attention before consolidating (WIP/SOURCES/):")
             for line in pending_sources:
