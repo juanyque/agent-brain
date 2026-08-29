@@ -23,7 +23,18 @@ Use the bootstrap in dry-run mode first:
 bash <agent-brain>/model/SCRIPTS/bootstrap-zero.sh --brain <brain_path>
 ```
 
-The bootstrap installs the skill for detected runtimes. Codex is detected through `~/.codex`, persists its user instructions and configuration at `_AGENTS/CODEX/AGENTS.runtime.codex.md` and `_AGENTS/CODEX/config.toml`, links them back to `~/.codex/AGENTS.md` and `~/.codex/config.toml`, and shares the user skill at `~/.agents/skills/brain` with OpenCode. Claude uses `~/.claude/skills/brain`. Antigravity CLI is skill-only and uses `~/.gemini/antigravity-cli/skills/brain`. If the private brain provides `_AGENTS/SHARED/memory/`, it is linked at `~/.agents/brain-memory` for lazy, indexed lookup. Codex's native `~/.codex/memories/` state is left untouched.
+The bootstrap installs the skill for detected runtimes. Codex is detected through `~/.codex`, persists its user instructions and configuration at `_AGENTS/CODEX/AGENTS.runtime.codex.md`, `_AGENTS/CODEX/config.toml`, and `_AGENTS/CODEX/hooks.json`, links them back to `~/.codex/AGENTS.md`, `~/.codex/config.toml`, and `~/.codex/hooks.json`, and shares the user skill at `~/.agents/skills/brain` with OpenCode. Claude uses `~/.claude/skills/brain`. Antigravity CLI is skill-only and uses `~/.gemini/antigravity-cli/skills/brain`. If the private brain provides `_AGENTS/SHARED/memory/`, it is linked at `~/.agents/brain-memory` for lazy, indexed lookup. Codex's native `~/.codex/memories/` state is left untouched.
+
+### Offer the SessionStart brain-connect hook
+
+Ask the user explicitly, per detected runtime, whether they want the brain to connect automatically when a session starts inside it. This is a real behavior change (something executes on every session start), not a passive config link like the mappings above, so it is opt-in, never assumed -- a "no" for one runtime, or for all of them, is a legitimate answer.
+
+If they say yes, wire `model/SCRIPTS/session_start_hook.py` -- portable, discovers the active brain from the hook's own `cwd` via `find_home.py`; no per-installation customization needed, and it fails safe (prints `{}`) for any cwd outside a brain:
+
+- **Claude Code**: add an entry to the `SessionStart` array already inside the brain-managed `settings.json` (`_AGENTS/CLAUDE/settings.json`, symlinked to `~/.claude/settings.json` per the mapping above): `{"hooks": [{"type": "command", "command": "python3 <agent-brain>/model/SCRIPTS/session_start_hook.py --runtime claude", "timeout": 5}]}`. No separate trust step exists for Claude Code hooks.
+- **Codex**: add the equivalent entry to `_AGENTS/CODEX/hooks.json`'s `SessionStart` array (symlinked to `~/.codex/hooks.json` via `runtime_install.sh codex --brain <brain_path> --apply`, now that `hooks.json` is a managed mapping): `{"hooks": [{"type": "command", "command": "/usr/bin/env python3 <agent-brain>/model/SCRIPTS/session_start_hook.py --runtime codex", "timeout": 10}]}`. Codex requires each hook to be explicitly trusted (a SHA-256 pinned per event+index in `config.toml`'s `[hooks.state]`) before it actually fires -- tell the user their next real interactive Codex session inside the vault will prompt for this. `--dangerously-bypass-hook-trust` exists for one-off testing only, never as a standing substitute for the user's own approval.
+
+Both runtimes share the same `hookSpecificOutput.additionalContext` response contract (verified empirically against Codex CLI 0.150.1, 2026-08-29) -- do not assume this holds for a future runtime without checking its own hook documentation first.
 
 Only apply after the dry-run is safe:
 
