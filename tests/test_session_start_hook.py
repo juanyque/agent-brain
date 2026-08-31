@@ -65,6 +65,18 @@ class SessionStartHookTests(unittest.TestCase):
         context = payload["hookSpecificOutput"]["additionalContext"]
         self.assertIn("$brain nueva sesion en español", context)
 
+    def test_opencode_reminder_uses_the_explicit_invocation_phrase(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw) / "opencodevault"
+            attach(brain)
+
+            result = run_hook("opencode", {"cwd": str(brain)}, agent_brain_home=REPO_ROOT)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        context = payload["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("$brain nueva sesion en español", context)
+
     def test_emits_empty_object_when_cwd_is_not_inside_a_brain(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             unrelated = Path(raw) / "not-a-brain"
@@ -219,7 +231,7 @@ class SessionStartHookTests(unittest.TestCase):
         # itself misspelled) must not break session start any more than a
         # missing brain does -- argparse's own SystemExit is a fail-safe case
         # too, not just runtime-discovery errors.
-        for bad_args in (["--runtime", "opencode"], ["--runtime"], []):
+        for bad_args in (["--runtime", "unsupported"], ["--runtime"], []):
             with self.subTest(bad_args=bad_args):
                 result = subprocess.run(
                     [sys.executable, str(HOOK), *bad_args],

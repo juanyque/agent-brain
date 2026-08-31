@@ -11,12 +11,13 @@ any brain and any cwd inside it, including a person with more than one brain.
 Usage (wired into the runtime's own hook config, one entry per runtime):
     python3 session_start_hook.py --runtime claude
     python3 session_start_hook.py --runtime codex
+    python3 session_start_hook.py --runtime opencode
 
 stdin: the runtime's own SessionStart hook payload (JSON). Only `cwd` is used;
 its absence or a malformed payload is not an error -- see resolve_cwd().
 
-stdout: the runtime's own SessionStart hook response contract. Both Claude
-Code and Codex share the same shape (verified empirically against Codex CLI
+stdout: the runtime's own SessionStart hook response contract. Claude Code,
+Codex, and the OpenCode bridge share the same shape (verified empirically against Codex CLI
 0.150.1: hookSpecificOutput.additionalContext is genuinely injected into the
 agent's own turn, not just schema-accepted-but-ignored) --
 `{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "..."}}`
@@ -37,11 +38,12 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import TypeAlias
 
 # The exact invocation phrase differs per runtime (confirmed empirically,
 # 2026-08-29): Claude Code's registered `/brain` slash command reliably runs
 # the session-start protocol from a plain "invoke the brain skill" reminder.
-# Codex's `$brain` is plain chat text the agent has to interpret, not a
+# In Codex and OpenCode, `$brain` is plain chat text the agent has to interpret, not a
 # registered command -- leaving off the explicit "nueva sesion en español"
 # argument produced unreliable initialization and the wrong response
 # language, so that runtime's phrasing spells out the exact invocation.
@@ -58,10 +60,23 @@ RUNTIME_MESSAGES = {
         "this session (new or resumed) per its own logic -- do not wait "
         "for the user to ask for it."
     ),
+    "opencode": (
+        "This session started inside the {name} brain vault. Before "
+        "anything else, run `$brain nueva sesion en español` to connect "
+        "this session (new or resumed) per its own logic -- do not wait "
+        "for the user to ask for it."
+    ),
 }
 
+JsonScalar: TypeAlias = str | int | float | bool | None
+JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 
-def resolve_cwd(hook_input: object) -> str:
+
+class InvalidHookPayloadError(ValueError):
+    pass
+
+
+def resolve_cwd(hook_input: JsonValue) -> str:
     cwd = hook_input.get("cwd") if isinstance(hook_input, dict) else None
     if isinstance(cwd, str) and cwd:
         return cwd
@@ -126,8 +141,8 @@ def main() -> int:
             # `[]`, `null`, and a bare scalar are all syntactically valid
             # JSON but not a usable hook payload -- treat the same as a
             # parse failure, not a payload resolve_cwd() should inspect.
-            raise ValueError("hook payload must be a JSON object")
-    except (json.JSONDecodeError, OSError, ValueError):
+            raise InvalidHookPayloadError("hook payload must be a JSON object")
+    except (InvalidHookPayloadError, json.JSONDecodeError, OSError):
         # Fail closed immediately -- do not fall through to a PWD-based cwd
         # guess, which could still find a real brain and inject the
         # reminder despite the malformed input.
@@ -154,6 +169,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception:
+    except Exception:  # noqa: BROAD_EXCEPT_OK
         print("{}")
         sys.exit(0)
