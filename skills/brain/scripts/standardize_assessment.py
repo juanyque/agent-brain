@@ -24,6 +24,8 @@ REQUIRED_ROOT_DIRS: Final = frozenset({
     "OUTBOX",
     "QUARANTINE",
     "REPORTS",
+    "SCRIPTS",
+    "SOURCE_TYPES",
     "TASK_TYPES",
     "TEMPLATES",
     "WIP",

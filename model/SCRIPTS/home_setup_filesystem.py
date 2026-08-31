@@ -60,6 +60,10 @@ def cleanup_empty_dirs_recursively(
     reporter: Reporter,
     dry_run: bool,
 ) -> None:
+    protected = {
+        brain_root / directory
+        for directory in SCAFFOLD_DIRECTORIES
+    }
     candidates: list[Path] = []
     try:
         top_entries = list(brain_root.iterdir())
@@ -82,6 +86,8 @@ def cleanup_empty_dirs_recursively(
     removed: list[Path] = []
     removed_set: set[Path] = set()
     for path in candidates:
+        if path in protected:
+            continue
         try:
             children = list(path.iterdir())
         except OSError:

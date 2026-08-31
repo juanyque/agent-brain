@@ -34,7 +34,13 @@ LEGACY_REQUIRED_ROOT_DIRS = {
     "TEMPLATES",
     "WIP",
 }
-NEW_REQUIRED_ROOT_DIRS = {"ARCHIVED", "OUTBOX", "TASK_TYPES"}
+NEW_REQUIRED_ROOT_DIRS = {
+    "ARCHIVED",
+    "OUTBOX",
+    "SCRIPTS",
+    "SOURCE_TYPES",
+    "TASK_TYPES",
+}
 OPTIONAL_ROOT_DIRS = {"_AGENTS", "_STAGING"}
 
 
@@ -118,6 +124,8 @@ class StandardizeAssessmentRootTests(unittest.TestCase):
             {
                 "Missing expected directory `ARCHIVED/`.",
                 "Missing expected directory `OUTBOX/`.",
+                "Missing expected directory `SCRIPTS/`.",
+                "Missing expected directory `SOURCE_TYPES/`.",
                 "Missing expected directory `TASK_TYPES/`.",
             },
         )
