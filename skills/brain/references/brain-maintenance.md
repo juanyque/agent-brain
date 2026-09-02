@@ -131,6 +131,6 @@ After a batch is applied, ask separately for any of the following before executi
 
 ## 5. Recurring maintenance reviews
 
-- Weekly trash review: review `QUARANTINE/TRASH/` for notes older than 15 days and propose candidates for permanent deletion. Do not delete automatically; list candidates and wait for explicit human approval.
+- Weekly trash review: review `QUARANTINE/TRASH/` for notes older than 15 days and propose candidates for permanent deletion. Do not delete automatically; list candidates and wait for explicit human approval. Before proposing or applying deletion, verify every work-day `# Sessions` registration required by `RULES-DAILY-NOTES.md`: preserve its recovery command or full id, context, and outcome; remove only the obsolete note link and record the deletion status. If a registration is missing, restore it before deleting the note.
 - Monthly maintenance-rule review: review recurring maintenance rules and refine them if they are creating unnecessary friction.
 - These recurring reviews may produce recommendations, WIP entries, or proposed rule edits. Once a content move is semantically justified, its brain-internal `git mv` uses the bounded standing authorization in `_COMMON/AGENTS.common.md`; permanent deletion and all other Git operations still require explicit user approval.

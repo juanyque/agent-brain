@@ -31,6 +31,12 @@ Use this rule when creating, rolling over, cleaning, or correcting daily notes i
   upsert keyed by the full session id: re-running it must leave exactly one entry and
   preserve any user-edited summary while correcting the recovery command and the link
   to the selected active session note.
+- Archiving or permanently deleting a session note must never remove its historical
+  registration from `# Sessions`. Keep the recovery command or full session id, the
+  project/context, and the short outcome summary; remove only the obsolete note link
+  and append a brief status such as `Session note deleted after explicit review on
+  YYYY-MM-DD`. If an earlier cleanup removed the whole entry, restore it before deleting
+  another session note.
 - Keep detailed work under `# Actions` → `* [[WORK]]:`.
 
 ## Cleanup timing
