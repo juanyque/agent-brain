@@ -50,9 +50,11 @@ This file is the canonical procedure for session lifecycle decisions.
 
 ## Closing gate
 
-Before moving a previous session note out of `WIP/SESSIONS/`, an agent must verify and record all of the following:
-
-1. Durable state has been preserved in the relevant daily note, WIP note, project note, or `MEMORY/` note.
+1. **Durable state has been preserved (Truth Destination Rule)**: the agent must actively transfer knowledge to its legitimate home before closing:
+   - **External projects/repositories**: if the session involved changes to infrastructure, code, configuration, root-cause findings, runbooks, or architecture decisions, they must be recorded in the relevant project's own documentation (`STATE.md`, `README.md`, `ADRs`, `runbooks/`, etc.), as that repository is the primary technical source of truth.
+   - **Brain memory & topics**: general or cross-cutting knowledge, decisions, or follow-ups that do not belong to a specific external codebase must be recorded in `MEMORY/`, thematic topic notes, or `WIP/`.
+   - **Daily Journal (`JOURNAL/`)**: the daily note must record substantive actions, decisions, and outcomes under `# Actions` -> `[[WORK]]`, rather than merely logging session IDs or generic labels.
+   A checklist with checked boxes is not valid proof of closure without this substantive knowledge transfer.
 2. The previous session is not the session currently being resumed or continued.
 3. The note is not only a handoff for a still-open same-session rollover.
 4. The consolidation checklist is complete, or any unchecked item has an explicit written reason in the new session note or `JOBS_LOGS.md`. Do not trust the checklist's own checkboxes as proof: `session_close.py consolidate` verifies the "Session ID written in daily note" item against the real `JOURNAL/*.md` files on disk and prints `verified` or `WARNING` accordingly — read that line rather than assuming the box was checked correctly. Pass `--cwd` with the session's real working directory so this matches the profile the session actually used (omitting it falls back to `brain_root`, which can select the wrong profile in a brain with per-project rules — the same caveat `source_scheduler.py`'s own `--cwd` flag documents). The same command also re-checks `WIP/SOURCES/` (only when `registry_activated()` says the capability is switched on) against `source_scheduler.py`'s own due-ness logic and reports any source still due *or* blocked instead of silently treating either as "nothing pending" — the same "opening a session lists what's due, but nothing forces it to actually happen" gap the source-ingestion capability itself doesn't close on its own. A source reported `degraded` was investigated and intentionally kept due for retry, not skipped — read the reported reason rather than assuming every warning means the session ignored something.
