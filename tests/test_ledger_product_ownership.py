@@ -108,6 +108,8 @@ class ProductFixture:
             },
         )
         subprocess.run(["git", "init"], cwd=self.impl, check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(["git", "config", "gc.auto", "0"], cwd=self.impl, check=True)
+        subprocess.run(["git", "config", "maintenance.auto", "false"], cwd=self.impl, check=True)
         subprocess.run(["git", "add", "."], cwd=self.impl, check=True)
         subprocess.run(
             ["git", "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid",

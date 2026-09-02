@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -65,6 +66,7 @@ console.log(JSON.stringify({ first: first.parts, second: second.parts }))
     )
 
 
+@unittest.skipUnless(shutil.which("bun"), "bun is required for OpenCode session start plugin tests")
 class OpenCodeSessionStartPluginTests(unittest.TestCase):
     def test_injects_brain_context_only_on_first_message(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
