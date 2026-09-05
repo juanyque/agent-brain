@@ -81,7 +81,7 @@ Once a brain path is confirmed, run `session_open.py` immediately. Do not pre-re
 
 The digest is state-only progressive loading: operational-file presence, open-session state, cwd-filtered WIP snippets, and `TASK_TYPES` index one-liners. It must not include `AGENTS.md`, `BRAIN.md`, rule, task, or reference bodies. Runtime-injected project instructions are already loaded by the agent runtime; only load a brain operational file later when a matching task requires it, and then load exactly one triggered rule, task, or reference at a time.
 
-Resolve the real session id and runtime before invoking the script. Never pass a timestamp fallback or let the script guess a wrong runtime. If the real id cannot be resolved, stop and ask the user.
+Resolve the real session id and runtime before invoking the script. Never pass a timestamp fallback or let the script guess a wrong runtime. If the real id cannot be resolved, stop and ask the user. For OpenCode, prefer `$OPENCODE_SESSION_ID` (authoritative — injected by the agent-brain `brain-session-env` plugin); `resolve_session_id.py --runtime opencode --cwd "$(pwd)"` implements the full fallback chain (launch flag → liveness probe → ask-user candidates) and `--install-plugin` enables signal 1.
 
 ```bash
 python3 ~/.agents/skills/brain/scripts/session_open.py \

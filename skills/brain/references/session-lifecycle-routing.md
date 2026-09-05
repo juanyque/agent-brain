@@ -31,7 +31,7 @@ entrypoint.
 |---|---|---|
 | Antigravity CLI | read the current workspace entry from `~/.gemini/antigravity-cli/cache/last_conversations.json`; if it is absent, use `/resume` and ask rather than guessing | `--runtime antigravity` |
 | Claude Code | read `$CLAUDE_CODE_SESSION_ID` | `--runtime claude` (or omit; auto-detected via env) |
-| OpenCode | run `opencode session list`, pick the active session | `--runtime opencode` (**required** — no env var) |
+| OpenCode | read `$OPENCODE_SESSION_ID` (injected by the agent-brain `brain-session-env` plugin); fallback: `-s`/`--session` value in `ps -p $OPENCODE_PID -o command=`, then `resolve_session_id.py --runtime opencode --cwd "$(pwd)"` (liveness probe); else ask the user with directory-filtered candidates | `--runtime opencode` (**required** — no env var) |
 | Codex | read `$CODEX_THREAD_ID` (runtime-provided; not a public API) | `--runtime codex` |
 | Other | consult the runtime's session-listing command | `--runtime generic` |
 
