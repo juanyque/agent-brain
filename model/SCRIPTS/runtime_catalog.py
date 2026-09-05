@@ -39,6 +39,11 @@ RUNTIME_CONFIGS = {
         "skills_dir": Path("~/.agents/skills"),
         "private_targets": {"config.toml"},
     },
+    "omo": {
+        "local_dir": Path("~/.omo"),
+        "agents_subdir": "OMO",
+        "mappings": [("omo.jsonc", "omo.jsonc")],
+    },
     "antigravity": {
         "local_dir": Path("~/.gemini/antigravity-cli"),
         "agents_subdir": "ANTIGRAVITY",

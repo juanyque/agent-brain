@@ -48,12 +48,13 @@ class RuntimeHealthTests(unittest.TestCase):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.symlink_to(source)
 
-                skills_raw = str(config.get("skills_dir", config["local_dir"] / "skills"))
-                skills_dir = home / skills_raw[2:]
-                skills_dir.mkdir(parents=True, exist_ok=True)
-                skill_link = skills_dir / "brain"
-                if not skill_link.exists() and not skill_link.is_symlink():
-                    skill_link.symlink_to(skill)
+                skills_raw = config.get("skills_dir")
+                if skills_raw is not None:
+                    skills_dir = home / str(skills_raw)[2:]
+                    skills_dir.mkdir(parents=True, exist_ok=True)
+                    skill_link = skills_dir / "brain"
+                    if not skill_link.exists() and not skill_link.is_symlink():
+                        skill_link.symlink_to(skill)
 
             shared_memory = brain / "_AGENTS" / "SHARED" / "memory"
             shared_memory.mkdir(parents=True)

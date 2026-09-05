@@ -53,6 +53,7 @@ When both sides have unmanaged config:
 | opencode | `~/.config/opencode/` | `~/.agents/skills/brain` | `AGENTS.runtime.opencode.md→AGENTS.md`, `opencode.json`, `oh-my-openagent.json` |
 | agents | `~/.agents/` | `~/.agents/skills/brain` | `AGENTS.runtime.agents.md→AGENTS.md` |
 | codex | `~/.codex/` | `~/.agents/skills/brain` | `AGENTS.runtime.codex.md→AGENTS.md`, `config.toml` |
+| omo | `~/.omo/` | — (no skills; config-only) | `omo.jsonc` |
 | antigravity | `~/.gemini/antigravity-cli/` | `~/.gemini/antigravity-cli/skills/brain` | Skill-only; no config mappings |
 
 The catalog does not define a `gemini` runtime or install into the legacy `~/.gemini/skills/` path.

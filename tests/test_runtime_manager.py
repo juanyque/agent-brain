@@ -103,6 +103,29 @@ class RuntimeManagerTests(unittest.TestCase):
         self.assertEqual(unrelated.read_text(), '{"theme":"dark"}\n')
         self.assertFalse(list((self.home / ".codex").glob("*.backup-*")))
 
+    def test_omo_ingests_config_and_manages_no_skills(self) -> None:
+        local_config = self.home / ".omo" / "omo.jsonc"
+        local_config.parent.mkdir(parents=True)
+        local_config.write_text(
+            '{ "disabled_commands": ["start-work"] }\n', encoding="utf-8"
+        )
+
+        self.process_runtime("omo")
+
+        brain_config = self.brain / "_AGENTS" / "OMO" / "omo.jsonc"
+        self.assertEqual(
+            brain_config.read_text(encoding="utf-8"),
+            '{ "disabled_commands": ["start-work"] }\n',
+        )
+        self.assertTrue(local_config.is_symlink())
+        self.assertEqual(local_config.resolve(), brain_config.resolve())
+        self.assertFalse((self.home / ".omo" / "skills").exists())
+
+        self.process_runtime("omo")
+
+        self.assertTrue(local_config.is_symlink())
+        self.assertFalse((self.home / ".omo" / "skills").exists())
+
     def test_direction_a_materializes_chained_runtime_config_symlink(self) -> None:
         external_config = self.root / "dropbox" / "runtime-instructions.md"
         external_config.parent.mkdir()

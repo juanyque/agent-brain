@@ -398,8 +398,11 @@ def quarantine_local(
 def link_skill(rt_name: str, brain_root: Path, reporter: Reporter, dry_run: bool) -> None:
     repo_root = resolve_repo_root()
     config = RUNTIME_CONFIGS[rt_name]
-    local_dir = config["local_dir"].expanduser()
-    skills_dir = config.get("skills_dir", local_dir / "skills").expanduser()
+    skills_dir = config.get("skills_dir")
+    if skills_dir is None:
+        reporter.write(f"  SKIP  skill link ({rt_name}): runtime manages no skills")
+        return
+    skills_dir = skills_dir.expanduser()
     link = skills_dir / "brain"
     target = repo_root / "skills" / "brain"
 

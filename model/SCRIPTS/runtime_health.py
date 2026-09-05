@@ -129,14 +129,13 @@ def check_runtime(
                 f"local state exists but brain source is missing: {source}",
             )
 
-    skills_dir = expand_runtime_path(
-        config.get("skills_dir", local_dir / "skills"), home_root
-    )
-    check.link(
-        f"{label} brain skill linked",
-        skills_dir / "brain",
-        (repo_root or resolve_repo_root()) / "skills" / "brain",
-    )
+    skills_dir = config.get("skills_dir")
+    if skills_dir is not None:
+        check.link(
+            f"{label} brain skill linked",
+            expand_runtime_path(skills_dir, home_root) / "brain",
+            (repo_root or resolve_repo_root()) / "skills" / "brain",
+        )
 
     if name == "codex":
         shared_memory = brain_root / AGENTS_DIR_NAME / "SHARED" / "memory"

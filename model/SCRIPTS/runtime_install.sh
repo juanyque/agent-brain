@@ -70,11 +70,16 @@ CODEX_MAP=(
   "hooks.json:hooks.json"
 )
 
+OMO_MAP=(
+  "omo.jsonc:omo.jsonc"
+)
+
 case "$RUNTIME" in
   claude)   SRC_DIR="$BRAIN_PATH/_AGENTS/CLAUDE";   TARGET="$HOME/.claude";          MAP=("${CLAUDE_MAP[@]}")   ;;
   opencode) SRC_DIR="$BRAIN_PATH/_AGENTS/OPENCODE"; TARGET="$HOME/.config/opencode"; MAP=("${OPENCODE_MAP[@]}") ;;
   agents)   SRC_DIR="$BRAIN_PATH/_AGENTS/AGENTS";   TARGET="$HOME/.agents";          MAP=("${AGENTS_MAP[@]}")   ;;
   codex)    SRC_DIR="$BRAIN_PATH/_AGENTS/CODEX";    TARGET="$HOME/.codex";           MAP=("${CODEX_MAP[@]}")    ;;
+  omo)      SRC_DIR="$BRAIN_PATH/_AGENTS/OMO";      TARGET="$HOME/.omo";             MAP=("${OMO_MAP[@]}")      ;;
   *) echo "ERROR: unknown runtime '$RUNTIME' (supported: claude, opencode, agents, codex)" >&2; exit 2 ;;
 esac
 
