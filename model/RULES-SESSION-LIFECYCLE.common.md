@@ -81,9 +81,9 @@ Daily note structure (sections `# Actions`, `# Sessions`, work organization by p
 
 ## Flow 1: day change / same session continues
 
-Trigger examples: `nuevo día`, `new day`, `cambio de día`, `cambia de día`, `we changed day`.
+Trigger examples: `nuevo día`, `new day`, `cambio de día`, `cambia de día`, `we changed day`, or resuming/continuing a session (compaction restore, runtime relaunch with the same session id) on a later calendar day.
 
-Use this flow only when the user is continuing the same working session and the calendar changed.
+Use this flow only when the user is continuing the same working session and the calendar changed. A resumed session re-registers by re-running `session_open.py` (idempotent: it reuses the existing note and records the session under **today's** `# Sessions` — the real activity date, never the note's creation date); never create a second session note for the same session id.
 
 1. Create today's daily note if it does not exist.
 2. **Migrate the previous day's unfinished `* [[TODO]]:` items.** Before cleaning the previous note, review its TODO list with the user (do not move silently — a wrong or dropped TODO loses real intended work, unlike Objectives evidence in `RULES-DAILY-NOTES.md`, which is a personal record with no such downstream cost and is recorded directly, no approval gate): carry unfinished items into today's `* [[TODO]]:`, promote real tasks to `WIP/`/`BACKLOG/` where they belong, and drop done/obsolete ones. This empties the previous TODO so the cleanup in the next step can remove it if it ends up empty.
