@@ -238,6 +238,21 @@ def _heading_section(text: str, heading: str) -> str | None:
 RESUME_ID_RE = re.compile(r"(?:--resume|--conversation|\bresume|(?<!\S)-s)\s+(\S+)")
 
 
+def consolidation_checklist_state(text: str) -> tuple[str, list[str]]:
+    """Classify the closing-gate checklist: 'passing', 'failing' with the
+    unchecked items that lack an inline `reason:`, or 'missing' for legacy
+    notes without the section."""
+    section = _heading_section(text, "## Consolidation checklist")
+    if section is None:
+        return "missing", []
+    failing: list[str] = []
+    for line in section.splitlines():
+        stripped = line.strip()
+        if re.match(r"^-\s*\[\s+\]\s+", stripped) and "reason:" not in stripped.lower():
+            failing.append(stripped)
+    return ("failing" if failing else "passing"), failing
+
+
 def _split_unquoted(line: str, sep: str) -> str | None:
     """Return the text after the first `sep` that appears outside any quoted
     span, or None if `sep` never appears unquoted.
@@ -507,6 +522,22 @@ def main() -> int:
             if registry_activated(brain_root)
             else []
         )
+        gate_state: tuple[str, list[str]] = ("missing", [])
+        if not already_target:
+            gate_state = consolidation_checklist_state(
+                note_path.read_text(encoding="utf-8")
+            )
+            if gate_state[0] == "failing":
+                print("ERROR: closing gate incomplete — refusing to consolidate.", file=sys.stderr)
+                print("  Unchecked checklist items without an inline 'reason:':", file=sys.stderr)
+                for item in gate_state[1]:
+                    print(f"    {item}", file=sys.stderr)
+                print(
+                    "  Check what you completed, and append ' — reason: <why>' to each "
+                    "legitimately-unchecked item (RULES-SESSION-LIFECYCLE closing gate).",
+                    file=sys.stderr,
+                )
+                return 1
 
     print(f"# Session close — {subcommand}")
     print(f"mode: {mode}")
@@ -527,6 +558,17 @@ def main() -> int:
             return 1
 
     if subcommand == "consolidate":
+        if not already_target:
+            if gate_state[0] == "passing":
+                print(
+                    "  verified: closing-gate checklist complete "
+                    "(unchecked items carry inline reasons)"
+                )
+            else:
+                print(
+                    "  WARNING: no '## Consolidation checklist' section — closing gate "
+                    "cannot be verified (legacy note)"
+                )
         if registration is not None:
             print(
                 f"  verified: session id found in {registration.relative_to(brain_root)} "

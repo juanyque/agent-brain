@@ -848,5 +848,110 @@ class SessionCloseTests(unittest.TestCase):
         self.assertEqual(status.stdout, "")
 
 
+class ClosingGateTests(unittest.TestCase):
+    def _write_note(
+        self, brain: Path, status: str, checklist: str | None
+    ) -> None:
+        note = brain / "WIP" / "SESSIONS" / "2026-09-05-session-ses-gate1-closing-gate.md"
+        note.parent.mkdir(parents=True)
+        checklist_block = f"\n## Consolidation checklist\n{checklist}\n" if checklist else ""
+        note.write_text(
+            "---\ntags: [session, wip]\n---\n"
+            "# Session ses-gate1\n\n"
+            f"## State\n- Status: {status}\n\n"
+            "## Resume command\n"
+            "- `cd /repo && opencode -s ses-gate1`\n\n"
+            "## Immediate next step\n- none\n"
+            f"{checklist_block}",
+            encoding="utf-8",
+        )
+        journal_dir = brain / "JOURNAL"
+        journal_dir.mkdir(parents=True,exist_ok=True)
+        (journal_dir / "2026-09-05.md").write_text(
+            "# Sessions\n- `cd /repo && opencode -s ses-gate1` — gate.\n",
+            encoding="utf-8",
+        )
+
+    def _brain(self, status: str, checklist: str | None) -> Path:
+        raw = tempfile.TemporaryDirectory()
+        self.addCleanup(raw.cleanup)
+        brain = Path(raw.name)
+        (brain / "_COMMON").symlink_to(MODEL_ROOT, target_is_directory=True)
+        self._write_note(brain, status, checklist)
+        return brain
+
+    def test_consolidate_refuses_unchecked_items_without_inline_reason(self) -> None:
+        brain = self._brain(
+            "open",
+            "- [x] `WIP/WIP.md` updated if needed\n"
+            "- [ ] `JOURNAL/` updated if needed\n"
+            "- [ ] Session ID written in daily note\n",
+        )
+        note = next((brain / "WIP" / "SESSIONS").glob("*.md"))
+
+        result = run("--brain-root", str(brain), "consolidate", "ses-gate1", "--apply")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("closing gate incomplete", result.stderr)
+        self.assertIn("reason:", result.stderr)
+        self.assertIn("- Status: open", note.read_text(encoding="utf-8"))
+
+    def test_consolidate_allows_unchecked_item_with_inline_reason(self) -> None:
+        brain = self._brain(
+            "open",
+            "- [x] `WIP/WIP.md` updated if needed\n"
+            "- [ ] `JOURNAL/` updated if needed — reason: recorded in ticket instead\n",
+        )
+
+        result = run("--brain-root", str(brain), "consolidate", "ses-gate1", "--apply")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "closing-gate checklist complete",
+            result.stdout,
+        )
+
+    def test_consolidate_passes_when_every_item_is_checked(self) -> None:
+        brain = self._brain(
+            "open",
+            "- [x] `WIP/WIP.md` updated if needed\n- [x] Session ID written in daily note\n",
+        )
+
+        result = run("--brain-root", str(brain), "consolidate", "ses-gate1", "--apply")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("closing-gate checklist complete", result.stdout)
+
+    def test_legacy_note_without_checklist_consolidates_with_warning(self) -> None:
+        brain = self._brain("open", None)
+
+        result = run("--brain-root", str(brain), "consolidate", "ses-gate1", "--apply")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("WARNING: no '## Consolidation checklist' section", result.stdout)
+
+    def test_dry_run_reports_incomplete_gate_without_mutating(self) -> None:
+        brain = self._brain("open", "- [ ] Session ID written in daily note\n")
+        note = next((brain / "WIP" / "SESSIONS").glob("*.md"))
+        before = note.read_text(encoding="utf-8")
+
+        result = run("--brain-root", str(brain), "consolidate", "ses-gate1")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("closing gate incomplete", result.stderr)
+        self.assertEqual(note.read_text(encoding="utf-8"), before)
+
+    def test_already_consolidated_note_reruns_without_gate(self) -> None:
+        brain = self._brain(
+            "consolidated",
+            "- [ ] Session ID written in daily note\n",
+        )
+
+        result = run("--brain-root", str(brain), "consolidate", "ses-gate1", "--apply")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("unchanged: Status already consolidated", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
