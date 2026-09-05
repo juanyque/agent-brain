@@ -65,6 +65,10 @@ This file is the canonical procedure for session lifecycle decisions.
 
 If any gate is uncertain, leave the note in `WIP/SESSIONS/`, mark it `stale-follow-up`, and report the exact uncertainty. Do not infer closure from age alone.
 
+### Reopening a closed session
+
+Consolidation is a close: resuming a session id whose note has `Status: consolidated` (or `stale-follow-up`) must never silently register it as active again. `session_open.py --apply` refuses such a resume outright. To genuinely continue that same session id, re-run with `--reopen-consolidated`: it records the explicit transition in the note (`Status: consolidated → open` plus a dated `- Reopened: <date> (from consolidated)` line) and only then performs the normal resume registration in today's daily. When in doubt, prefer starting a new session id and linking back to the closed note. Notes with `Status: open`, `handoff-only`, or no parseable Status (legacy) resume as before.
+
 ### Session-close dump: two roles
 
 Closing gate item 1 ("durable state has been preserved") splits into two roles, not one:

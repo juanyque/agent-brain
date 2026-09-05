@@ -46,6 +46,15 @@ def parse_args() -> argparse.Namespace:
         "block is empty and ready for deterministic registration.",
     )
     parser.add_argument(
+        "--reopen-consolidated",
+        action="store_true",
+        help="Record an explicit reopen when the matched session note has Status "
+        "consolidated or stale-follow-up: flips Status to open and appends a dated "
+        "Reopened line before the normal resume registration. Without this flag, "
+        "resuming such a note is refused in --apply mode. No-op for open or "
+        "handoff-only notes.",
+    )
+    parser.add_argument(
         "--apply",
         action="store_true",
         help="Write session note and upsert the daily registration. Default is dry-run.",
@@ -69,5 +78,6 @@ def main(hooks: SessionOpenHooks) -> int:
         cwd=args.cwd,
         prepare_daily=args.prepare_daily,
         apply=args.apply,
+        reopen_consolidated=args.reopen_consolidated,
     )
     return run_flow(request, hooks)

@@ -10,7 +10,7 @@ from brain_state import current_brain_status, current_model_root
 from model_check_no_follow import lstat_entry, symlinked_parent
 from session_digest import SessionDigestRequest, render_session_digest
 from session_open_context import collect_session_digest_state, derive_topic
-from session_open_discovery import JournalConfigError, find_existing_session_note, find_template, list_daily_notes, load_journal_folder
+from session_open_discovery import JournalConfigError, find_existing_session_note, find_template, list_daily_notes, load_journal_folder, read_session_status
 from session_open_registration import build_sessions_entry
 from session_open_transaction import SessionTransactionRequest, apply_session_transaction
 from session_open_validation import validate_daily_navigation
@@ -43,6 +43,7 @@ class SessionOpenRequest:
     cwd: str
     prepare_daily: bool
     apply: bool
+    reopen_consolidated: bool = False
 
 
 def run_flow(request: SessionOpenRequest, hooks: SessionOpenHooks) -> int:
@@ -90,6 +91,27 @@ def run_flow(request: SessionOpenRequest, hooks: SessionOpenHooks) -> int:
     existing_note = find_existing_session_note(brain_root, request.session_id)
     if existing_note and existing_note == session_note_path:
         existing_note = None
+    reopen_status: str | None = None
+    consolidated_conflict: str | None = None
+    if existing_note is not None:
+        existing_status = read_session_status(existing_note)
+        if existing_status in ("consolidated", "stale-follow-up"):
+            if request.reopen_consolidated:
+                reopen_status = existing_status
+            elif request.apply:
+                print(
+                    f"ERROR: session note is {existing_status} — refusing to register it "
+                    f"as active: {existing_note.relative_to(brain_root)}",
+                    file=sys.stderr,
+                )
+                print(
+                    "  Continue in a NEW session id, or re-run with --reopen-consolidated "
+                    "to record an explicit reopen (Status → open with a Reopened line).",
+                    file=sys.stderr,
+                )
+                return 1
+            else:
+                consolidated_conflict = existing_status
     if existing_note:
         effective_note_rel = existing_note.relative_to(brain_root)
         effective_slug = existing_note.stem
@@ -113,6 +135,12 @@ def run_flow(request: SessionOpenRequest, hooks: SessionOpenHooks) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     sys.stdout.write(render_session_digest(digest_state))
+    if consolidated_conflict is not None:
+        print(
+            f"consolidated_note: session note Status is {consolidated_conflict} — apply "
+            "refuses; continue in a NEW session id or pass --reopen-consolidated to "
+            "record an explicit reopen."
+        )
     sessions_entry = build_sessions_entry(
         request.session_id,
         topic,
@@ -181,6 +209,7 @@ def run_flow(request: SessionOpenRequest, hooks: SessionOpenHooks) -> int:
                 existing_note=existing_note,
                 template_path=template_path,
                 sessions_entry=sessions_entry,
+                reopen_status=reopen_status,
             ),
             hooks,
         )

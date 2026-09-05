@@ -12,7 +12,7 @@ from session_open_fs import (
     _restore_regular_file_no_follow,
     _rollback_created_session_note,
 )
-from session_open_registration import upsert_session_recovery
+from session_open_registration import apply_reopen_transition, upsert_session_recovery
 from session_open_validation import validate_session_postconditions
 
 
@@ -55,6 +55,7 @@ class SessionTransactionRequest:
     existing_note: Path | None
     template_path: Path | None
     sessions_entry: str
+    reopen_status: str | None = None
 
 
 def _read_bytes_no_follow(path: Path, safe_root: Path) -> bytes:
@@ -85,6 +86,17 @@ def apply_session_transaction(
                 session_restore_path,
                 request.brain_root,
             )
+            if request.reopen_status is not None:
+                reopen_action = apply_reopen_transition(
+                    session_restore_path,
+                    request.today,
+                    safe_root=request.brain_root,
+                )
+                print(
+                    f"reopened: {request.effective_note_rel} "
+                    f"(Status: {request.reopen_status} -> open, "
+                    f"Reopened: {request.today}; {reopen_action})"
+                )
             recovery_action = upsert_session_recovery(
                 session_restore_path,
                 request.session_id,

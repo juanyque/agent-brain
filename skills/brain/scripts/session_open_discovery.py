@@ -130,6 +130,11 @@ def _read_status(path: Path) -> str:
     return ""
 
 
+def read_session_status(path: Path) -> str:
+    """Public status reader for flow-level resume guards."""
+    return _read_status(path)
+
+
 def find_existing_session_note(brain_root: Path, session_id: str) -> Path | None:
     """Return the most recent active session note for session_id."""
     session_dir = brain_root / "WIP" / "SESSIONS"

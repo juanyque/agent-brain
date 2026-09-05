@@ -147,6 +147,199 @@ class SessionOpenApplyMixin:
             self.assertEqual(len(registrations), 1)
             self.assertIn(f"[[{prior_stem}]]", registrations[0])
 
+    def _write_closed_note(
+        self, session_dir: Path, session_id: str, prior_day, status: str
+    ) -> Path:
+        note = session_dir / f"{prior_day}-session-{session_id}-topic.md"
+        state_block = (
+            f"## State\n- Status: {status}\n\n" if status else "## State\n\n"
+        )
+        note.write_text(
+            state_block
+            + "## Resume command\n"
+            f"- `cd /old && opencode -s {session_id}`\n"
+            "- Working directory: `/old`\n\n"
+            "## Current objective\n- preserve me\n",
+            encoding="utf-8",
+        )
+        return note
+
+    def _run_resume(
+        self, brain: Path, session_id: str, *extra: str
+    ) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPTS_DIR / "session_open.py"),
+                "--brain-root", str(brain),
+                "--session-id", session_id,
+                "--runtime", "opencode",
+                "--cwd", "/new-project",
+                *extra,
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def test_consolidated_resume_is_refused_without_explicit_reopen(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            self.attach_current_model(brain)
+            session_id = "session-consolidated-full-id"
+            today = datetime.now().date()
+            session_dir = brain / "WIP" / "SESSIONS"
+            session_dir.mkdir(parents=True)
+            note = self._write_closed_note(
+                session_dir, session_id, today - timedelta(days=1), "consolidated"
+            )
+            daily = brain / "JOURNAL" / f"{today}.md"
+            daily.parent.mkdir()
+            original_daily = "# Sessions\n\n# Actions\n"
+            daily.write_text(original_daily, encoding="utf-8")
+            original_note = note.read_text(encoding="utf-8")
+
+            result = self._run_resume(brain, session_id, "--apply")
+
+            daily_content = daily.read_text(encoding="utf-8")
+            note_content = note.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("refusing to register it as active", result.stderr)
+        self.assertIn("--reopen-consolidated", result.stderr)
+        self.assertEqual(daily_content, original_daily)
+        self.assertEqual(note_content, original_note)
+
+    def test_reopen_consolidated_records_transition_and_registers_today(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            self.attach_current_model(brain)
+            session_id = "session-reopen-full-id"
+            today = datetime.now().date()
+            prior_day = today - timedelta(days=1)
+            prior_stem = f"{prior_day}-session-{session_id}-topic"
+            session_dir = brain / "WIP" / "SESSIONS"
+            session_dir.mkdir(parents=True)
+            note = self._write_closed_note(session_dir, session_id, prior_day, "consolidated")
+            daily = brain / "JOURNAL" / f"{today}.md"
+            daily.parent.mkdir()
+            daily.write_text("# Sessions\n\n# Actions\n", encoding="utf-8")
+
+            result = self._run_resume(brain, session_id, "--reopen-consolidated", "--apply")
+
+            note_content = note.read_text(encoding="utf-8")
+            registrations = [
+                line
+                for line in daily.read_text(encoding="utf-8").splitlines()
+                if session_id in line
+            ]
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("reopened:", result.stdout)
+        self.assertIn("- Status: open\n- Reopened: " f"{today} (from consolidated)", note_content)
+        self.assertIn(f"cd /new-project && opencode -s {session_id}", note_content)
+        self.assertIn("## Current objective\n- preserve me", note_content)
+        self.assertEqual(len(registrations), 1)
+        self.assertIn(f"[[{prior_stem}]]", registrations[0])
+
+    def test_stale_follow_up_resume_is_refused_like_consolidated(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            self.attach_current_model(brain)
+            session_id = "session-stale-full-id"
+            today = datetime.now().date()
+            session_dir = brain / "WIP" / "SESSIONS"
+            session_dir.mkdir(parents=True)
+            self._write_closed_note(
+                session_dir, session_id, today - timedelta(days=1), "stale-follow-up"
+            )
+            daily = brain / "JOURNAL" / f"{today}.md"
+            daily.parent.mkdir()
+            daily.write_text("# Sessions\n\n# Actions\n", encoding="utf-8")
+
+            result = self._run_resume(brain, session_id, "--apply")
+
+            daily_content = daily.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("session note is stale-follow-up", result.stderr)
+        self.assertNotIn(session_id, daily_content)
+
+    def test_handoff_only_resume_still_registers_without_reopen(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            self.attach_current_model(brain)
+            session_id = "session-handoff-full-id"
+            today = datetime.now().date()
+            session_dir = brain / "WIP" / "SESSIONS"
+            session_dir.mkdir(parents=True)
+            note = self._write_closed_note(
+                session_dir, session_id, today - timedelta(days=1), "handoff-only"
+            )
+            daily = brain / "JOURNAL" / f"{today}.md"
+            daily.parent.mkdir()
+            daily.write_text("# Sessions\n\n# Actions\n", encoding="utf-8")
+
+            result = self._run_resume(brain, session_id, "--apply")
+
+            note_content = note.read_text(encoding="utf-8")
+            registrations = [
+                line
+                for line in daily.read_text(encoding="utf-8").splitlines()
+                if session_id in line
+            ]
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("- Status: handoff-only", note_content)
+        self.assertNotIn("Reopened:", note_content)
+        self.assertEqual(len(registrations), 1)
+    def test_dry_run_on_consolidated_warns_and_refuses_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            self.attach_current_model(brain)
+            session_id = "session-drywarn-full-id"
+            today = datetime.now().date()
+            session_dir = brain / "WIP" / "SESSIONS"
+            session_dir.mkdir(parents=True)
+            note = self._write_closed_note(
+                session_dir, session_id, today - timedelta(days=1), "consolidated"
+            )
+            original_note = note.read_text(encoding="utf-8")
+
+            result = self._run_resume(brain, session_id)
+
+            note_content = note.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("consolidated_note:", result.stdout)
+        self.assertIn("--reopen-consolidated", result.stdout)
+        self.assertEqual(note_content, original_note)
+
+    def test_legacy_note_without_status_still_resumes_via_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            self.attach_current_model(brain)
+            session_id = "session-legacy-full-id"
+            today = datetime.now().date()
+            session_dir = brain / "WIP" / "SESSIONS"
+            session_dir.mkdir(parents=True)
+            note = self._write_closed_note(
+                session_dir, session_id, today - timedelta(days=2), ""
+            )
+            daily = brain / "JOURNAL" / f"{today}.md"
+            daily.parent.mkdir()
+            daily.write_text("# Sessions\n\n# Actions\n", encoding="utf-8")
+
+            result = self._run_resume(brain, session_id, "--apply")
+
+            note_content = note.read_text(encoding="utf-8")
+            registrations = [
+                line
+                for line in daily.read_text(encoding="utf-8").splitlines()
+                if session_id in line
+            ]
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(registrations), 1)
+        self.assertNotIn("Status:", note_content)
+
     def test_multiple_sessions_preserve_each_others_daily_entries(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)

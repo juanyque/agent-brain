@@ -17,6 +17,10 @@ SESSION_SCAFFOLD_PREFIXES = (
     "- Example (Codex):",
 )
 SESSION_NOTE_REFERENCE_RE = re.compile(r"Session note:\s*\[\[[^\]]+\]\]\.?")
+REOPENABLE_STATUS_RE = re.compile(
+    r"^-\s*Status:\s*(?P<status>consolidated|stale-follow-up)\s*$",
+    re.MULTILINE,
+)
 
 
 def instantiate_session_template(
@@ -156,6 +160,32 @@ def _entry_with_preserved_summary(existing: str, desired: str) -> str:
             current += separator + desired_reference.group(0)
         return current + newline
     return desired + ("\n" if existing.endswith("\n") else "")
+
+
+def apply_reopen_transition(
+    note_path: Path,
+    today: str,
+    safe_root: Path | None = None,
+) -> str:
+    """Flip a consolidated/stale-follow-up Status to open with a dated Reopened line."""
+    descriptor = _open_regular_no_follow(note_path, os.O_RDWR, safe_root)
+    stream = os.fdopen(descriptor, "r+", encoding="utf-8")
+    descriptor = -1
+    try:
+        text = stream.read()
+        match = REOPENABLE_STATUS_RE.search(text)
+        if match is None:
+            return "not-consolidated"
+        replacement = f"- Status: open\n- Reopened: {today} (from {match.group('status')})"
+        new_text = REOPENABLE_STATUS_RE.sub(replacement, text, count=1)
+        stream.seek(0)
+        stream.write(new_text)
+        stream.truncate()
+        return "reopened"
+    finally:
+        stream.close()
+        if descriptor >= 0:
+            os.close(descriptor)
 
 
 def upsert_sessions_entry(
