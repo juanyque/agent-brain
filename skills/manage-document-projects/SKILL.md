@@ -351,7 +351,8 @@ When a user asks to start, manage, or generate documents for a project (e.g.
 de reserva"*), act as an interactive assistant:
 
 1. **Locate or Initialize**: Search for the project in active work directories
-   (e.g., `WIP/` or project root) or long-term archives (e.g., `MEMORY/`). If not
+   first, followed by the workspace's configured long-term memory or archive
+   locations (for example, `MEMORY/` and `ARCHIVED/` in an agent-brain). If not
    found, initialize clean project files or ask the user for the path.
 2. **Present Documents**: List the documents available for that project type
    (`reservation`, `lease`, `inventory`, `access-license`, `termination`).

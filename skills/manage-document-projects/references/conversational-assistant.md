@@ -7,7 +7,8 @@ Guide users step-by-step from raw requirements to generated, printable documents
 1. **Agnostic & Relative Discovery**:
    - Do not hardcode absolute vault paths.
    - Look for active projects in the workspace work-in-progress area (e.g., `WIP/`, `projects/`, or root).
-   - If not found in work areas, look in archive/memory stores (e.g., `MEMORY/`, `archive/`).
+   - If not found in work areas, search the workspace's configured long-term memory and archive locations
+     (for example, `MEMORY/` and `ARCHIVED/` in an agent-brain).
    - If still not found or ambiguous, ask the user for the target folder path.
 2. **Deliverables Location Flexibility**:
    - Write deliverables (PDF, HTML) to the configured output area (e.g., `OUTBOX/`, `dist/`, `exports/`, or user-specified downloads).
@@ -28,7 +29,8 @@ User Intent ("Gestionar nuevo alquiler en Canarias 5 5-E")
    ▼
 [Step 1: Project Resolution]
    ├─ Check WIP/ / projects/
-   ├─ Check MEMORY/ / archive/
+   ├─ Check configured memory/archive locations
+   │  (e.g., MEMORY/ / ARCHIVED/ in an agent-brain)
    └─ If not found: initialize new project or ask path
    │
    ▼
