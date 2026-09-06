@@ -15,8 +15,8 @@
 [[<% tp.date.now("DD.MMMM.YYYY", -1) %>|Yesterday]]
 [[<% tp.date.now("DD.MMMM.YYYY", +1) %>|Tomorrow]]
 [[Week <% tp.date.now("WW")%> of <%tp.date.now("yyyy")%>|This Week]]
-[[<% tp.date.now("00M-" + "MMMM-YYYY") %>|This Month]] 
-[[Q<%tp.date.now("Q")%> of <%tp.date.now("yyyy")%>|This Quarter]] 
+[[<% tp.date.now("00M-" + "MMMM-YYYY") %>|This Month]]
+[[Q<%tp.date.now("Q")%> of <%tp.date.now("yyyy")%>|This Quarter]]
 [[Year of <% tp.date.now("yyyy") %> |This Year]]
 
 << [[<% tp.date.now("DDMMMYYYY, dddd", -1) %>]] | <span style="color: green;"><% tp.file.title %></span> | [[<% tp.date.now("DDMMMYYYY, dddd", 1) %>]] >>
@@ -25,8 +25,8 @@
 [[<% tp.date.now("DD.MMMM.YYYY", -1) %>]]
 [[<% tp.date.now("DD.MMMM.YYYY", +1) %>|Tomorrow]]
 [[Week <% tp.date.now("WW")%> of <%tp.date.now("yyyy")%>|This Week]]
-[[<% tp.date.now("00M-" + "MMMM-YYYY") %>|This Month]] 
-[[Q<%tp.date.now("Q")%> of <%tp.date.now("yyyy")%>|This Quarter]] 
+[[<% tp.date.now("00M-" + "MMMM-YYYY") %>|This Month]]
+[[Q<%tp.date.now("Q")%> of <%tp.date.now("yyyy")%>|This Quarter]]
 [[Year of <% tp.date.now("yyyy") %> |This Year]]
 
 ## Theme Things

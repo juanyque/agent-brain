@@ -3238,5 +3238,31 @@ class RunTodoExpansionTests(unittest.TestCase):
         self.assertEqual(missing_verify.returncode, 2)
 
 
+class TrackedTextWhitespaceTests(unittest.TestCase):
+    def test_tracked_markdown_and_jinja_files_carry_no_trailing_whitespace(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        listing = subprocess.run(
+            ["git", "ls-files", "--", "*.md", "*.j2"],
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        offenders: list[str] = []
+        for rel in listing.stdout.splitlines():
+            for lineno, line in enumerate(
+                (repo_root / rel).read_text(encoding="utf-8", errors="replace").splitlines(),
+                start=1,
+            ):
+                if line != line.rstrip(" \t"):
+                    offenders.append(f"{rel}:{lineno}")
+        self.assertEqual(
+            offenders,
+            [],
+            "trailing whitespace reintroduced (git diff --check would fail on "
+            "any future diff touching these lines)",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
