@@ -58,22 +58,40 @@ print_command() {
   color_stdout "$YELLOW" "COMMAND: $rendered"
 }
 
-if [[ ! -d "$CANONICAL/.git" ]]; then
-  info "Cloning agent-brain into $CANONICAL ..."
-  print_command mkdir -p "$CANONICAL"
-  mkdir -p "$CANONICAL"
-  print_command git clone --depth 1 "$REPO_URL" "$CANONICAL"
-  git clone --depth 1 "$REPO_URL" "$CANONICAL"
-  ok "OK: agent-brain cloned"
-else
-  info "agent-brain already present at $CANONICAL — updating (git pull --ff-only)..."
+ensure_repo() {
+  if [[ ! -d "$CANONICAL/.git" ]]; then
+    info "Cloning agent-brain into $CANONICAL ..."
+    print_command mkdir -p "$CANONICAL"
+    mkdir -p "$CANONICAL"
+    print_command git clone --depth 1 "$REPO_URL" "$CANONICAL"
+    git clone --depth 1 "$REPO_URL" "$CANONICAL"
+    ok "OK: agent-brain cloned"
+    return 0
+  fi
+  info "agent-brain already present at $CANONICAL — updating ..."
+  if [[ -f "$CANONICAL/.git/shallow" ]]; then
+    info "Shallow clone detected — fetching full history (one-time) ..."
+    print_command git -C "$CANONICAL" fetch --unshallow
+    if ! git -C "$CANONICAL" fetch --unshallow; then
+      warning "WARNING: unshallow fetch failed — trying update anyway"
+    fi
+  fi
   print_command git -C "$CANONICAL" pull --ff-only
   if git -C "$CANONICAL" pull --ff-only; then
     ok "OK: agent-brain updated"
-  else
-    warning "WARNING: pull failed — continuing with local copy"
+    return 0
   fi
-fi
+  warning "WARNING: update failed — the local agent-brain copy may be stale or diverged."
+  warning "Recover with one of (brains are never touched by these):"
+  warning "  git -C \"$CANONICAL\" stash push -u && git -C \"$CANONICAL\" pull --ff-only  # local changes in the way"
+  warning "  git -C \"$CANONICAL\" fetch origin && git -C \"$CANONICAL\" reset --hard origin/main  # discard local divergence"
+  warning "  mv \"$CANONICAL\" \"${CANONICAL}.old-$(date +%Y%m%d%H%M%S)\" && re-run bootstrap-zero.sh  # start fresh, keeps the old copy"
+  return 0
+}
 
-print_command bash "$CANONICAL/model/SCRIPTS/bootstrap-zero.sh" "$@"
-exec bash "$CANONICAL/model/SCRIPTS/bootstrap-zero.sh" "$@"
+_bootstrap_source="${BASH_SOURCE[0]:-}"
+if [[ -z "$_bootstrap_source" || "$_bootstrap_source" == "$0" ]]; then
+  ensure_repo
+  print_command bash "$CANONICAL/model/SCRIPTS/bootstrap-zero.sh" "$@"
+  exec bash "$CANONICAL/model/SCRIPTS/bootstrap-zero.sh" "$@"
+fi
