@@ -47,6 +47,8 @@ SCAFFOLD_DIRECTORIES = (
     "INBOX",
     "WIP",
     "WIP/SESSIONS",
+    "WIP/evidence",
+    "WIP/evidence/ATTACHMENTS",
     "JOURNAL",
     "MEMORY",
     "BACKLOG",
