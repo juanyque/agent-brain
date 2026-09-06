@@ -32,14 +32,14 @@ LOCAL_STATE_FILES: Final = {
     "WIP/OBJECTIVES.md": (
         "---\ntags: [wip, objectives]\n---\n"
         "# OBJECTIVES\n\n"
-        "Este wrapper sigue los objetivos generales del modelo: "
-        "[[_COMMON/OBJECTIVES.common.md]]. Léelos primero — "
-        "[[Learn]] y [[Collaborate]] están siempre activos.\n\n"
-        "Los objetivos locales **amplían** los generales; nunca los reemplazan. "
-        "No crees notas locales con el mismo nombre que un objetivo canónico.\n\n"
-        "## Objetivos locales\n\n"
-        "- <objetivos específicos de este brain, p. ej. [[Improve codebase]] "
-        "si aquí se escribe código>\n"
+        "This wrapper follows the model-general objectives: "
+        "[[_COMMON/OBJECTIVES.common.md]]. Read them first — "
+        "[[Learn]] and [[Support Others]] are always active.\n\n"
+        "Local objectives **extend** the general set; they never replace it. "
+        "Do not create local notes named exactly like a canonical objective.\n\n"
+        "## Local objectives\n\n"
+        "- <brain-specific objectives, e.g. [[Improve codebase]] "
+        "if this brain writes code>\n"
     ),
 }
 

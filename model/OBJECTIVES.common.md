@@ -13,5 +13,5 @@ Universal recurring objectives, shared by every brain through `_COMMON`. Each br
 
 - [[Learn]] — continuous learning
   - **Evidence**: exploring unfamiliar areas, debugging the unknown, technical reading, mastering new tools or domains.
-- [[Collaborate]] — collaborating with others
+- [[Support Others]] — helping others be effective (multiplier effect)
   - **Evidence**: pairing, mentoring, documented help, unblocking colleagues, messages or threads with other teams.

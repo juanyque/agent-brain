@@ -57,9 +57,9 @@ class HomeSetupObjectivesTests(unittest.TestCase):
         self.assertTrue(is_file)
         self.assertFalse(is_symlink)
         self.assertIn("[[_COMMON/OBJECTIVES.common.md]]", content)
-        self.assertIn("## Objetivos locales", content)
+        self.assertIn("## Local objectives", content)
         self.assertIn("[[Learn]]", content)
-        self.assertIn("[[Collaborate]]", content)
+        self.assertIn("[[Support Others]]", content)
 
     def test_apply_preserves_existing_rich_objectives_file(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
