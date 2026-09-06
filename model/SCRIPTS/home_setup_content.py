@@ -29,6 +29,18 @@ LOCAL_STATE_FILES: Final = {
         "## Monthly\n\n"
         "## Yearly\n"
     ),
+    "WIP/OBJECTIVES.md": (
+        "---\ntags: [wip, objectives]\n---\n"
+        "# OBJECTIVES\n\n"
+        "Este wrapper sigue los objetivos generales del modelo: "
+        "[[_COMMON/OBJECTIVES.common.md]]. Léelos primero — "
+        "[[Learn]] y [[Collaborate]] están siempre activos.\n\n"
+        "Los objetivos locales **amplían** los generales; nunca los reemplazan. "
+        "No crees notas locales con el mismo nombre que un objetivo canónico.\n\n"
+        "## Objetivos locales\n\n"
+        "- <objetivos específicos de este brain, p. ej. [[Improve codebase]] "
+        "si aquí se escribe código>\n"
+    ),
 }
 
 SCAFFOLD_DIRECTORIES = (
