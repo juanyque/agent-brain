@@ -65,8 +65,19 @@ python3 ~/.agents/skills/brain/scripts/attachments_audit.py --brain-root . --sco
 - Safe relocation and quarantine moves are applied only with `--apply`.
 - Empty nested directories and their empty source `ATTACHMENTS/` root are removed after safe moves.
 
+## Plain-text mention warnings
+
+Wikilinks are the only basis for classification and automatic moves, but a note can
+own an attachment in practice while mentioning the filename only as plain text. For
+every `ORPHAN_CANDIDATE` and `RELOCATE_CANDIDATE`, the audit also scans markdown
+notes for plain-text mentions of the filename (outside `[[...]]` spans, on name
+boundaries) and lists them as `plain_text_mentions (review before moving)`. The
+warning never changes a classification and never blocks or pauses `--apply`: run the
+dry audit first, review the warnings, and only then invoke `--apply`.
+
 ## Known limitations
-- It only understands markdown `[[...]]` references by attachment filename.
+- Automatic moves consider only markdown `[[...]]` references by attachment filename;
+  plain-text mentions produce warnings, not moves.
 - It does not rewrite note contents; it assumes Obsidian's link resolution by filename remains valid after a move.
 - It does not auto-resolve duplicate names or multi-folder ownership conflicts.
 - It is intentionally conservative.

@@ -16,10 +16,14 @@ import argparse
 import shutil
 import subprocess
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from re import Pattern, compile as re_compile
 
 from _common import Reporter, build_command_string
+
+WIKILINK_SPAN_RE: Pattern[str] = re_compile(r"\[\[.*?\]\]")
+MOVE_CANDIDATE_STATUSES = frozenset({"ORPHAN_CANDIDATE", "RELOCATE_CANDIDATE"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +33,7 @@ class AttachmentReport:
     references: list[Path]
     proposed_destination: Path | None
     note: str
+    plain_mentions: tuple[Path, ...] = ()
 
 def is_git_repo(brain_root: Path) -> bool:
     try:
@@ -72,6 +77,79 @@ def build_markdown_index(brain_root: Path) -> dict[str, list[Path]]:
 
 def note_attachment_dir(note_path: Path) -> Path:
     return note_path.parent / "ATTACHMENTS"
+
+
+def _is_name_boundary(char: str) -> bool:
+    return char.isalnum() or char in "._-"
+
+
+def has_bounded_occurrence(text: str, name: str) -> bool:
+    start = 0
+    while True:
+        i = text.find(name, start)
+        if i == -1:
+            return False
+        end = i + len(name)
+        bounded_before = i == 0 or not _is_name_boundary(text[i - 1])
+        bounded_after = end >= len(text) or not _is_name_boundary(text[end])
+        if bounded_before and bounded_after:
+            return True
+        start = i + 1
+
+
+def build_plain_mention_index(
+    brain_root: Path,
+    names: set[str],
+) -> dict[str, tuple[Path, ...]]:
+    """Single vault pass mapping each candidate filename to the notes that
+    mention it as plain text.
+
+    Wikilink spans are stripped before matching so only plain-text mentions
+    count, and matches must sit on name boundaries so a longer filename that
+    merely contains this name is not reported. The index is built once per
+    run from the notes on disk at that moment; it is never cached.
+    """
+    index: dict[str, tuple[Path, ...]] = {name: () for name in names}
+    if not names:
+        return index
+    hits: dict[str, list[Path]] = defaultdict(list)
+    for md_file in brain_root.rglob("*.md"):
+        try:
+            content = md_file.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for name in names:
+            if name not in content:
+                continue
+            for line in content.splitlines():
+                if name not in line:
+                    continue
+                plain_line = WIKILINK_SPAN_RE.sub(" ", line)
+                if has_bounded_occurrence(plain_line, name):
+                    hits[name].append(md_file)
+                    break
+    for name, notes in hits.items():
+        index[name] = tuple(notes)
+    return index
+
+
+def with_plain_mentions(
+    reports: list[AttachmentReport],
+    mention_index: dict[str, tuple[Path, ...]],
+) -> list[AttachmentReport]:
+    enriched: list[AttachmentReport] = []
+    for report in reports:
+        if report.status not in MOVE_CANDIDATE_STATUSES:
+            enriched.append(report)
+            continue
+        refs = {ref.resolve() for ref in report.references}
+        mentions = tuple(
+            note
+            for note in mention_index.get(report.attachment.name, ())
+            if note.resolve() not in refs
+        )
+        enriched.append(replace(report, plain_mentions=mentions))
+    return enriched
 
 
 def infer_destination(
@@ -212,6 +290,12 @@ def print_report(brain_root: Path, scoped_reports: list[tuple[Path, list[Attachm
                     reporter.write(f"    - {ref.relative_to(brain_root)}")
             else:
                 reporter.write("  references: []")
+            if report.plain_mentions:
+                reporter.write(
+                    "  plain_text_mentions (review before moving):"
+                )
+                for mention in report.plain_mentions:
+                    reporter.write(f"    - {mention.relative_to(brain_root)}")
             reporter.write("")
 
 
@@ -267,6 +351,19 @@ def main() -> int:
         if reports:
             scoped_reports.append((attachment_dir, reports))
             all_reports.extend(reports)
+
+    candidate_names = {
+        report.attachment.name
+        for report in all_reports
+        if report.status in MOVE_CANDIDATE_STATUSES
+    }
+    if candidate_names:
+        mention_index = build_plain_mention_index(brain_root, candidate_names)
+        scoped_reports = [
+            (attachment_dir, with_plain_mentions(reports, mention_index))
+            for attachment_dir, reports in scoped_reports
+        ]
+        all_reports = with_plain_mentions(all_reports, mention_index)
 
     print_report(brain_root, scoped_reports, reporter, args.apply, command_string)
     if args.apply:
