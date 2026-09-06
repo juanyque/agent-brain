@@ -21,6 +21,12 @@ from pathlib import Path
 from re import Pattern, compile as re_compile
 
 from _common import Reporter, build_command_string
+from attachment_destinations import (
+    AttachmentDestinationError,
+    collision_key,
+    flat_attachment_shape,
+    require_flat_attachment_destination,
+)
 
 WIKILINK_SPAN_RE: Pattern[str] = re_compile(r"\[\[.*?\]\]")
 MOVE_CANDIDATE_STATUSES = frozenset({"ORPHAN_CANDIDATE", "RELOCATE_CANDIDATE"})
@@ -236,13 +242,60 @@ def find_attachment_dirs(scope_root: Path) -> list[Path]:
 
 
 def move_file(src: Path, dst: Path, brain_root: Path, use_git_mv: bool) -> None:
+    dst = require_flat_attachment_destination(dst, brain_root=brain_root)
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.exists():
+    if dst.exists() or dst.is_symlink():
         raise FileExistsError(f"Destination already exists for {src.name}: {dst}")
     if use_git_mv:
         subprocess.run(["git", "mv", str(src), str(dst)], cwd=brain_root, check=True)
     else:
         shutil.move(str(src), str(dst))
+
+
+def validate_destinations(
+    reports: list[AttachmentReport],
+    brain_root: Path,
+) -> list[str]:
+    errors: list[str] = []
+    claimed: dict[Path, str] = {}
+    for report in reports:
+        if report.proposed_destination is None:
+            continue
+        destination = report.proposed_destination
+        if report.status not in MOVE_CANDIDATE_STATUSES:
+            if not flat_attachment_shape(destination):
+                errors.append(
+                    f"{report.attachment.name}: destination is not a direct "
+                    f"child of an ATTACHMENTS/ directory: {destination}"
+                )
+            continue
+        try:
+            resolved = require_flat_attachment_destination(
+                destination, brain_root=brain_root
+            )
+        except AttachmentDestinationError as error:
+            errors.append(f"{report.attachment.name}: {error}")
+            continue
+        previous = claimed.get(collision_key(resolved))
+        if previous is not None:
+            errors.append(
+                f"{report.attachment.name}: destination {destination} collides "
+                f"with the one proposed for {previous}"
+            )
+        else:
+            claimed[collision_key(resolved)] = report.attachment.name
+        source = report.attachment.resolve(strict=False)
+        if source == resolved:
+            errors.append(
+                f"{report.attachment.name}: already at its proposed destination "
+                f"({destination}); re-auditing it proposes a no-op move"
+            )
+            continue
+        if destination.exists() or destination.is_symlink():
+            errors.append(
+                f"{report.attachment.name}: destination already exists ({destination})"
+            )
+    return errors
 
 
 def cleanup_empty_attachment_dirs(dirs: set[Path]) -> None:
@@ -252,6 +305,11 @@ def cleanup_empty_attachment_dirs(dirs: set[Path]) -> None:
 
 
 def apply_reports(reports: list[AttachmentReport], brain_root: Path, use_git_mv: bool) -> None:
+    errors = validate_destinations(reports, brain_root)
+    if errors:
+        raise AttachmentDestinationError(
+            "destination preflight failed:\n" + "\n".join(f"- {e}" for e in errors)
+        )
     touched_attachment_dirs: set[Path] = set()
     for report in reports:
         if report.status not in {"RELOCATE_CANDIDATE", "ORPHAN_CANDIDATE"}:
@@ -365,7 +423,16 @@ def main() -> int:
         ]
         all_reports = with_plain_mentions(all_reports, mention_index)
 
+    destination_errors = validate_destinations(all_reports, brain_root)
+
     print_report(brain_root, scoped_reports, reporter, args.apply, command_string)
+    if destination_errors:
+        reporter.write("")
+        reporter.write("destination preflight FAILED (no moves were applied):")
+        for error in destination_errors:
+            reporter.write(f"- {error}")
+        reporter.flush()
+        return 1
     if args.apply:
         apply_reports(all_reports, brain_root, use_git_mv)
         reporter.write("Applied relocate/orphan moves for safe candidates.")

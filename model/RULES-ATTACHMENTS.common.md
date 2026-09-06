@@ -29,6 +29,7 @@ This file is the canonical operational policy for attachment ownership and reloc
 ## Creation convention
 
 - Create or extract attachments directly into the owning note folder's `ATTACHMENTS/` directory. Create the owning information structure before extracting files; never encode that structure below `ATTACHMENTS/`.
+- Before a script creates, copies, extracts, or moves an attachment, it must pass the complete destination file path through `attachment_destinations.require_flat_attachment_destination(...)` (`skills/brain/scripts/`) and use the returned path. Only direct file children of an exact `ATTACHMENTS/` directory are accepted; direct children of `QUARANTINE/ATTACHMENTS/` are valid, while nested descendants and destinations outside `ATTACHMENTS/` are rejected.
 
 ## Quarantine destination
 
@@ -37,6 +38,7 @@ This file is the canonical operational policy for attachment ownership and reloc
 ## Tooling
 
 - Use `attachments_audit.py` to audit every file recursively below `ATTACHMENTS/` folders under a chosen scope. Nested files are non-conforming defensive inputs; after the required apply-mode confirmation, the tool flattens safe cases into the owning note folder's local `ATTACHMENTS/` with `git mv` under the bounded standing authorization in `AGENTS.common.md`.
+- `attachments_audit.py` validates every proposed destination with `attachment_destinations.require_flat_attachment_destination(...)` before any move, together with batch-wide checks: destination uniqueness across the whole run, source/destination inequality, and pre-existing targets. A failed preflight blocks `--apply` and exits nonzero.
 - Choose the narrowest scope that covers the completed information structure. Exclude or defer any subtree reserved by an active process.
 - Use `canvas_path_repair.py` to audit `.canvas` file-node paths and optionally repair only uniquely resolvable broken paths.
 - Run the dry-run command first, inspect machine-readable or console output, then ask for explicit approval before any `--apply` invocation.
