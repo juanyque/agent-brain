@@ -122,6 +122,110 @@ def is_session_open(note_path: Path) -> bool:
     return False
 
 
+SESSION_NOTE_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-session-")
+PLACEHOLDER_ITEM_RE = re.compile(r"^-\s*$")
+UNCHECKED_BOX_RE = re.compile(r"^- \[ \]")
+CHECKLIST_SECTION = "Consolidation checklist"
+SHELL_SECTIONS = frozenset({"State", "Resume command"})
+HEADING_RE = re.compile(r"^#{1,3} +(.+?)\s*$")
+COMMENT_SPAN_RE = re.compile(r"<!--.*?-->")
+
+
+def session_note_date(note_path: Path) -> str | None:
+    match = SESSION_NOTE_DATE_RE.match(note_path.name)
+    return match.group(1) if match else None
+
+
+def is_session_note_empty(note_path: Path) -> bool:
+    """Classify a session note as never-worked (scaffold only) or worked.
+
+    Never counts as work: frontmatter (only at line 0, per the note format),
+    HTML comments (single- or multi-line), headings, the State/Resume command
+    shell sections, blank lines, bare ``-`` placeholders, and unchecked boxes
+    inside the template's Consolidation checklist. Any other content —
+    including a mid-document ``---`` rule — marks the note worked; on any
+    parse doubt (unclosed frontmatter or comment) the note is reported
+    worked, so the flag never fires on ambiguity.
+    """
+    lines = read_lines_safe(note_path)
+    in_frontmatter = False
+    frontmatter_closed = False
+    in_comment = False
+    section = ""
+    for line_no, raw in enumerate(lines):
+        line = raw.rstrip("\n")
+        stripped = line.strip()
+        is_frontmatter_delim = stripped == "---"
+        if (
+            line_no == 0
+            and not frontmatter_closed
+            and is_frontmatter_delim
+        ):
+            in_frontmatter = True
+            continue
+        if in_frontmatter:
+            if is_frontmatter_delim:
+                in_frontmatter = False
+                frontmatter_closed = True
+            continue
+        if in_comment:
+            if "-->" in stripped:
+                after = stripped.split("-->", 1)[1].strip()
+                in_comment = False
+                if not after:
+                    continue
+                stripped = after
+            else:
+                continue
+        elif stripped.startswith("<!--"):
+            if "-->" in stripped:
+                after = stripped.split("-->", 1)[1].strip()
+                if not after:
+                    continue
+                stripped = after
+            else:
+                in_comment = True
+                continue
+        heading = HEADING_RE.match(line)
+        if heading:
+            section = heading.group(1).strip()
+            continue
+        if not stripped:
+            continue
+        if section in SHELL_SECTIONS:
+            continue
+        if PLACEHOLDER_ITEM_RE.match(stripped):
+            continue
+        if (
+            section == CHECKLIST_SECTION
+            and UNCHECKED_BOX_RE.match(stripped)
+        ):
+            continue
+        return False
+    if in_frontmatter or in_comment:
+        return False
+    return True
+
+
+def empty_open_session_paths(
+    brain_root: Path,
+    open_sessions: tuple[str, ...],
+    today: str,
+    exclude: frozenset[str] = frozenset(),
+) -> tuple[str, ...]:
+    flagged: list[str] = []
+    for rel in open_sessions:
+        if rel in exclude:
+            continue
+        note_path = brain_root / rel
+        note_day = session_note_date(note_path)
+        if note_day is None or note_day >= today:
+            continue
+        if is_session_note_empty(note_path):
+            flagged.append(rel)
+    return tuple(flagged)
+
+
 def _read_status(path: Path) -> str:
     for line in read_lines_safe(path):
         match = STATUS_RE.match(line.strip())

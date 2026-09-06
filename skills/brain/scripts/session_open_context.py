@@ -8,6 +8,7 @@ from maintenance_scheduler import summarize_due_jobs
 from session_digest import SessionDigestRequest, SessionDigestState
 from source_scheduler import registry_activated, summarize_due_sources
 from session_open_discovery import (
+    empty_open_session_paths,
     find_existing_session_note,
     is_session_open,
     list_daily_notes,
@@ -169,6 +170,7 @@ def collect_session_digest_state(
         task_types = fixture.task_types
         maintenance_jobs = fixture.maintenance_jobs
         sources_due = fixture.sources_due
+        empty_open_sessions = fixture.empty_open_sessions
         existing_note = (
             brain_root / fixture.existing_session_note
             if fixture.existing_session_note is not None
@@ -179,6 +181,16 @@ def collect_session_digest_state(
     day_rollover = latest_daily != "NONE" and not today_exists
     if existing_note is not None and existing_note == session_note_path:
         existing_note = None
+    exclude_current = {session_note_rel.as_posix()}
+    if existing_note is not None:
+        exclude_current.add(existing_note.relative_to(brain_root).as_posix())
+    if fixture is None:
+        empty_open_sessions = empty_open_session_paths(
+            brain_root,
+            open_sessions,
+            today,
+            exclude=frozenset(exclude_current),
+        )
     if existing_note:
         effective_note_rel = existing_note.relative_to(brain_root)
         note_action = "continuing (prior day)"
@@ -212,6 +224,7 @@ def collect_session_digest_state(
         daily_update=f"{journal_folder}/{today}.md",
         daily_action=daily_action,
         open_sessions=open_sessions,
+        empty_open_sessions=empty_open_sessions,
         operational_files=operational_files,
         wip_context=wip_context,
         task_types=task_types,

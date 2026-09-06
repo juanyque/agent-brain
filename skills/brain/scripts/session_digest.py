@@ -28,6 +28,7 @@ class SessionDigestFixtureData:
     maintenance_jobs: tuple[str, ...]
     sources_due: tuple[str, ...]
     injected_project_agents: bool
+    empty_open_sessions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +54,7 @@ class SessionDigestState:
     maintenance_jobs: tuple[str, ...]
     sources_due: tuple[str, ...]
     injected_project_agents: bool
+    empty_open_sessions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +119,12 @@ def render_session_digest(state: SessionDigestState) -> str:
         lines.append("project_agents_injected: yes")
     lines.extend(["", "open_sessions:"])
     if state.open_sessions:
-        lines.extend(f"- {session}" for session in state.open_sessions)
+        empty = frozenset(state.empty_open_sessions)
+        for session in state.open_sessions:
+            if session in empty:
+                lines.append(f"- {session}  ⚠ empty (never worked) — close it or resume it")
+            else:
+                lines.append(f"- {session}")
     else:
         lines.append("- none")
     lines.extend(["", "operational_files:"])
