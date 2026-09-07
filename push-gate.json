@@ -7,7 +7,8 @@
   "allow_strings": [
     "AKIAIOSFODNN7EXAMPLE",
     "AKIA000000000000EXAMPLE",
-    "ASIA0000000000000000"
+    "ASIA0000000000000000",
+    "/Users/somebody/"
   ],
   "disabled_detectors": [],
   "protected_paths": []
