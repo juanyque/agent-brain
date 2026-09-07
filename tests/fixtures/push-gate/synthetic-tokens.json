@@ -1,0 +1,16 @@
+{
+  "schema_version": "push-gate/synthetic-tokens-v1",
+  "aws_key": "AKIAIOSFODNN7EXAMPLE",
+  "asia_key": "ASIAIOSFODNN7EXAMPLE",
+  "ghp": "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "ghs": "ghs_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "xoxc": "xoxc-cccccccccccccccccccc",
+  "xoxe": "xoxe-dddddddddddddddddddd",
+  "xapp": "xapp-eeeeeeeeeeeeeeeeeeee",
+  "jwt": "eyJhbGciOiJIUzI1NiI.eyJzdWIiOiIxMjM0NTY3OD.SflKxwRJSMeKKF2QT4fD",
+  "dni": "12345678Z",
+  "dni_hyphen": "12345678-Z",
+  "nie": "X1234567L",
+  "iban": "ES91 2100 0418 4502 0005 1332",
+  "phone": "+34 612 345 678"
+}

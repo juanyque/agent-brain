@@ -1,0 +1,10 @@
+title = "gitleaks config (server-side net; local gate: skills/push-gate)"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "synthetic detector tokens for the push-gate test suite"
+paths = [
+  '''(^|/)tests/fixtures/push-gate/''',
+]

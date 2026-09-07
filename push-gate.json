@@ -1,0 +1,14 @@
+{
+  "schema_version": "push-gate/config-v1",
+  "allow_paths": [
+    "tests/fixtures/push-gate/",
+    "skills/manage-document-projects/assets/project-types/residential-lease/jurisdictions/"
+  ],
+  "allow_strings": [
+    "AKIAIOSFODNN7EXAMPLE",
+    "AKIA000000000000EXAMPLE",
+    "ASIA0000000000000000"
+  ],
+  "disabled_detectors": [],
+  "protected_paths": []
+}
