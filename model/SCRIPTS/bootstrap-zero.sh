@@ -42,7 +42,6 @@ RED=$'\033[31m'
 GREEN=$'\033[32m'
 YELLOW=$'\033[33m'
 BLUE=$'\033[34m'
-CYAN=$'\033[36m'
 ORANGE=$'\033[38;5;208m'
 
 color_stdout() {
@@ -80,7 +79,8 @@ print_command_with_label() {
   color_stdout "$YELLOW" "$label $rendered"
 }
 print_command() { print_command_with_label "COMMAND:" "$@"; }
-print_user_command() { color_stdout "$CYAN" "$*"; }
+# Commands the user should copy and execute use the same green semantic as OK.
+print_user_command() { color_stdout "$GREEN" "$*"; }
 colorize_output() {
   local line
   while IFS= read -r line || [[ -n "$line" ]]; do
@@ -89,6 +89,7 @@ colorize_output() {
       *WARNING:*|*WARN*) color_stdout "$ORANGE" "$line" ;;
       *OK*|*SUCCESS*) color_stdout "$GREEN" "$line" ;;
       *command:*) color_stdout "$YELLOW" "$line" ;;
+      *missing*|*Missing*|*can\ create*|*SKIP*|*skipping*|*dry-run*|*Dry\ run*|*would-*) color_stdout "$ORANGE" "$line" ;;
       *) printf '%s\n' "$line" ;;
     esac
   done

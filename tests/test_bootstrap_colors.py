@@ -44,7 +44,7 @@ class BootstrapColorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn(ANSI_ESCAPE, result.stdout + result.stderr)
 
-    def test_terminal_output_colors_commands_sections_and_user_command(self) -> None:
+    def test_terminal_output_colors_executed_commands_sections_and_user_command(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             brain = root / "brain"
@@ -63,7 +63,9 @@ class BootstrapColorTests(unittest.TestCase):
         self.assertEqual(returncode, 0, output)
         self.assertIn("\x1b[34m== git-snapshot ==", output)
         self.assertIn("\x1b[33mCOMMAND:", output)
-        self.assertIn("\x1b[36mcurl -fsSL", output)
+        self.assertIn("\x1b[32mcurl -fsSL", output)
+        self.assertIn("\x1b[38;5;208m", output)
+        self.assertNotIn("\x1b[36mcurl -fsSL", output)
 
     def test_no_color_disables_ansi_sequences_in_terminal(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
