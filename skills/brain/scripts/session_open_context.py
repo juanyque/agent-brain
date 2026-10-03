@@ -16,6 +16,7 @@ from session_open_discovery import (
     load_journal_folder,
     read_lines_safe,
 )
+from session_open_preflight import collect_preflight
 
 
 HEADING_RE = re.compile(r"^#{1,3} ")
@@ -191,6 +192,14 @@ def collect_session_digest_state(
             today,
             exclude=frozenset(exclude_current),
         )
+        preflight = collect_preflight(
+            cwd=request.cwd,
+            session_id=request.session_id,
+            open_sessions=open_sessions,
+            rollover_pending=day_rollover,
+        )
+    else:
+        preflight = fixture.preflight
     if existing_note:
         effective_note_rel = existing_note.relative_to(brain_root)
         note_action = "continuing (prior day)"
@@ -231,4 +240,5 @@ def collect_session_digest_state(
         maintenance_jobs=maintenance_jobs,
         sources_due=sources_due,
         injected_project_agents=injected_project_agents,
+        preflight=preflight,
     )

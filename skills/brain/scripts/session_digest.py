@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from session_open_preflight import SessionPreflight
+
 
 RESUME_COMMAND_TEMPLATES: Final = {
     "antigravity": "agy --conversation {session_id}",
@@ -29,6 +31,7 @@ class SessionDigestFixtureData:
     sources_due: tuple[str, ...]
     injected_project_agents: bool
     empty_open_sessions: tuple[str, ...] = ()
+    preflight: SessionPreflight = SessionPreflight()
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +58,7 @@ class SessionDigestState:
     sources_due: tuple[str, ...]
     injected_project_agents: bool
     empty_open_sessions: tuple[str, ...] = ()
+    preflight: SessionPreflight = SessionPreflight()
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +121,38 @@ def render_session_digest(state: SessionDigestState) -> str:
     ]
     if state.injected_project_agents:
         lines.append("project_agents_injected: yes")
+    lines.extend(["", "preflight:"])
+    if state.preflight.git_root is None:
+        if state.preflight.git_unavailable:
+            lines.append("- git: unavailable from cwd (advisory only)")
+        else:
+            lines.append("- git: not applicable (no project cwd)")
+    else:
+        lines.append(f"- worktree: {state.preflight.git_root}")
+        lines.append(f"- branch: {state.preflight.branch}")
+        if not state.preflight.git_status_available:
+            lines.append("- working_tree: unknown (Git status check failed; advisory only)")
+        elif state.preflight.changed_entries:
+            suffix = "entry" if state.preflight.changed_entries == 1 else "entries"
+            lines.append(
+                f"- working_tree: dirty ({state.preflight.changed_entries} status {suffix})"
+            )
+        else:
+            lines.append("- working_tree: clean")
+    if state.preflight.peer_sessions:
+        lines.append(
+            f"- peer_sessions: {state.preflight.peer_sessions} "
+            "(shared brain/worktree allowed; coordinate scope)"
+        )
+    else:
+        lines.append("- peer_sessions: none detected")
+    if state.preflight.rollover_pending:
+        lines.append(
+            "- rollover: pending (non-blocking; complete one day-start "
+            "preparation before parallel starts)"
+        )
+    else:
+        lines.append("- rollover: ready")
     lines.extend(["", "open_sessions:"])
     if state.open_sessions:
         empty = frozenset(state.empty_open_sessions)

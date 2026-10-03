@@ -186,6 +186,7 @@ Multiple agent sessions may operate against the same brain in parallel (e.g. one
   - never rewrite or restructure sections owned by other sessions;
   - never replace an entire shared file in one edit when only a section is theirs.
 - **Detect parallel sessions at session start**. Use `session_open.py`'s compact digest. Any session id present and not equal to the current session is a parallel session whose scope must be respected. If only the compatibility fallback is available, `session_bootstrap.py`'s `open_session_notes` list can be used to read each peer note's `## Current objective` and learn its scope.
+- The session-open preflight is advisory only: it may report the current project branch/worktree, a count of dirty Git status entries, peer sessions, and a pending rollover. It does not claim ownership, require a separate worktree, acquire a lock, or block agents that intentionally share a branch, worktree, or brain. Treat a dirty-state warning as a prompt to inspect before editing, not as evidence that another agent owns the changes.
 - **When in doubt, ask the user** which session owns an ambiguous scope. Do not infer from filenames or cwd alone.
 
 This section is referenced by `skills/brain/SKILL.md` → "After brain resolution" so the rule loads at every `brain` connection.
