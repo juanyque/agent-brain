@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 from tests.support.session_open_test_support import SCRIPTS_DIR  # noqa: F401  (sys.path side effect)
 
@@ -197,6 +198,28 @@ class DecideJobsTests(unittest.TestCase):
         self.assertEqual(by_name["Weekly"], "due")
         self.assertEqual(by_name["Monthly"], "due")
         self.assertEqual(by_name["Yearly"], "due")
+
+    def test_trash_candidates_use_git_entry_date_and_calendar_retention(self) -> None:
+        today = date(2026, 10, 3)
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            old_note = brain / "QUARANTINE" / "TRASH" / "old.md"
+            recent_note = brain / "QUARANTINE" / "TRASH" / "recent.md"
+            old_note.parent.mkdir(parents=True)
+            old_note.write_text("old\n", encoding="utf-8")
+            recent_note.write_text("recent\n", encoding="utf-8")
+
+            with patch.object(
+                ms,
+                "git_entry_date",
+                side_effect=lambda _root, path: date(2026, 6, 29)
+                if path.name == "old.md"
+                else date(2026, 7, 4),
+            ):
+                candidates = ms.trash_candidates(brain, today)
+
+        self.assertEqual([candidate.path for candidate in candidates], ["QUARANTINE/TRASH/old.md"])
+        self.assertEqual(candidates[0].eligible_from, "2026-07-03")
 
 
 class SummarizeDueJobsTests(unittest.TestCase):

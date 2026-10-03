@@ -11,7 +11,8 @@ agent-brain is a personal operating model for AI coding agents (Claude Code, Ope
 
 ## Prerequisites
 
-- **Python 3.x** (stdlib only — no pip dependencies)
+- **Python 3.x** (the runtime scripts use only the standard library; the complete
+  governed test gate installs its validation dependencies with `uv`)
 - **git** on PATH
 - At least one supported agent runtime installed:
   - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) → `~/.claude/`
@@ -169,11 +170,16 @@ Files under `model/` keep the `.common.md` naming convention because they live i
 
 ## Tests
 
-The stdlib-only test suite runs entirely against temporary brains, homes, and Git
-repositories:
+The test suite runs entirely against temporary brains, homes, and Git repositories.
+The lifecycle and focused subsets are stdlib-only; the complete governed gate uses
+`uv` to provide `jsonschema`, `pydantic`, and `pyyaml`:
 
 ```bash
-python3 -m unittest discover -s tests -v
+uv run --python 3.12 \
+  --with 'jsonschema>=4.25,<5' \
+  --with 'pydantic>=2.10,<3' \
+  --with 'pyyaml>=6.0.2,<7' \
+  python3 -m unittest discover -s tests -v
 ```
 
 CI executes the same suite on macOS and Linux. The profile integration test uses an isolated

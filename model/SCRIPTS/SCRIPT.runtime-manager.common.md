@@ -17,7 +17,7 @@ All runtime wiring for a brain (D21/D26). Replaces the runtime logic previously 
    | yes | yes (symlinked) | **OK** — already wired |
    | no | no | Skip |
 
-3. **Old-layout migration** — detects external symlinks pointing into the brain, moves targets to `_AGENTS/`, rewrites symlinks.
+3. **Old-layout migration** — detects external symlinks pointing into the brain, moves targets to `_AGENTS/`, rewrites symlinks. Its implementation helpers live in `runtime_manager_migration.py` so the main manager remains focused on runtime orchestration.
 4. **Skill link** — symlinks each runtime's user skill location to `agent-brain/skills/brain`. Codex and OpenCode share `~/.agents/skills/brain`; Antigravity CLI uses `~/.gemini/antigravity-cli/skills/brain`.
 
 ## Usage

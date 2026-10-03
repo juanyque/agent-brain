@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
@@ -17,6 +18,7 @@ ENTRY_START_RE = re.compile(r"^\s*-\s+run:\s*(\d{4}-\d{2}-\d{2})\s*$")
 ENTRY_FIELD_RE = re.compile(r"^\s{2,}([a-z_]+):\s*(.*?)\s*$")
 
 JOB_NAMES = ["Daily (Day change)", "Session consolidation", "Weekly", "Monthly", "Yearly"]
+TRASH_RETENTION_MONTHS = 3
 
 
 @dataclass
@@ -35,6 +37,13 @@ class JobLogEntry:
     status: str
     summary: str
     run_at: datetime | None
+
+
+@dataclass
+class TrashCandidate:
+    path: str
+    entered_trash: str
+    eligible_from: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -227,6 +236,77 @@ def daily_note_state(brain_root: Path, today: date) -> tuple[bool, str]:
     return path.exists(), str(path.relative_to(brain_root))
 
 
+def subtract_months(value: date, months: int) -> date:
+    """Return ``value`` shifted back by calendar months without dependencies."""
+    month_index = value.year * 12 + value.month - 1 - months
+    year, month_zero_based = divmod(month_index, 12)
+    month = month_zero_based + 1
+    # The retention comparison only needs a calendar boundary. Clamp the day to
+    # the last valid day of the target month so 31st-of-month dates are stable.
+    if month == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month + 1, 1)
+    last_day = (next_month - timedelta(days=1)).day
+    return date(year, month, min(value.day, last_day))
+
+
+def git_entry_date(brain_root: Path, relative_path: Path) -> date | None:
+    """Return the date the current TRASH path first entered Git."""
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(brain_root),
+            "log",
+            "--diff-filter=A",
+            "--format=%aI",
+            "--",
+            str(relative_path),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        try:
+            return datetime.fromisoformat(line.strip()).date()
+        except ValueError:
+            continue
+    return None
+
+
+def trash_candidates(brain_root: Path, today: date) -> list[TrashCandidate]:
+    """List tracked TRASH files past the retention boundary.
+
+    Git entry dates are used instead of filesystem mtimes because session
+    archival and checkout operations can make mtimes misleading. Untracked or
+    otherwise unresolvable files are omitted and remain a manual review case.
+    """
+    trash_root = brain_root / "QUARANTINE" / "TRASH"
+    if not trash_root.is_dir():
+        return []
+    eligible_from = subtract_months(today, TRASH_RETENTION_MONTHS)
+    candidates: list[TrashCandidate] = []
+    for path in sorted(trash_root.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        relative_path = path.relative_to(brain_root)
+        entered = git_entry_date(brain_root, relative_path)
+        if entered is None or entered > eligible_from:
+            continue
+        candidates.append(
+            TrashCandidate(
+                path=str(relative_path),
+                entered_trash=entered.isoformat(),
+                eligible_from=eligible_from.isoformat(),
+            )
+        )
+    return candidates
+
+
 def decide_jobs(brain_root: Path, today: date) -> list[JobDecision]:
     sections = read_sections(brain_root / "JOBS_LOGS.md")
     decisions: list[JobDecision] = []
@@ -249,11 +329,17 @@ def decide_jobs(brain_root: Path, today: date) -> list[JobDecision]:
         decisions.append(JobDecision("Session consolidation", "review", "Session consolidation is event-triggered, not calendar-triggered.", latest_run_label(session_lines), "Review only when starting/closing/changing sessions."))
 
     weekly_lines = sections.get("Weekly", [])
+    old_trash = trash_candidates(brain_root, today)
+    trash_suffix = (
+        f" {len(old_trash)} TRASH candidate(s) exceed the {TRASH_RETENTION_MONTHS}-month retention window."
+        if old_trash
+        else ""
+    )
     if contains_current_week(weekly_lines, today):
-        decisions.append(JobDecision("Weekly", "not_due", "Weekly job has an entry in the current ISO week.", latest_run_label(weekly_lines), "No action needed."))
+        decisions.append(JobDecision("Weekly", "not_due", "Weekly job has an entry in the current ISO week." + trash_suffix, latest_run_label(weekly_lines), "Review the listed TRASH candidates during the next maintenance pass." if old_trash else "No action needed."))
     else:
         weekly_latest = latest_run(weekly_lines)
-        decisions.append(JobDecision("Weekly", "due", "No Weekly job entry found for the current ISO week.", weekly_latest.isoformat() if weekly_latest else "none", "Propose weekly maintenance checklist."))
+        decisions.append(JobDecision("Weekly", "due", "No Weekly job entry found for the current ISO week." + trash_suffix, weekly_latest.isoformat() if weekly_latest else "none", "Propose weekly maintenance checklist and review the listed TRASH candidates." if old_trash else "Propose weekly maintenance checklist."))
 
     monthly_lines = sections.get("Monthly", [])
     if contains_current_month(monthly_lines, today):
@@ -312,6 +398,13 @@ def render_report(brain_root: Path, today: date, decisions: list[JobDecision]) -
             f"  reason: {decision.reason}",
             f"  recommendation: {decision.recommendation}",
         ])
+    candidates = trash_candidates(brain_root, today)
+    if candidates:
+        lines.extend(["", "## TRASH candidates beyond retention"])
+        lines.extend(
+            f"- `{candidate.path}` — entered {candidate.entered_trash}; eligible from {candidate.eligible_from}"
+            for candidate in candidates
+        )
     lines.append("")
     return "\n".join(lines)
 

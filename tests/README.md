@@ -1,15 +1,21 @@
 # Tests
 
 The test suite protects agent-brain's deterministic installation and brain-lifecycle
-contracts. Tests use Python's standard library only and create isolated temporary
-directories; they do not modify a real brain, runtime home, Git history, or remote state.
+contracts. Tests create isolated temporary directories; they do not modify a real
+brain, runtime home, Git history, or remote state. Focused lifecycle subsets use only
+the standard library, while the complete governed gate supplies `jsonschema`,
+`pydantic`, and `pyyaml` through `uv`.
 
 ## Run the suite
 
 From the repository root:
 
 ```bash
-python3 -m unittest discover -s tests -v
+uv run --python 3.12 \
+  --with 'jsonschema>=4.25,<5' \
+  --with 'pydantic>=2.10,<3' \
+  --with 'pyyaml>=6.0.2,<7' \
+  python3 -m unittest discover -s tests -v
 ```
 
 Run one module or one test directly when iterating:
@@ -87,7 +93,7 @@ python3 tests/support/compile_sources.py model/SCRIPTS skills tests
 git diff HEAD --check
 ```
 
-GitHub Actions runs the complete stdlib suite and strict operating-model gates on both
+GitHub Actions runs the complete dependency-bearing suite and strict operating-model gates on both
 `ubuntu-latest` and `macos-latest`. The workflow uses full checkout history, proves the selected
 comparison base object, runs committed-range whitespace/scope checks, then runs worktree
 scope/whitespace checks after compile and shell syntax validation.

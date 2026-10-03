@@ -43,7 +43,14 @@ Do not run broad brain maintenance, standardization, or semantic reorganization 
 - A notes brain to connect to.
 - The `brain` skill installed by the agent-brain bootstrap. Codex and OpenCode share `~/.agents/skills/brain`; Claude uses `~/.claude/skills/brain`; Antigravity CLI uses `~/.gemini/antigravity-cli/skills/brain`.
 
-> **Runtime path note:** command examples use `~/.agents/skills/brain/scripts/...`, shared by Codex and OpenCode. In another runtime, use its installed `brain/scripts/` path, such as `~/.claude/skills/brain/scripts/` or `~/.gemini/antigravity-cli/skills/brain/scripts/`.
+> **Runtime path note:** command examples use the installed Codex/OpenCode skill at
+> `~/.agents/skills/brain/scripts/...`. Resolve that prefix from the runtime that
+> loaded this skill; Claude normally uses `~/.claude/skills/brain/scripts/` and
+> Antigravity uses `~/.gemini/antigravity-cli/skills/brain/scripts/`. A checkout
+> source path such as `~/.local/share/agent-brain/skills/brain/scripts/` is also
+> valid when the runtime loads the skill directly from the repository, but it is
+> not a universal replacement for the installed runtime link. Do not copy a
+> `~/.agents/...` command verbatim into a runtime whose skill lives elsewhere.
 
 ## Brain resolution
 

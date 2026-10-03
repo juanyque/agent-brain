@@ -62,7 +62,7 @@ All tools that move or rewrite files are dry-run by default. Apply only after re
 ### Script conventions
 
 - Common lifecycle setup scripts live under `<agent-brain>/model/SCRIPTS/`.
-- Runtime skill tools live under `<agent-brain>/skills/brain/scripts/` and are exposed through installed runtime symlinks such as `~/.agents/skills/brain/scripts/`.
+- Runtime skill tools live under `<agent-brain>/skills/brain/scripts/` and are exposed through an installed runtime link. The link is usually `~/.agents/skills/brain/scripts/` for Codex/OpenCode, `~/.claude/skills/brain/scripts/` for Claude, or `~/.gemini/antigravity-cli/skills/brain/scripts/` for Antigravity. If the runtime loads the checkout directly, use `~/.local/share/agent-brain/skills/brain/scripts/` instead; command examples must follow the path of the active runtime.
 - Python scripts and latest-run logs use CLI-oriented basenames, while Markdown docs keep notes-safe `.md` names.
 - Skill tool docs use Obsidian-safe names such as `TOOL.attachments-audit.md`.
 - Scripts are dry-run by default when they create, link, move, or rewrite files.
