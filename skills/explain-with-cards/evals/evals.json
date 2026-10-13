@@ -1,0 +1,156 @@
+{
+  "skill_name": "explain-with-cards",
+  "evals": [
+    {
+      "id": "session-mode-plan-first",
+      "prompt": "/explain-with-cards explícame lo que hemos hecho en esta sesión",
+      "setup": "A conversation in Spanish where a small feature was just implemented in a repo.",
+      "pass_criteria": [
+        "Output is in Spanish",
+        "A plan with a goal and 4-8 'after this you can ...' objectives is shown",
+        "At most 3 scoping questions, or context is inferred",
+        "The turn ends waiting for approval; no card is delivered yet"
+      ]
+    },
+    {
+      "id": "save-confirmation",
+      "prompt": "(plan approved) sí, adelante",
+      "setup": "Plan approved; no brain connected; no notes tool named.",
+      "pass_criteria": [
+        "Proposes a local temp file and asks OK before writing",
+        "Uses exactly `mktemp -d`, prints the absolute path, warns it is ephemeral",
+        "Does not use a fixed predictable /tmp path",
+        "The save proposal turn contains no card; after the learner confirms, the plan is written and card 1 is delivered in that same turn"
+      ]
+    },
+    {
+      "id": "one-card-then-stop",
+      "prompt": "siguiente",
+      "setup": "plan_state: O1 pending, current objective O1, plan stored and pinned.",
+      "pass_criteria": [
+        "Exactly one card is presented with core idea, example and one check",
+        "The check is not a bare 'did you understand?' and is not answered by the agent",
+        "O1 is not marked checked"
+      ]
+    },
+    {
+      "id": "wrong-answer",
+      "prompt": "(answer to a check) creo que eso sirve para cachear resultados",
+      "setup": "Open check on O2 whose correct answer is different; plan stored.",
+      "pass_criteria": [
+        "Names the misconception without discarding what was right",
+        "Records the misconception and sets O2 needs-review, not checked",
+        "Reteaches with a different example and a smaller follow-up check, then stops"
+      ]
+    },
+    {
+      "id": "dont-get-it",
+      "prompt": "no lo entiendo",
+      "setup": "A card on O3 was just presented.",
+      "pass_criteria": [
+        "Reframes more simply with a new example",
+        "Does not advance to the next objective"
+      ]
+    },
+    {
+      "id": "skip",
+      "prompt": "skip",
+      "setup": "Current objective O4 pending.",
+      "pass_criteria": [
+        "O4 is marked skipped, not checked",
+        "Moves to the next objective in the next card, one card only"
+      ]
+    },
+    {
+      "id": "parking-lot",
+      "prompt": "por cierto, ¿y cómo funciona el retry con backoff en general?",
+      "setup": "Mid-lesson on O2, which is about idempotency; question is independent of O2.",
+      "pass_criteria": [
+        "Answered in 2-3 lines and parked under O2",
+        "Learner is offered open now or later, and the agent stops",
+        "No next card is delivered in the same turn"
+      ]
+    },
+    {
+      "id": "resume-missing-file",
+      "prompt": "/explain-with-cards resume /tmp/does-not-exist/plan.md",
+      "setup": "File does not exist.",
+      "pass_criteria": [
+        "Says the file is missing",
+        "Does not invent a plan without the learner's agreement"
+      ]
+    },
+    {
+      "id": "write-failure",
+      "prompt": "(after a card) ok, siguiente",
+      "setup": "The plan write to the pinned location fails.",
+      "pass_criteria": [
+        "Reports the failure and keeps teaching from in-memory state",
+        "Proposes one explicit migration target and does not write elsewhere silently"
+      ]
+    },
+    {
+      "id": "unverified-claim",
+      "prompt": "(topic mode) enséñame cómo funciona el flag X en el servicio Y",
+      "setup": "No tool can reach the service source.",
+      "pass_criteria": [
+        "Claims that cannot be verified are labeled unverified",
+        "Invented examples are labeled illustrative"
+      ]
+    },
+    {
+      "id": "negative-ordinary-explanation",
+      "prompt": "explícame qué hace git rebase --onto en una frase",
+      "pass_criteria": [
+        "Direct short answer; no plan, cards or persistence"
+      ]
+    },
+    {
+      "id": "negative-near-miss",
+      "prompt": "explícame esta PR de forma rápida",
+      "pass_criteria": [
+        "Skill does not trigger; a direct short explanation is given"
+      ]
+    },
+    {
+      "id": "codex-invocation",
+      "prompt": "$explain-with-cards hazme un plan de formación sobre el retry con backoff",
+      "setup": "Fresh Codex session, no brain, no AskUserQuestion tool.",
+      "pass_criteria": [
+        "Skill activates via $ syntax",
+        "Scoping questions asked in plain chat and the turn ends",
+        "No Claude-only tool names are assumed"
+      ]
+    },
+    {
+      "id": "storage-refused",
+      "prompt": "no quiero que guardes nada",
+      "setup": "Plan approved; the agent proposed a temp file.",
+      "pass_criteria": [
+        "No file is written",
+        "Offers chat-only state or stop",
+        "Plan is re-shown on 'where are we'"
+      ]
+    },
+    {
+      "id": "resume-success",
+      "prompt": "/explain-with-cards resume <plan path>",
+      "setup": "Valid plan file: O1 checked, O2 needs-review with open check 'what if the key expires?', one parked question.",
+      "pass_criteria": [
+        "Restates goal and where are we",
+        "Re-presents the stored open check, not a new card",
+        "Keeps the original pinned backend"
+      ]
+    },
+    {
+      "id": "checked-after-reteach",
+      "prompt": "(answer) ah, o sea que expira y se vuelve a calcular, no se sirve el valor viejo",
+      "setup": "O2 is needs-review after a wrong answer and a reteach with a new example.",
+      "pass_criteria": [
+        "Recognizes the recovery",
+        "O2 moves to checked",
+        "Stops after the update or next card, one card only"
+      ]
+    }
+  ]
+}
