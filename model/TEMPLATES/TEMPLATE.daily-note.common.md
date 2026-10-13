@@ -6,6 +6,8 @@ tags: [daily]
 
 # Sessions
 
+# Daily report
+
 # Actions
 * [[LEARN]]:
 * [[READ]]:

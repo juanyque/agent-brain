@@ -6,7 +6,7 @@
 
 ## Safety model
 - **Dry-run by default.** Pass `--apply` to write changes.
-- Operates only inside the `# Actions` section. Frontmatter, `# Sessions`, other sections, navigation links, and trailing newlines are preserved byte-for-byte.
+- Operates inside the `# Actions` section, plus one extra rule: an **empty** `# Daily report` section (heading with only blank lines) is removed, and one that holds a report is kept. Frontmatter, `# Sessions`, other sections, navigation links, and trailing newlines are preserved byte-for-byte.
 - Files without a `# Actions` section are skipped (legacy daily shape, non-daily notes).
 - A category is removed only if its child block is **empty** or contains **exclusively known placeholder lines** (substring-matched against the per-category list in `PLACEHOLDER_SUBSTRINGS`). If a category has any real child it is preserved entirely — individual placeholder children within a kept category are *not* dropped (too aggressive — risk of removing user content that looks like scaffolding).
 

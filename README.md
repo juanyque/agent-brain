@@ -104,7 +104,7 @@ Two skills ship with agent-brain, but only the operating skill is installed auto
 
 | Skill | Command | Installation | Purpose |
 |---|---|---|---|
-| **brain** | `/brain` (Codex: `$brain`) | Automatic | Connect to the brain, manage session lifecycle, daily notes, and standardization |
+| **brain** | `/brain` (Codex: `$brain`) | Automatic | Connect to the brain, manage session lifecycle, daily notes, stand-up reports (`/brain daily`), and standardization |
 | **boyscout** | `/boyscout` (Codex: `$boyscout`) | Opt-in | Spot improvement opportunities and route them to an explicit remediation workflow or backlog |
 
 Skills live outside the brain and are symlinked to the repo. Codex and OpenCode share

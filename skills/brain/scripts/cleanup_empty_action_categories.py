@@ -22,6 +22,9 @@ from pathlib import Path
 
 STATUS_OPEN_RE = re.compile(r"^-\s+Status:\s*open\s*$", re.IGNORECASE)
 
+# Optional section filled by `brain daily`; removed here only when left empty.
+DAILY_REPORT_HEADING = "# Daily report"
+
 # Top-level action bullet: `* [[NAME]]:` followed by optional trailing whitespace.
 CATEGORY_RE = re.compile(r"^\*\s+\[\[([\w-]+)\]\]:\s*$")
 
@@ -122,6 +125,22 @@ def clean_actions_section(
     return out, removed
 
 
+def clean_empty_daily_report(
+    lines: list[str],
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """Drop a `# Daily report` section whose body is blank; keep it when it holds a report."""
+    for i, line in enumerate(lines):
+        if line.rstrip("\n") != DAILY_REPORT_HEADING:
+            continue
+        end = i + 1
+        while end < len(lines) and not lines[end].startswith("# "):
+            end += 1
+        if any(body.strip() for body in lines[i + 1 : end]):
+            return lines, []
+        return lines[:i] + lines[end:], [("Daily report", "empty section")]
+    return lines, []
+
+
 def process_file(path: Path, apply: bool) -> tuple[bool, list[tuple[str, str]]]:
     try:
         text = path.read_text(encoding="utf-8")
@@ -132,6 +151,8 @@ def process_file(path: Path, apply: bool) -> tuple[bool, list[tuple[str, str]]]:
         return (False, [])
     lines = text.splitlines(keepends=True)
     cleaned, removed = clean_actions_section(lines)
+    cleaned, removed_report = clean_empty_daily_report(cleaned)
+    removed += removed_report
     if not removed:
         return (False, [])
     if apply:

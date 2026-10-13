@@ -4,6 +4,7 @@ issue_id:
 project:
 url:
 status: open  # open | in-progress | blocked | done | merged | deployed | cancelled
+work_type:  # sprint | unplanned | <other free value>; ask the user, never infer
 created_at:
 merged_at:
 deployed_at:

@@ -45,7 +45,7 @@ Do **not** fire the rule on:
 2. Resolve the destination path (see "Paths" below).
 3. Resolve the short title (see "Short title" below).
 4. If the doc does not exist, create the folder + file from `TEMPLATES/Issue Template.md`.
-5. Pre-fill the frontmatter (`issue_id`, `project`, `url`, `status: in-progress`, `created_at: YYYY-MM-DD`).
+5. Pre-fill the frontmatter (`issue_id`, `project`, `url`, `status: in-progress`, `created_at: YYYY-MM-DD`). Ask the user for `work_type` (see "Work type") and leave it empty until they answer.
 6. Pre-fill `## Context` from the tracker entry. Other sections stay empty — they will be appended to as the work progresses.
 7. Announce to the user: `Working doc created at <path>. I'll keep it updated as we go.`
 
@@ -167,6 +167,15 @@ Examples:
 - Tracker: `[Team] API layer and handler consistency cleanup` → `API layer and handler consistency cleanup`
 
 If the derived title would collide with another folder under the same `<repo>`, append `(v2)` or similar disambiguator.
+
+## Work type
+
+The `work_type` frontmatter field records whether the ticket is planned team work or something the user took on by their own initiative, so reports (e.g. the `/brain daily` report) can group work without querying the tracker.
+
+- `sprint` — the ticket is on the team's sprint board.
+- `unplanned` — work the user took on outside the sprint (maintenance, reliability work, personal initiative).
+- Any other value is allowed when neither fits (for example `support`); keep it short, lowercase and free of spaces.
+- Ask the user once, when the doc is created. Do not infer it from the tracker (labels, boards and sprints can drift), and never overwrite a value the user already set. An empty value means "not answered yet", not a default.
 
 ## Lifecycle: WIP → MEMORY
 

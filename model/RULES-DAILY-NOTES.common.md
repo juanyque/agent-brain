@@ -39,6 +39,13 @@ Use this rule when creating, rolling over, cleaning, or correcting daily notes i
   another session note.
 - Keep detailed work under `# Actions` → `* [[WORK]]:`.
 
+## Daily report section
+
+- `# Daily report` sits between `# Sessions` and `# Actions`. It is optional generated content owned by `brain daily` (`daily_report_write.py`): the report lives between `<!-- daily-report range=A..B -->` and `<!-- /daily-report -->`, and a new run replaces it, so a note holds at most one report.
+- Only today's note is ever written. Do not edit, move or "fix" the report by hand-editing other days; to correct it, run `brain daily` again with the right `--date`.
+- Report headings use `##` or deeper: a top-level `# ` line would end the section for every tool that parses the note.
+- A day without a report keeps the empty heading while it is today; rollover cleanup of a past day removes the section when it is empty and keeps it when it holds a report.
+
 ## Cleanup timing
 
 - Structural cleanup of a daily note (removing empty sections or categories and finalizing rollover) may only run when the day has ended — i.e. the date of the note is **not** today's date.

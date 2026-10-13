@@ -41,6 +41,8 @@ The runtime skill exposes deterministic helper tools under its installed `script
 - `cleanup_ds_store.py` — remove `.DS_Store` noise files from visible brain content. Safe (does not destroy information); runs automatically in `home_setup.py` before the empty-dir sweep, and as a maintenance pre-check.
 - `cleanup_empty_action_categories.py` — remove empty / placeholder-only action categories from daily notes (`# Actions` section). Dry-run by default. Skips legacy-shape dailies without `# Actions`. Pass `--skip-if-open-sessions` to refuse cleaning a daily that still has open session notes pending consolidation (exit code 2). Intended hook for `brain` day-rollover cleanup.
 - `check_basename_collisions.py` — detect `*.md` basename collisions brain-wide. Counts incoming references (wikilink-simple / wikilink-path / markdown-simple / markdown-path) across `.md` + `.canvas` (refs inside code spans are skipped — Obsidian does not resolve them). If all four counters are 0, suggests renaming every instance and `--apply` executes via `git mv`. Otherwise computes per-file attribution and auto-renames the files no reference points at, leaving files that are referenced to interactive review via `--show-refs <basename>`. `--exclude-path` skips runtime-governed subtrees (e.g. `_AGENTS/CLAUDE/memory/`).
+- `daily_report_collect.py` — read-only JSON evidence for `brain daily`: dailies, sessions, issue notes (with `work_type` and dated status entries) and generated `OUTBOX/` files over a date range. Args: `--brain-root`, optional `--from` (default: latest daily before today), `--to`, `--scan-dir`. Exit code 2 on an invalid range.
+- `daily_report_write.py` — store the approved `brain daily` report in today's daily note between replaceable `daily-report` markers (section `# Daily report`). Dry-run by default; `--apply` writes and verifies. Args: `--brain-root`, `--report-file`, `--range A..B`. Refuses any day but today, never creates the daily, and refuses unmanaged content or malformed markers (exit code 2).
 
 Tool documentation lives next to the scripts using Obsidian-safe common names:
 
@@ -50,6 +52,8 @@ Tool documentation lives next to the scripts using Obsidian-safe common names:
 - `TOOL.check-basename-collisions.md`
 - `TOOL.cleanup-ds-store.md`
 - `TOOL.cleanup-empty-action-categories.md`
+- `TOOL.daily-report-collect.md`
+- `TOOL.daily-report-write.md`
 - `TOOL.maintenance-scheduler.md`
 - `TOOL.memory-query.md`
 - `TOOL.profile-context.md`
