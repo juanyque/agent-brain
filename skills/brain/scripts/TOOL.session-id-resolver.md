@@ -11,10 +11,12 @@ python3 ~/.agents/skills/brain/scripts/resolve_session_id.py \
   --cwd "$(pwd)"
 ```
 
-For Codex, query the local App Server and require one loaded thread in the
-current directory. The resolver reads the authoritative `thread.sessionId`
-field, which matters because a forked thread's id may differ from its
-session-tree id:
+For Codex, prefer the runtime-provided `$CODEX_SESSION_ID`, the session-tree
+id used by `codex resume`. Do not substitute `$CODEX_THREAD_ID`: a forked
+thread's id may differ from its session-tree id. If the session environment
+variable is unavailable, query the local App Server and require one loaded
+thread in the current directory; the resolver reads that thread's
+authoritative `thread.sessionId` field:
 
 ```bash
 python3 ~/.agents/skills/brain/scripts/resolve_session_id.py \
@@ -24,6 +26,13 @@ python3 ~/.agents/skills/brain/scripts/resolve_session_id.py \
 
 Resolution chain (first hit wins):
 
+Codex:
+
+1. `codex_session_id_env` — `$CODEX_SESSION_ID`, injected by the Codex runtime.
+2. `app_server_loaded_thread` — query loaded threads and return
+   `thread.sessionId` only when exactly one thread matches `--cwd`.
+
+OpenCode:
 1. `plugin_env` — `$OPENCODE_SESSION_ID`, injected into every shell execution
    by the `brain-session-env` plugin (opencode `shell.env` hook). Authoritative.
 2. `launch_flag` — the `-s`/`--session` value in `ps -p $OPENCODE_PID -o command=`.
@@ -52,8 +61,9 @@ loads the plugin on next start; `--pure` sessions skip it (signals 2–4 still
 apply). The tool is read-only apart from `--install-plugin` and uses only
 Python's standard library.
 
-Codex queries the daemon socket reported by `codex app-server daemon version`.
-If that socket is unavailable, or zero/multiple loaded threads match the cwd,
-the tool exits 3 with evidence. It never guesses by most-recent history entry.
+Codex first reads `CODEX_SESSION_ID`. If it is unavailable, the resolver
+queries the daemon socket reported by `codex app-server daemon version`. If
+that socket is unavailable, or zero/multiple loaded threads match the cwd, the
+tool exits 3 with evidence. It never guesses by most-recent history entry.
 `--socket-path` is available for diagnostics and tests; `--install-plugin` is
 OpenCode-only.

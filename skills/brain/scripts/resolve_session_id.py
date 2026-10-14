@@ -482,6 +482,21 @@ def resolve(args: argparse.Namespace, environ: dict[str, str]) -> int:
     chain: list[str] = []
 
     if args.runtime == "codex":
+        env_session = environ.get("CODEX_SESSION_ID", "").strip()
+        if env_session:
+            chain.append("codex_session_id_env")
+            return emit(
+                {
+                    "session_id": env_session,
+                    "resolution": "codex_session_id_env",
+                    "chain": chain,
+                    "evidence": {"environment": "CODEX_SESSION_ID"},
+                },
+                EXIT_RESOLVED,
+            )
+
+        # CODEX_THREAD_ID can identify a forked thread, not the session id
+        # required by `codex resume`; use App Server as the fallback.
         cwd = os.path.normpath(os.path.expanduser(args.cwd))
         configured_socket = (
             Path(args.socket_path).expanduser() if args.socket_path else None

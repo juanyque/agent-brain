@@ -279,7 +279,13 @@ class CliTests(unittest.TestCase):
         env = {
             key: value
             for key, value in os.environ.items()
-            if key not in ("OPENCODE_SESSION_ID", "OPENCODE_PID")
+            if key
+            not in (
+                "OPENCODE_SESSION_ID",
+                "OPENCODE_PID",
+                "CODEX_SESSION_ID",
+                "CODEX_THREAD_ID",
+            )
         }
         env.update(env_extra or {})
         return subprocess.run(
@@ -297,6 +303,33 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, EXIT_RESOLVED)
         self.assertIn('"ses_env"', result.stdout)
         self.assertIn('"plugin_env"', result.stdout)
+
+    def test_codex_session_id_env_wins_without_app_server(self):
+        result = self.run_cli(
+            "--runtime",
+            "codex",
+            env_extra={
+                "CODEX_SESSION_ID": "codex-session",
+                "CODEX_THREAD_ID": "different-thread",
+            },
+        )
+        self.assertEqual(result.returncode, EXIT_RESOLVED)
+        self.assertIn('"session_id": "codex-session"', result.stdout)
+        self.assertIn('"resolution": "codex_session_id_env"', result.stdout)
+        self.assertIn('"environment": "CODEX_SESSION_ID"', result.stdout)
+
+    def test_codex_thread_id_alone_does_not_resolve_session(self):
+        result = self.run_cli(
+            "--runtime",
+            "codex",
+            "--socket-path",
+            "/fake/missing-codex.sock",
+            env_extra={"CODEX_THREAD_ID": "thread-only"},
+        )
+        self.assertEqual(result.returncode, EXIT_UNRESOLVED)
+        self.assertIn('"ask_user": true', result.stdout)
+        self.assertIn("app_server_error", result.stdout)
+        self.assertNotIn("thread-only", result.stdout)
 
     def test_unsupported_runtime(self):
         result = self.run_cli("--runtime", "claude")
