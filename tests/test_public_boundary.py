@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import unittest
 from pathlib import Path
 
@@ -9,31 +10,20 @@ PUBLIC_ROOTS = (ROOT / "skills", ROOT / "model", ROOT / "docs", ROOT / "examples
 PUBLIC_FILES = (ROOT / "README.md",)
 PUBLIC_SUFFIXES = {".md", ".json", ".toml", ".sh", ".py", ".yaml", ".yml"}
 
+sys.path.insert(0, str(ROOT / "skills" / "push-gate" / "scripts"))
+
+from pre_push_audit import load_forbidden_values, resolve_values_file  # noqa: E402
+
 
 class PublicBoundaryTests(unittest.TestCase):
     def test_public_tree_has_no_known_private_markers(self) -> None:
-        private_markers = (
-            "aff" + "irm",
-            "crd" + "pltintl",
-            "all-the-" + "things",
-            "consumer-eng-" + "tools",
-            "card platform " + "international",
-            "card " + "simulator",
-            "card-" + "simulator",
-            "snow" + "flake",
-            "chrono" + "sphere",
-            "audit" + "board",
-            "memory-" + "bank",
-            "kt" + "lo",
-            "proj-" + "368",
-            "juan" + ".garcia",
-            "obsidian-" + "vault-common",
-            "card-" + "engineer",
-            "refund" + "handler",
-            "processor" + "eventid",
-            "unfreeze" + "card",
-            "evolve " + "merchant",
-            "cs_" + "smoke",
+        values_file = resolve_values_file(ROOT, None)
+        if values_file is None or not values_file.is_file():
+            self.skipTest(
+                "no forbidden-values file configured (git config pushgate.valuesFile)"
+            )
+        private_markers = tuple(
+            value.lower() for value in load_forbidden_values(values_file)
         )
         violations: list[str] = []
         paths = list(PUBLIC_FILES)

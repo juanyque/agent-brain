@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -19,6 +21,8 @@ from pre_push_audit import (  # noqa: E402
     Finding,
     GateConfig,
     audit_diff,
+    forbidden_patterns,
+    load_forbidden_values,
     main,
     redact,
 )
@@ -283,14 +287,14 @@ while read -r local_ref local_sha remote_ref remote_sha; do
         ''|*[!0]*) ;;
         *) continue ;;
     esac
-    python3 "$GATE" --repo-root "$REPO_ROOT" \\
+    "{python}" "$GATE" --repo-root "$REPO_ROOT" \\
         --range "$remote_sha..$local_sha" || status=1
 done
 exit "$status"
 """
 
 
-class CliTests(unittest.TestCase):
+class GitRepoCase(unittest.TestCase):
     GIT_ENV = {
         "GIT_AUTHOR_NAME": "t",
         "GIT_AUTHOR_EMAIL": "t@example.com",
@@ -313,7 +317,7 @@ class CliTests(unittest.TestCase):
             (root / ".githooks").mkdir()
             gate = SKILL_SCRIPTS / "pre_push_audit.py"
             (root / ".githooks" / "pre-push").write_text(
-                HOOK.format(gate=gate)
+                HOOK.format(gate=gate, python=sys.executable)
             )
             (root / ".githooks" / "pre-push").chmod(0o755)
             subprocess.run(
@@ -335,6 +339,7 @@ class CliTests(unittest.TestCase):
             env={**os.environ, **self.GIT_ENV},
         )
 
+class CliTests(GitRepoCase):
     def test_clean_commit_exits_zero(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = self._repo(Path(raw))
@@ -582,6 +587,123 @@ class CliTests(unittest.TestCase):
                 text=True,
             )
         self.assertEqual(second.returncode, 0, second.stderr)
+
+
+class ForbiddenValuesTests(unittest.TestCase):
+    """Per-user forbidden values: a file outside the repo, never a built-in list."""
+
+    VALUE = "acme-internal"
+
+    def _config(self) -> GateConfig:
+        config = GateConfig({})
+        config.forbidden_patterns = forbidden_patterns((self.VALUE,))
+        return config
+
+    def test_values_file_ignores_blank_lines_and_comments(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "values.txt"
+            path.write_text(f"# why\n\n  {self.VALUE}  \nother\n", encoding="utf-8")
+            self.assertEqual(load_forbidden_values(path), (self.VALUE, "other"))
+
+    def test_added_line_match_is_case_insensitive(self) -> None:
+        findings = audit_diff(
+            diff_for("doc.md", [f"see {self.VALUE.upper()} here"]), [], self._config()
+        )
+        self.assertEqual(kinds(findings), {"forbidden-value"})
+
+    def test_path_match_is_reported_as_in_path(self) -> None:
+        findings = audit_diff(
+            {}, [("A", f"docs/{self.VALUE}.md", None)], self._config()
+        )
+        self.assertEqual(kinds(findings), {"forbidden-value-in-path"})
+
+    def test_allow_paths_exempt_a_file(self) -> None:
+        config = GateConfig({"allow_paths": ["tests/fixtures/"]})
+        config.forbidden_patterns = forbidden_patterns((self.VALUE,))
+        findings = audit_diff(
+            diff_for("tests/fixtures/x.md", [self.VALUE]),
+            [("A", "tests/fixtures/x.md", None)],
+            config,
+        )
+        self.assertEqual(findings, [])
+
+    def test_no_values_means_no_findings(self) -> None:
+        findings = audit_diff(diff_for("doc.md", [self.VALUE]), [], GateConfig({}))
+        self.assertEqual(findings, [])
+
+
+class ForbiddenValuesCliTests(GitRepoCase):
+    VALUE = "acme-internal"
+
+    def _values_file(self, raw: str, content: str | None) -> list[str]:
+        if content is None:
+            return ["--values-file", str(Path(raw) / "missing.txt")]
+        path = Path(raw) / "values.txt"
+        path.write_text(content, encoding="utf-8")
+        return ["--values-file", str(path)]
+
+    def _commit_message(self, root: Path, message: str) -> None:
+        subprocess.run(
+            ["git", "-C", str(root), "commit", "-q", "--allow-empty", "-m", message],
+            check=True,
+            env={**os.environ, **self.GIT_ENV},
+        )
+
+    def test_added_content_blocks_when_a_values_file_is_given(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = self._repo(Path(raw))
+            self._commit(root, "doc.md", f"mentions {self.VALUE}\n")
+            code = main(
+                ["--repo-root", str(root), "--range", "HEAD~1..HEAD",
+                 *self._values_file(raw, f"{self.VALUE}\n")]
+            )
+        self.assertEqual(code, 1)
+
+    def test_commit_message_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = self._repo(Path(raw))
+            self._commit_message(root, f"fix {self.VALUE} handling")
+            code = main(
+                ["--repo-root", str(root), "--range", "HEAD~1..HEAD",
+                 *self._values_file(raw, self.VALUE)]
+            )
+        self.assertEqual(code, 1)
+
+    def test_missing_file_skips_the_check_with_a_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = self._repo(Path(raw))
+            self._commit(root, "doc.md", f"mentions {self.VALUE}\n")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = main(
+                    ["--repo-root", str(root), "--range", "HEAD~1..HEAD",
+                     *self._values_file(raw, None)]
+                )
+        self.assertEqual(code, 0)
+        self.assertIn("not found", stderr.getvalue())
+
+    def test_unconfigured_repo_skips_the_check_with_a_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = self._repo(Path(raw))
+            self._commit(root, "doc.md", f"mentions {self.VALUE}\n")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = main(["--repo-root", str(root), "--range", "HEAD~1..HEAD"])
+        self.assertEqual(code, 0)
+        self.assertIn("pushgate.valuesFile", stderr.getvalue())
+
+    def test_git_config_key_locates_the_file(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = self._repo(Path(raw))
+            values = Path(raw) / "values.txt"
+            values.write_text(self.VALUE, encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(root), "config", "pushgate.valuesFile", str(values)],
+                check=True,
+            )
+            self._commit(root, "doc.md", f"mentions {self.VALUE}\n")
+            code = main(["--repo-root", str(root), "--range", "HEAD~1..HEAD"])
+        self.assertEqual(code, 1)
 
 
 if __name__ == "__main__":

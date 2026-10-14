@@ -66,7 +66,7 @@ class SessionOpenCliGuardMixin:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             project = root / "project"
-            old_model = root / "legacy-model-common"
+            old_model = root / "obsidian-vault-common"
             project.mkdir()
             old_model.mkdir()
             (project / "_COMMON").symlink_to(old_model, target_is_directory=True)

@@ -191,6 +191,9 @@ class GateConfig:
         self.protected_paths: tuple[str, ...] = tuple(
             string_lists["protected_paths"]
         )
+        # Filled from the user's values file (see load_forbidden_values);
+        # kept out of push-gate.json so the values are never published.
+        self.forbidden_patterns: tuple[tuple[str, Pattern[str]], ...] = ()
 
     @classmethod
     def load(cls, path: Path) -> "GateConfig":
@@ -234,6 +237,44 @@ class GateConfig:
 
 
 HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
+
+VALUES_FILE_GIT_KEY = "pushgate.valuesFile"
+FORBIDDEN_DETECTOR = "forbidden-values"
+
+
+def resolve_values_file(repo_root: Path, explicit: str | None) -> Path | None:
+    """Path of the forbidden-values file: --values-file, else git config."""
+    raw = explicit
+    if raw is None:
+        probe = subprocess.run(
+            ["git", "-C", str(repo_root), "config", "--get", VALUES_FILE_GIT_KEY],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        raw = probe.stdout.strip() if probe.returncode == 0 else ""
+    return Path(raw).expanduser() if raw else None
+
+
+def load_forbidden_values(path: Path) -> tuple[str, ...]:
+    """One value per line; blank lines and `#` comments are ignored."""
+    values = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        value = line.strip()
+        if value and not value.startswith("#"):
+            values.append(value)
+    return tuple(values)
+
+
+def forbidden_patterns(
+    values: tuple[str, ...],
+) -> tuple[tuple[str, Pattern[str]], ...]:
+    """Case-insensitive substring patterns, one per forbidden value."""
+    return tuple(
+        ("forbidden-value", re.compile(re.escape(value), re.IGNORECASE))
+        for value in values
+    )
 
 
 def parse_added_lines(diff_text: str) -> list[tuple[int, str]]:
@@ -350,6 +391,16 @@ def audit_diff(
                 config,
                 findings,
             )
+            _scan_line(
+                config.forbidden_patterns,
+                FORBIDDEN_DETECTOR,
+                "-in-path",
+                candidate,
+                None,
+                candidate,
+                config,
+                findings,
+            )
         if (
             status in ADD_LIKE_STATUSES
             and config.detector_enabled("attachments")
@@ -384,6 +435,39 @@ def audit_diff(
                 config,
                 findings,
             )
+            _scan_line(
+                config.forbidden_patterns,
+                FORBIDDEN_DETECTOR,
+                "",
+                path,
+                line_no,
+                text,
+                config,
+                findings,
+            )
+    return findings
+
+
+def audit_commit_metadata(
+    repo_root: Path, commit: str, config: GateConfig
+) -> list[Finding]:
+    """Scan one commit's message and author/committer emails for forbidden values."""
+    if not config.forbidden_patterns:
+        return []
+    raw = git(repo_root, ["show", "-s", "--format=%ae%n%ce%n%B", commit])
+    findings: list[Finding] = []
+    for line_no, text in enumerate(raw.splitlines(), start=1):
+        label = "<author/committer email>" if line_no <= 2 else "<commit message>"
+        _scan_line(
+            config.forbidden_patterns,
+            FORBIDDEN_DETECTOR,
+            "-in-metadata",
+            label,
+            None,
+            text,
+            config,
+            findings,
+        )
     return findings
 
 
@@ -557,7 +641,8 @@ def render(
         lines.append("")
         lines.append(
             "Blocking findings: fix them, extend allowlists in push-gate.json "
-            "deliberately, or bypass once with `git push --no-verify` (leave a reason)."
+            "deliberately (forbidden values live in the file named by "
+            f"`git config {VALUES_FILE_GIT_KEY}`), or bypass once with `git push --no-verify` (leave a reason)."
         )
     return "\n".join(lines) + "\n"
 
@@ -576,6 +661,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Config path (default: <repo-root>/push-gate.json)",
     )
+    parser.add_argument(
+        "--values-file",
+        default=None,
+        help=f"Forbidden-values file (default: git config {VALUES_FILE_GIT_KEY})",
+    )
     parser.add_argument("--json", action="store_true", help="JSON output")
     args = parser.parse_args(argv)
 
@@ -587,12 +677,32 @@ def main(argv: list[str] | None = None) -> int:
             else repo_root / "push-gate.json"
         )
         config = GateConfig.load(config_path)
+        values_file = resolve_values_file(repo_root, args.values_file)
+        if values_file is None:
+            print(
+                f"push-gate: no forbidden-values file configured "
+                f"(git config {VALUES_FILE_GIT_KEY}); that check is skipped.",
+                file=sys.stderr,
+            )
+        elif not values_file.is_file():
+            print(
+                f"push-gate: forbidden-values file not found: {values_file}; "
+                f"that check is skipped.",
+                file=sys.stderr,
+            )
+        else:
+            config.forbidden_patterns = forbidden_patterns(
+                load_forbidden_values(values_file)
+            )
         revision_range = resolve_range(repo_root, args.revision_range)
         snapshots = collect(repo_root, revision_range)
         seen: set[tuple[str, str, str, int | None, str]] = set()
         findings: list[Finding] = []
         for commit, added_by_path, status_records in snapshots:
-            for finding in audit_diff(added_by_path, status_records, config):
+            for finding in [
+                *audit_diff(added_by_path, status_records, config),
+                *audit_commit_metadata(repo_root, commit, config),
+            ]:
                 key = (
                     finding.detector,
                     finding.kind,

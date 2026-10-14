@@ -48,6 +48,7 @@
 - `WIP/` is the main entrypoint for active work. `WIP/WIP.md` is a compact dashboard, not a full archive.
 - `WIP/SESSIONS/` holds temporary per-session memory. Session notes support continuity until durable state has been consolidated.
 - `WIP/scratch/<topic>/` holds working files that must outlive one step or a restart; never use `/tmp` for them. Once unneeded, move them to `QUARANTINE/TRASH/` (standing move authorization in `AGENTS.common.md`); deletion needs approval.
+- `_AGENTS/push-gate/forbidden-values.txt`, when present, lists values that must not be pushed to shared repositories (see `skills/push-gate`). Add a value there as soon as one is identified.
 - `JOURNAL/` is the dated historical record. Work belongs to the day it was actually done.
 - `MEMORY/` holds reusable knowledge. Common areas include Projects, Clients, People, Tools, Providers, Inventory, Services, Infrastructure, and Canvas material.
 - `BACKLOG/` holds non-active future initiatives and ideas.

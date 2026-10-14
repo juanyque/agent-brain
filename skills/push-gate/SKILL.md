@@ -19,6 +19,7 @@ before a push. Shared logic, local configuration: the detector lives here
 | owner-paths | `/Users/<name>/`, `/home/<name>/` absolute paths | generic doc-example usernames (foo/bar/test/…) are exempt; deterministic fixtures use `/fixture/...` |
 | attachments | add-like changes (added/copied/renamed) to files with binary extensions | deletions and in-place edits of previously pushed files are not flagged |
 | protected-paths | any change to glob-matched paths (e.g. `WIP/evidence/**`) | checked on both sides of renames |
+| forbidden-values | the user's own list of values that must not be published (names, ticket prefixes, ...) | case-insensitive substrings in added lines, file paths, commit messages and author/committer emails; the list lives outside the repo, see below |
 
 Every finding is blocking; the pressure valve is the repo's allowlist
 config, never silence. Bypass once with `git push --no-verify` and leave
@@ -67,5 +68,22 @@ consumer after a `git pull`.
 - `disabled_detectors`: detector names turned off for this repo (avoid;
   prefer allowlists).
 - `protected_paths`: fnmatch globs; any diff touching them fails.
+
+## Forbidden values (per user, outside the repo)
+
+The values are never written in the repository or in `push-gate.json`, so the gate cannot
+publish what it protects. They live in a plain-text file (one value per line, `#` comments and
+blank lines ignored), typically in the user's brain at `_AGENTS/push-gate/forbidden-values.txt`
+so it is versioned there. Point a repo at it with:
+
+```bash
+git config pushgate.valuesFile /path/to/forbidden-values.txt
+```
+
+(`--values-file` overrides it for one run.) With no file configured, or a configured path that
+does not exist, the gate prints one line to stderr and skips only this check. Repos and clones
+without the file are not checked, including CI. `allow_paths` still exempts whole path prefixes.
+Choose values narrow enough not to match your normal commit metadata (for example an email
+domain, not a first name).
 
 Script reference: `scripts/TOOL.pre-push-audit.md`.

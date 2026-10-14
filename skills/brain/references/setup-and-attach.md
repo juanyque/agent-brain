@@ -74,6 +74,10 @@ For direct low-level repair, `home_setup.py` supports `--skip-full-reorder`; nev
 
 If the dry-run reports rewritten symlinks, surface the `WIP/AGENTS_MIGRATION.<date>.md` path to the user after apply so they can verify the new links resolve before deleting the `.bak` backups themselves.
 
+### Ask for push-forbidden values
+
+Ask the user whether this brain has values that must never be pushed to a public or shared repository (company or project names, ticket prefixes, personal names). It is opt-in: "none" is a legitimate answer and creates nothing. If there are values, create `<brain>/_AGENTS/push-gate/forbidden-values.txt` (one value per line, `#` comments allowed; see `skills/push-gate/SKILL.md`) and tell the user to point each repo they push at it with `git config pushgate.valuesFile <path>`. Setup scripts never prompt or create this file themselves. Later, when a new value that must not be published is identified, add it to that same file.
+
 ## Install or repair the runtime skill
 
 Use `skill_link.sh` in dry-run mode first. For Codex or OpenCode, use the shared user-skill parent `~/.agents`:

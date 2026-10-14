@@ -8,7 +8,7 @@ paths. Never mutates the repository, the index, or the worktree.
 
 ```bash
 python3 pre_push_audit.py [--repo-root DIR] [--range RANGE]
-                          [--config PATH] [--json]
+                          [--config PATH] [--values-file PATH] [--json]
 ```
 
 - Default range: `@{upstream}..HEAD`; with no upstream configured the tool
@@ -43,6 +43,11 @@ python3 pre_push_audit.py [--repo-root DIR] [--range RANGE]
   from name scans.
 - `allow_paths` exempts whole path prefixes from line, attachment, and
   path-name checks.
+- `forbidden-values`: when `--values-file` or `git config pushgate.valuesFile` names an existing
+  file, every non-blank, non-`#` line is a case-insensitive substring searched in added lines
+  (`forbidden-value`), changed paths (`forbidden-value-in-path`) and, per commit, the message and
+  author/committer emails (`forbidden-value-in-metadata`). No file configured, or a missing file,
+  prints one stderr line and skips only this check. Requires Python 3.10+, like the whole tool.
 - `allow_strings` exempts a matched value when the allowed string equals
   it or occurs inside the matched span (assignment matches wrap their
   token).
