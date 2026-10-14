@@ -52,6 +52,13 @@ def validate_report(report: str) -> str:
     return body
 
 
+def report_warnings(report: str) -> list[str]:
+    """Non-blocking advice about the report body (validate_report already refused the unsafe cases)."""
+    if not any(line.startswith("## ") for line in report.splitlines()):
+        return ["the report has no `## ` section heading; sections should be `## ` headings, not bold text"]
+    return []
+
+
 def validate_range(range_label: str) -> str:
     match = RANGE_RE.match(range_label)
     if not match:
@@ -152,6 +159,8 @@ def main(argv: list[str] | None = None) -> int:
     reporter.write(f"range: {range_label}")
     reporter.write(f"action: {action}")
     reporter.write(f"lines: {len(before.splitlines())} -> {len(after.splitlines())}")
+    for warning in report_warnings(report):
+        reporter.write(f"warning: {warning}")
     if not args.apply:
         reporter.write("dry-run: nothing written; pass --apply to write")
         return 0

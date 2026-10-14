@@ -95,6 +95,18 @@ class RenderTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     writer.render(text, bad, "2026-03-09..2026-03-11")
 
+    def test_accepts_second_level_section_headings(self) -> None:
+        text, action = writer.render(template_daily(), "## Sprint\n- item", "2026-03-09..2026-03-11")
+        self.assertEqual(action, "fill-empty-section")
+        self.assertIn("## Sprint", text)
+
+    def test_warns_when_the_report_has_no_section_heading(self) -> None:
+        self.assertEqual(writer.report_warnings("## Sprint\n- item\n\n## Blockers\nNone"), [])
+        self.assertEqual(writer.report_warnings("### Deeper only\n- item"), [self._NO_HEADING])
+        self.assertEqual(writer.report_warnings("**Sprint**\n- item"), [self._NO_HEADING])
+
+    _NO_HEADING = "the report has no `## ` section heading; sections should be `## ` headings, not bold text"
+
     def test_validates_the_range(self) -> None:
         for bad in ("2026-03-09", "2026-03-11..2026-03-09", "2026/03/09..2026/03/11"):
             with self.subTest(range=bad):

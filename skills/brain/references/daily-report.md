@@ -15,7 +15,7 @@ The report is a reading of what the brain already records. It never invents acti
 
 1. **Connect.** Resolve the brain and run `session_open.py` as for any session start (see `session-lifecycle-routing.md`). If today's daily note is missing, finish that rollover first; the report is stored in today's note.
 2. **Dump, without closing (optional).** Open sessions in the range may hold facts that exist only in their conversations. Offer to prepare the dump prompt below for each session the user names. You cannot message another runtime, so present the prompt to the user to paste; do it yourself for the current session. A dump is **not** a session close: never set `Status: consolidated`, never archive, never tick the consolidation checklist. Wait for the user to say the sessions answered, or to skip the step.
-3. **Collect.** Run `daily_report_collect.py --brain-root <brain> [--from <date>]` and read its JSON (see `TOOL.daily-report-collect.md`). Do not re-derive what it already attributes to a day.
+3. **Collect.** Run `daily_report_collect.py --brain-root <brain> [--from <date>]` and read its JSON (see `TOOL.daily-report-collect.md`). Do not re-derive what it already attributes to a day. If you read the JSON in a single step, do not save it; if you need it across steps, save it under `WIP/scratch/daily-report/`.
 4. **Resolve gaps with the user.**
    - An issue with an empty `work_type`: ask once whether it is `sprint` or `unplanned` (or another value) and, once answered, write only that frontmatter field. See "Work type" in `RULES-ISSUE-DOCS.md`.
    - A ticket worked on in a session or a WORK entry that has no issue note: propose creating it per `RULES-ISSUE-DOCS.md`, and create it only with approval. Pure PR reviews do not need an issue note or a session note unless they produced further work.
@@ -57,7 +57,7 @@ Today's daily note holds the report in a `# Daily report` section, delimited by 
 <!-- /daily-report -->
 ```
 
-- Save the approved report body (no markers, `##` headings or deeper) to a temporary file and run `daily_report_write.py --brain-root <brain> --report-file <file> --range <first>..<today>`. It is a dry-run until you add `--apply`; run the dry-run, check the `action:` line, then apply. See `TOOL.daily-report-write.md`.
+- Save the approved report body to a scratch file under `WIP/scratch/daily-report/` (see `WIP/scratch/` in `BRAIN.md`; not `/tmp`). Write each section title as a `## ` heading (never bold text, never a top-level `# ` heading, which would end the `# Daily report` section) and leave the markers out; the tool adds them. Then run `daily_report_write.py --brain-root <brain> --report-file <file> --range <first>..<today>`. It is a dry-run until you add `--apply`; run the dry-run, check the `action:` line, then apply. See `TOOL.daily-report-write.md`.
 - The tool writes only today's note, replaces a previous report, and refuses to touch content it does not own. If it refuses, tell the user why instead of editing the note by hand.
 - Never edit the report in any other day's note.
 - The `# Daily report` section is generated content: other brain procedures leave it alone, and the rollover cleanup removes it only when it is empty.

@@ -28,10 +28,13 @@ Python's standard library.
     the note has no `# Actions`).
   - `replace-report` — a previous report exists; only the content between the markers changes.
 - Opens the note without following symlinks, like the session-open tools.
+- Prints `warning:` (and still writes) when the report has no `## ` section heading, which usually
+  means the section titles were written as bold text.
 
 ## Refusals (exit code 2, nothing written)
 
-- The report is empty, contains a top-level `# ` heading, or contains the markers.
+- The report is empty, contains a top-level `# ` heading (it would end the `# Daily report`
+  section; write sections as `## `), or contains the markers.
 - The section already has content that is not a managed report: move it by hand first.
 - The markers are unbalanced, duplicated or out of order.
 - The range is not `YYYY-MM-DD..YYYY-MM-DD` or ends before it starts.
