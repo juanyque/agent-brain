@@ -76,7 +76,7 @@ class FindHomeCliTests(unittest.TestCase):
             root = Path(raw)
             valid = root / "valid"
             legacy = root / "legacy"
-            old_model = root / "obsidian-vault-common"
+            old_model = root / "legacy-model-common"
             old_model.mkdir()
             self.attach(valid)
             self.attach(legacy, old_model)

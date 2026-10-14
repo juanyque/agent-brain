@@ -26,21 +26,21 @@ class SessionOpenContextMixin:
                 "## another-project - Graphify\n"
                 "- Registry: [[graphify.registry#another-project]]\n"
                 "- Graph: [[graphify.another-project]]\n\n"
-                "## all-the-things - Graphify\n"
-                "- Registry: [[graphify.registry#all-the-things-card-platform]]\n"
-                "- Graph: [[graphify.all-the-things-card-platform]]\n",
+                "## example-repo - Graphify\n"
+                "- Registry: [[graphify.registry#example-repo-platform]]\n"
+                "- Graph: [[graphify.example-repo-platform]]\n",
                 encoding="utf-8",
             )
 
             context = extract_wip_context(
                 wip,
-                "/workspace/all-the-things",
+                "/workspace/example-repo",
             )
 
         rendered = "\n".join(context)
-        self.assertIn("## all-the-things - Graphify", rendered)
-        self.assertIn("[[graphify.registry#all-the-things-card-platform]]", rendered)
-        self.assertIn("[[graphify.all-the-things-card-platform]]", rendered)
+        self.assertIn("## example-repo - Graphify", rendered)
+        self.assertIn("[[graphify.registry#example-repo-platform]]", rendered)
+        self.assertIn("[[graphify.example-repo-platform]]", rendered)
         self.assertNotIn("another-project", rendered)
 
     def test_codex_resume_command_contains_original_cwd(self) -> None:

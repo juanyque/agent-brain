@@ -90,7 +90,7 @@ class SessionCloseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             brain = root / "brain"
-            old_model = root / "obsidian-vault-common"
+            old_model = root / "legacy-model-common"
             old_model.mkdir()
             note = create_note(brain, "session-unsafe")
             (brain / "_COMMON").unlink()

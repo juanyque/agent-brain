@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": "triage-first-no-card",
-      "prompt": "/step-by-step tengo que: decidir el nombre del flag, contestar a Ana sobre la fecha, mergear la PR 123 y revisar el ticket CRDPLTINTL-1",
+      "prompt": "/step-by-step tengo que: decidir el nombre del flag, contestar a Ana sobre la fecha, mergear la PR 123 y revisar el ticket PROJ-1",
       "setup": "Conversation in Spanish; the PR merge depends on nothing else.",
       "pass_criteria": [
         "Output is in Spanish",
