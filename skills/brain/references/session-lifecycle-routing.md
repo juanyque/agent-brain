@@ -32,7 +32,7 @@ entrypoint.
 | Antigravity CLI | read the current workspace entry from `~/.gemini/antigravity-cli/cache/last_conversations.json`; if it is absent, use `/resume` and ask rather than guessing | `--runtime antigravity` |
 | Claude Code | read `$CLAUDE_CODE_SESSION_ID` | `--runtime claude` (or omit; auto-detected via env) |
 | OpenCode | read `$OPENCODE_SESSION_ID` (injected by the agent-brain `brain-session-env` plugin); fallback: `-s`/`--session` value in `ps -p $OPENCODE_PID -o command=`, then `resolve_session_id.py --runtime opencode --cwd "$(pwd)"` (liveness probe); else ask the user with directory-filtered candidates | `--runtime opencode` (**required** — no env var) |
-| Codex | read `$CODEX_THREAD_ID` (runtime-provided; not a public API) | `--runtime codex` |
+| Codex | `resolve_session_id.py --runtime codex --cwd "$(pwd)"`; queries the local App Server, requires exactly one loaded thread matching cwd, and returns its `thread.sessionId`; otherwise ask the user | `--runtime codex` (**required**) |
 | Other | consult the runtime's session-listing command | `--runtime generic` |
 
 If you cannot resolve the real id, **stop and ask the user** rather than inventing one.

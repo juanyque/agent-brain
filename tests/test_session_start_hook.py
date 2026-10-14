@@ -65,6 +65,43 @@ class SessionStartHookTests(unittest.TestCase):
         context = payload["hookSpecificOutput"]["additionalContext"]
         self.assertIn("$brain nueva sesion en español", context)
 
+    def test_includes_runtime_session_id_when_provided(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw) / "sessionvault"
+            attach(brain)
+
+            result = run_hook(
+                "codex",
+                {
+                    "cwd": str(brain),
+                    "source": "compact",
+                    "session_id": "session-123",
+                },
+                agent_brain_home=REPO_ROOT,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("Runtime session ID: `session-123`", context)
+        self.assertIn("compact continuation", context)
+        self.assertIn("exact ID", context)
+
+    def test_does_not_invent_session_id_when_payload_omits_it(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw) / "nosessionvault"
+            attach(brain)
+
+            result = run_hook(
+                "codex",
+                {"cwd": str(brain), "source": "resume"},
+                agent_brain_home=REPO_ROOT,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("resume continuation", context)
+        self.assertNotIn("Runtime session ID:", context)
+
     def test_opencode_reminder_uses_the_explicit_invocation_phrase(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw) / "opencodevault"

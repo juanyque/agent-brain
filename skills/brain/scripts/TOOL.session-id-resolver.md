@@ -1,12 +1,24 @@
 # Session id resolver
 
-`resolve_session_id.py` resolves the current OpenCode session id through a
-deterministic signal chain — never by list order. It is the executable form of
-the "Identify the current session id" rule in `RULES-SESSION-LIFECYCLE.common.md`.
+`resolve_session_id.py` resolves the current OpenCode or Codex session id
+through runtime-specific deterministic signals, never by history list order.
+It is the executable form of the "Identify the current session id" rule in
+`RULES-SESSION-LIFECYCLE.common.md`.
 
 ```bash
 python3 ~/.agents/skills/brain/scripts/resolve_session_id.py \
   --runtime opencode \
+  --cwd "$(pwd)"
+```
+
+For Codex, query the local App Server and require one loaded thread in the
+current directory. The resolver reads the authoritative `thread.sessionId`
+field, which matters because a forked thread's id may differ from its
+session-tree id:
+
+```bash
+python3 ~/.agents/skills/brain/scripts/resolve_session_id.py \
+  --runtime codex \
   --cwd "$(pwd)"
 ```
 
@@ -39,3 +51,9 @@ Refuses to overwrite an existing copy unless `--force` is passed. OpenCode
 loads the plugin on next start; `--pure` sessions skip it (signals 2–4 still
 apply). The tool is read-only apart from `--install-plugin` and uses only
 Python's standard library.
+
+Codex queries the daemon socket reported by `codex app-server daemon version`.
+If that socket is unavailable, or zero/multiple loaded threads match the cwd,
+the tool exits 3 with evidence. It never guesses by most-recent history entry.
+`--socket-path` is available for diagnostics and tests; `--install-plugin` is
+OpenCode-only.

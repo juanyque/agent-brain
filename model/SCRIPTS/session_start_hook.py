@@ -13,8 +13,9 @@ Usage (wired into the runtime's own hook config, one entry per runtime):
     python3 session_start_hook.py --runtime codex
     python3 session_start_hook.py --runtime opencode
 
-stdin: the runtime's own SessionStart hook payload (JSON). Only `cwd` is used;
-its absence or a malformed payload is not an error -- see resolve_cwd().
+stdin: the runtime's own SessionStart hook payload (JSON). `cwd`, `source`, and
+`session_id` are used when present; their absence or a malformed payload is not
+an error -- see the resolve_* helpers.
 
 stdout: the runtime's own SessionStart hook response contract. Claude Code,
 Codex, and the OpenCode bridge share the same shape (verified empirically against Codex CLI
@@ -81,6 +82,36 @@ def resolve_cwd(hook_input: JsonValue) -> str:
     if isinstance(cwd, str) and cwd:
         return cwd
     return os.environ.get("PWD") or os.getcwd()
+
+
+def resolve_session_id(hook_input: JsonValue) -> str | None:
+    session_id = hook_input.get("session_id") if isinstance(hook_input, dict) else None
+    return session_id.strip() if isinstance(session_id, str) and session_id.strip() else None
+
+
+def resolve_source(hook_input: JsonValue) -> str | None:
+    source = hook_input.get("source") if isinstance(hook_input, dict) else None
+    return source.strip() if isinstance(source, str) and source.strip() else None
+
+
+def build_message(
+    runtime: str,
+    brain_name: str,
+    source: str | None,
+    session_id: str | None,
+) -> str:
+    message = RUNTIME_MESSAGES[runtime].format(name=brain_name)
+    if session_id:
+        message += (
+            f" Runtime session ID: `{session_id}`. Use this exact ID when "
+            "connecting the brain; never invent a replacement ID."
+        )
+    if source in ("compact", "resume"):
+        message += (
+            f" This is a {source} continuation: reconnect the brain before "
+            "substantive work, even if the conversation context appears restored."
+        )
+    return message
 
 
 def resolve_agent_brain_home() -> Path:
@@ -156,7 +187,12 @@ def main() -> int:
         return 0
 
     name = brain.get("name") or "connected"
-    message = RUNTIME_MESSAGES[args.runtime].format(name=name)
+    message = build_message(
+        args.runtime,
+        name,
+        resolve_source(hook_input),
+        resolve_session_id(hook_input),
+    )
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",

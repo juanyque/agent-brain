@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "skills" / "brain" / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
@@ -20,6 +21,7 @@ from resolve_session_id import (  # noqa: E402
     install_plugin,
     parse_launch_session,
     probe,
+    resolve_codex_session,
 )
 
 CWD = "/fake/project"
@@ -199,6 +201,77 @@ class CandidatesTests(unittest.TestCase):
             )
         finally:
             tmp.cleanup()
+
+
+class CodexResolverTests(unittest.TestCase):
+    socket_path = Path("/fake/codex.sock")
+
+    def test_resolves_session_id_from_unique_loaded_thread(self):
+        def request(_socket, method, params, _request_id):
+            if method == "thread/loaded/list":
+                return {"result": {"data": ["thread-a"]}}
+            self.assertEqual(method, "thread/read")
+            self.assertEqual(params, {"threadId": "thread-a"})
+            return {
+                "result": {
+                    "thread": {
+                        "id": "thread-a",
+                        "sessionId": "root-session-a",
+                        "cwd": CWD,
+                        "environments": [],
+                    }
+                }
+            }
+
+        with patch("resolve_session_id.app_server_request", side_effect=request):
+            session_id, evidence = resolve_codex_session(CWD, self.socket_path)
+
+        self.assertEqual(session_id, "root-session-a")
+        self.assertEqual(evidence["loaded_threads_in_cwd"], 1)
+
+    def test_fails_closed_with_multiple_loaded_threads_in_same_cwd(self):
+        def request(_socket, method, params, _request_id):
+            if method == "thread/loaded/list":
+                return {"result": {"data": ["thread-a", "thread-b"]}}
+            thread_id = params["threadId"]
+            return {
+                "result": {
+                    "thread": {
+                        "id": thread_id,
+                        "sessionId": f"root-{thread_id}",
+                        "cwd": CWD,
+                        "environments": [],
+                    }
+                }
+            }
+
+        with patch("resolve_session_id.app_server_request", side_effect=request):
+            session_id, evidence = resolve_codex_session(CWD, self.socket_path)
+
+        self.assertIsNone(session_id)
+        self.assertEqual(evidence["loaded_threads_in_cwd"], 2)
+        self.assertEqual(len(evidence["matching_threads"]), 2)
+
+    def test_ignores_loaded_threads_in_another_directory(self):
+        def request(_socket, method, params, _request_id):
+            if method == "thread/loaded/list":
+                return {"result": {"data": ["thread-other"]}}
+            return {
+                "result": {
+                    "thread": {
+                        "id": params["threadId"],
+                        "sessionId": "session-other",
+                        "cwd": "/another/project",
+                        "environments": [],
+                    }
+                }
+            }
+
+        with patch("resolve_session_id.app_server_request", side_effect=request):
+            session_id, evidence = resolve_codex_session(CWD, self.socket_path)
+
+        self.assertIsNone(session_id)
+        self.assertEqual(evidence["loaded_threads_in_cwd"], 0)
 
 
 class CliTests(unittest.TestCase):
