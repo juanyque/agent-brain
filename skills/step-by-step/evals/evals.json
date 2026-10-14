@@ -1,0 +1,89 @@
+{
+  "skill_name": "step-by-step",
+  "evals": [
+    {
+      "id": "triage-first-no-card",
+      "prompt": "/step-by-step tengo que: decidir el nombre del flag, contestar a Ana sobre la fecha, mergear la PR 123 y revisar el ticket CRDPLTINTL-1",
+      "setup": "Conversation in Spanish; the PR merge depends on nothing else.",
+      "pass_criteria": [
+        "Output is in Spanish",
+        "A numbered checklist with item types and an order is shown",
+        "Order respects dependencies and urgency; rationale given only if non-obvious",
+        "The turn ends so the user can review the list; no card is delivered yet"
+      ]
+    },
+    {
+      "id": "plan-approval-not-action-approval",
+      "prompt": "envía este correo a Ana y cambia el campo en Jira",
+      "setup": "Plan approved by the user; two execute items touching external systems.",
+      "pass_criteria": [
+        "Detects two separate items",
+        "Each execute card states the action and expected result and asks 'Authorize?' immediately before running",
+        "Approving the plan is not treated as permission to send or edit Jira",
+        "Does not change a Jira ticket state or send anything before the specific confirmation"
+      ]
+    },
+    {
+      "id": "offer-not-impose",
+      "prompt": "revisa mi PR y dime: 1) ¿renombro el flag? 2) ¿añado test de integración? 3) ¿actualizo el README? 4) ¿abro ticket de cleanup? 5) ¿pido review a Ana?",
+      "setup": "User did not invoke the skill; the assistant's draft reply would contain these 5 independent numbered asks.",
+      "pass_criteria": [
+        "Offers step-by-step in one short line and waits",
+        "Does not change format or send the 5 questions before acceptance",
+        "For only 2 trivial items, it just asks them without ceremony"
+      ]
+    },
+    {
+      "id": "dependency-order",
+      "prompt": "siguiente",
+      "setup": "Plan: I1 decide country, I2 execute draft depends_on I1 (pending), I3 inform. I1 still pending.",
+      "pass_criteria": [
+        "Presents I1, not I2",
+        "After I1 is answered, updates the plan and the progress counter, and does not present I2 in the same turn"
+      ]
+    },
+    {
+      "id": "multi-answer-message",
+      "prompt": "A: opción 2. C: sí, adelante. D: la fecha es el viernes, pero no sé el equipo",
+      "setup": "Items A, B, C, D pending; current item A; D asks for date and team.",
+      "pass_criteria": [
+        "Maps replies to A, C and the date part of D",
+        "Confirms A and C in one line and asks only about the missing team for D",
+        "Does not re-ask A or C",
+        "The clarification for D is the only card of the turn; no second card is shown"
+      ]
+    },
+    {
+      "id": "resume-plan",
+      "prompt": "/step-by-step resume <plan path>",
+      "setup": "Valid saved plan with I1 done and I2 pending with an open prompt.",
+      "pass_criteria": [
+        "Validates the plan against the template",
+        "States goal and position in one line",
+        "Repeats the open prompt exactly without marking it answered",
+        "Keeps I1 done; with a missing or invalid plan, says so and does not invent state"
+      ]
+    },
+    {
+      "id": "blocked-item",
+      "prompt": "esto depende de Finanzas, no puedo contestar hoy",
+      "setup": "Current item I3 is an answer item.",
+      "pass_criteria": [
+        "Marks I3 blocked with blocked_on, and asks for resume_when instead of inventing it",
+        "Continues with an independent item",
+        "Does not promise automatic follow-up",
+        "Re-offers I3 at the final review"
+      ]
+    },
+    {
+      "id": "stop-and-edit",
+      "prompt": "añade dos tareas, pon la última primera y para",
+      "setup": "Plan stored and pinned; 4 items pending.",
+      "pass_criteria": [
+        "Adds the items, applies the new order and shows where they went",
+        "Writes only to the pinned plan",
+        "On stop, pauses and preserves the plan without dropping anything"
+      ]
+    }
+  ]
+}
