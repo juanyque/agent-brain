@@ -26,15 +26,21 @@ def template_daily() -> str:
     return text.replace("<% tp.file.cursor() %>", "")
 
 
+def legacy_daily() -> str:
+    """A daily note that already holds the empty `# Daily report` section (older template shape)."""
+    return template_daily().replace("# Actions", "# Daily report\n\n# Actions", 1)
+
+
 class TemplateShapeTests(unittest.TestCase):
-    def test_template_places_daily_report_between_sessions_and_actions(self) -> None:
+    def test_template_has_no_daily_report_section(self) -> None:
         headings = [line for line in template_daily().splitlines() if line.startswith("# ")]
-        self.assertEqual(headings[:3], ["# Sessions", "# Daily report", "# Actions"])
+        self.assertEqual(headings[:2], ["# Sessions", "# Actions"])
+        self.assertNotIn("# Daily report", headings)
 
 
 class RenderTests(unittest.TestCase):
     def test_fills_the_empty_template_section(self) -> None:
-        text = template_daily()
+        text = legacy_daily()
         new, action = writer.render(text, REPORT, "2026-03-09..2026-03-11")
         self.assertEqual(action, "fill-empty-section")
         self.assertIn("# Daily report\n\n<!-- daily-report range=2026-03-09..2026-03-11 -->\n## Sprint", new)
@@ -42,8 +48,7 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(new.replace(new[new.index("# Daily report"): new.index("# Actions")], ""), text.replace(text[text.index("# Daily report"): text.index("# Actions")], ""))
 
     def test_inserts_the_section_before_actions_when_the_note_lacks_it(self) -> None:
-        legacy = template_daily().replace("# Daily report\n\n", "")
-        new, action = writer.render(legacy, REPORT, "2026-03-09..2026-03-11")
+        new, action = writer.render(template_daily(), REPORT, "2026-03-09..2026-03-11")
         self.assertEqual(action, "insert-section")
         headings = [line for line in new.splitlines() if line.startswith("# ")]
         self.assertEqual(headings[:3], ["# Sessions", "# Daily report", "# Actions"])
@@ -55,7 +60,7 @@ class RenderTests(unittest.TestCase):
         self.assertIn("- one\n\n# Daily report", new)
 
     def test_rerun_with_another_range_replaces_the_report_and_keeps_the_rest(self) -> None:
-        first, _ = writer.render(template_daily(), REPORT, "2026-03-11..2026-03-11")
+        first, _ = writer.render(legacy_daily(), REPORT, "2026-03-11..2026-03-11")
         second, action = writer.render(first, "## Sprint\nnew text", "2026-03-06..2026-03-11")
         self.assertEqual(action, "replace-report")
         self.assertEqual(second.count("<!-- daily-report range="), 1)
@@ -65,17 +70,17 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(second.split("<!-- /daily-report -->")[1], first.split("<!-- /daily-report -->")[1])
 
     def test_same_input_is_idempotent(self) -> None:
-        once, _ = writer.render(template_daily(), REPORT, "2026-03-09..2026-03-11")
+        once, _ = writer.render(legacy_daily(), REPORT, "2026-03-09..2026-03-11")
         twice, _ = writer.render(once, REPORT, "2026-03-09..2026-03-11")
         self.assertEqual(once, twice)
 
     def test_refuses_to_overwrite_unmanaged_content(self) -> None:
-        text = template_daily().replace("# Daily report\n", "# Daily report\nmy own notes\n")
+        text = legacy_daily().replace("# Daily report\n", "# Daily report\nmy own notes\n")
         with self.assertRaisesRegex(ValueError, "not a managed report"):
             writer.render(text, REPORT, "2026-03-09..2026-03-11")
 
     def test_refuses_malformed_markers(self) -> None:
-        good, _ = writer.render(template_daily(), REPORT, "2026-03-09..2026-03-11")
+        good, _ = writer.render(legacy_daily(), REPORT, "2026-03-09..2026-03-11")
         with self.assertRaisesRegex(ValueError, "malformed"):
             writer.render(good.replace("<!-- /daily-report -->", ""), REPORT, "2026-03-09..2026-03-11")
         swapped = good.replace("<!-- /daily-report -->", "<!-- daily-report range=2026-03-01..2026-03-02 -->")
@@ -83,7 +88,7 @@ class RenderTests(unittest.TestCase):
             writer.render(swapped, REPORT, "2026-03-09..2026-03-11")
 
     def test_refuses_reports_that_would_break_the_section_structure(self) -> None:
-        text = template_daily()
+        text = legacy_daily()
         for bad, message in (
             ("", "empty"),
             ("   \n\n", "empty"),
@@ -96,7 +101,7 @@ class RenderTests(unittest.TestCase):
                     writer.render(text, bad, "2026-03-09..2026-03-11")
 
     def test_accepts_second_level_section_headings(self) -> None:
-        text, action = writer.render(template_daily(), "## Sprint\n- item", "2026-03-09..2026-03-11")
+        text, action = writer.render(legacy_daily(), "## Sprint\n- item", "2026-03-09..2026-03-11")
         self.assertEqual(action, "fill-empty-section")
         self.assertIn("## Sprint", text)
 
@@ -121,7 +126,7 @@ class CliTests(unittest.TestCase):
         self.brain = Path(self._tmp.name) / "brain"
         (self.brain / "JOURNAL").mkdir(parents=True)
         self.note = self.brain / "JOURNAL" / f"{TODAY}.md"
-        self.note.write_text(template_daily(), encoding="utf-8")
+        self.note.write_text(legacy_daily(), encoding="utf-8")
         self.report = Path(self._tmp.name) / "report.md"
         self.report.write_text(REPORT, encoding="utf-8")
         self.log = Path(self._tmp.name) / "run.log"
@@ -160,7 +165,7 @@ class CliTests(unittest.TestCase):
 
     def test_refuses_any_day_other_than_today(self) -> None:
         past = self.brain / "JOURNAL" / "2026-03-10.md"
-        past.write_text(template_daily(), encoding="utf-8")
+        past.write_text(legacy_daily(), encoding="utf-8")
         code, _, err = self.run_cli("--apply", date_args=("--date", "2026-03-10"))
         self.assertEqual(code, 2)
         self.assertIn("only today's note", err)
@@ -175,7 +180,7 @@ class CliTests(unittest.TestCase):
 
     def test_refuses_a_symlinked_daily(self) -> None:
         target = Path(self._tmp.name) / "elsewhere.md"
-        target.write_text(template_daily(), encoding="utf-8")
+        target.write_text(legacy_daily(), encoding="utf-8")
         self.note.unlink()
         self.note.symlink_to(target)
         code, _, err = self.run_cli("--apply")
@@ -204,7 +209,7 @@ class CleanupTests(unittest.TestCase):
         return changed, removed, self.note.read_text(encoding="utf-8")
 
     def test_an_empty_report_section_is_removed_with_the_rest_untouched(self) -> None:
-        template = template_daily()
+        template = legacy_daily()
         changed, removed, text = self.clean(template)
         self.assertTrue(changed)
         self.assertIn(("Daily report", "empty section"), removed)
@@ -212,7 +217,7 @@ class CleanupTests(unittest.TestCase):
         self.assertIn("# Sessions\n\n# Actions", text)
 
     def test_a_filled_report_section_survives_the_cleanup(self) -> None:
-        filled, _ = writer.render(template_daily(), REPORT, "2026-03-09..2026-03-11")
+        filled, _ = writer.render(legacy_daily(), REPORT, "2026-03-09..2026-03-11")
         changed, removed, text = self.clean(filled)
         self.assertNotIn("Daily report", [name for name, _ in removed])
         self.assertIn("<!-- daily-report range=2026-03-09..2026-03-11 -->", text)
@@ -220,7 +225,7 @@ class CleanupTests(unittest.TestCase):
         self.assertTrue(changed)  # the empty action placeholders are still removed
 
     def test_dry_run_does_not_touch_the_note(self) -> None:
-        template = template_daily()
+        template = legacy_daily()
         changed, removed, text = self.clean(template, apply=False)
         self.assertTrue(changed)
         self.assertEqual(text, template)
