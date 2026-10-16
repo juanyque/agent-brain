@@ -58,6 +58,7 @@ Today's daily note holds the report in a `# Daily report` section, delimited by 
 ```
 
 - Save the approved report body to a scratch file under `WIP/scratch/daily-report/` (see `WIP/scratch/` in `BRAIN.md`; not `/tmp`). Write each section title as a `## ` heading (never bold text, never a top-level `# ` heading, which would end the `# Daily report` section) and leave the markers out; the tool adds them. Then run `daily_report_write.py --brain-root <brain> --report-file <file> --range <first>..<today>`. It is a dry-run until you add `--apply`; run the dry-run, check the `action:` line, then apply. See `TOOL.daily-report-write.md`.
+- Once the write is verified, move every scratch file of this run (the report body and any saved collector JSON) to `QUARANTINE/TRASH/` (standing move authorization in `AGENTS.common.md`); the stored report is the durable copy. Do not delete them.
 - The tool writes only today's note, replaces a previous report, and refuses to touch content it does not own. If it refuses, tell the user why instead of editing the note by hand.
 - Never edit the report in any other day's note.
 - The `# Daily report` section is generated content: other brain procedures leave it alone, and the rollover cleanup removes it only when it is empty.
