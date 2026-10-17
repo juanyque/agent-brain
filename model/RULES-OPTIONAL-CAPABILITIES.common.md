@@ -161,11 +161,14 @@ without a written guide yet is not investigated until one exists — do not impr
 - `session_open.py`'s digest surfaces sources that are due, and separately reports sources
   that are blocked (see "Access" below) — quiet otherwise.
 - `Last checked:` is the watermark of the last **successfully completed** check, never of
-  a mere attempt. After investigating a due source, update it with
-  `source_scheduler.py mark-checked --status ok|no_activity` — never edit `Last checked:`
-  by hand. A `degraded` result (the source was reachable but the check could not
-  meaningfully complete) records `Last status: degraded` but leaves `Last checked:`
-  untouched, so the source stays due for retry and no unread window is silently skipped.
+  a mere attempt. After the user has reviewed the findings of a source check, update it
+  with `source_scheduler.py mark-checked --status ok|no_activity` — never edit
+  `Last checked:` by hand, and never mark a source from a session-start side effect. A
+  `degraded` result (the source was reachable but the check could not meaningfully
+  complete, including a check that did not cover the whole window since `Last checked:` or
+  that was limited to a single task or topic) records `Last status: degraded` but leaves
+  `Last checked:` untouched, so the source stays due for retry and no unread window is
+  silently skipped.
 - A descriptor may declare `Scan targets:` when its `Locator:` fans out to several
   distinct targets. `ok`/`no_activity` then require `--scanned` naming every declared
   target, or the write is refused and the watermark does not advance — a partial check
@@ -199,7 +202,10 @@ without a written guide yet is not investigated until one exists — do not impr
 
 ### Investigation behavior
 
-For each source the digest lists as due:
+Source investigation runs only when the user asks for it (`ingesta <fuente>`, `revisar
+fuentes`), never as a side effect of opening a session: the session-start digest only
+reports what is due. Exception: a source with `Check cadence (days): always` carries no
+watermark and may be read at session open. For each source to investigate:
 
 1. Spawn one subagent per source using the runtime's subagent mechanism when available and
    permitted by the active instructions; otherwise investigate sequentially in the parent.
@@ -211,9 +217,13 @@ For each source the digest lists as due:
    `WIP/`, `BACKLOG/`, or `MEMORY/` happens later, on request (`/brain revisar fuentes`) or
    during ordinary session work.
 4. A subagent's failure (timeout, missing permission, error) is logged as a one-line note
-   and skipped — it never blocks the rest of the sources or the session start.
+   and skipped — it never blocks the rest of the sources or the rest of the review.
 5. A source the digest lists as blocked is reported, not investigated: no subagent is
    spawned for it. Explain the blocking reason briefly and move on.
+6. Present the findings to the user (see "Triage order"), and record the watermark only
+   after the user has reviewed them. A search that did not cover the whole window since
+   `Last checked:`, or that was limited to a single task or topic, is `degraded`, never
+   `ok` or `no_activity`.
 
 ### Triage order
 
