@@ -215,6 +215,27 @@ For each source the digest lists as due:
 5. A source the digest lists as blocked is reported, not investigated: no subagent is
    spawned for it. Explain the blocking reason briefly and move on.
 
+### Triage order
+
+When a check surfaces several relevant items, present them in this order for every source
+type. Each item takes the first position that applies.
+
+1. **Directly addressed to the user** (mentions, direct recipient, assignment) comes before
+   anything else, above broadcasts, lists, and automated notices — especially when it
+   carries a date. Within that group, order by date bucket relative to today:
+   1. due within the next 7 days (today included);
+   2. past by less than 7 days (possibly still recoverable: offer to ask for an extension
+      or a new date);
+   3. due later than 7 days from now;
+   4. no date;
+   5. past by 7 days or more.
+2. **Not directed at the user** (broadcasts, distribution lists), with the same date
+   buckets; relevant only when the user's team owns the topic.
+3. **Informational or automated** items are counted, not listed.
+
+Within each bucket, newest first. An item still open from an earlier check is not a
+separate group: flag it as carried over and rank it by the same rule.
+
 ### Installation
 
 Model setup must not enable a source, install a tool, or generate capture files by
