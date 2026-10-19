@@ -27,6 +27,21 @@ python3 -m unittest \
   -v
 ```
 
+For a fast check of the model, baseline, and public-boundary gates (about 1.5 minutes
+instead of the full suite's ~14), run:
+
+```bash
+python3 -m unittest tests.test_model_check tests.test_public_boundary -v
+python3 tests/support/run_baseline_tests.py --root . \
+  --git-ref 6373436ab4a16170cd4d1911f255a14430e367ca \
+  --expected-ids tests/fixtures/baseline-test-ids.txt
+python3 model/SCRIPTS/model_check.py --strict --format json
+```
+
+The pinned `--git-ref` must match the one in `tests/fixtures/operating-model-qa-commands.json`.
+`test_public_boundary` skips its private-marker check unless `git config pushgate.valuesFile`
+points to a forbidden-values file.
+
 The complete governed local gate is declared in
 `tests/fixtures/operating-model-qa-commands.json` as alias `complete-local-gate`. Run it through
 the run-todo wrapper so the invocation, manifest command, plan SHA, implementation SHA, stdout,

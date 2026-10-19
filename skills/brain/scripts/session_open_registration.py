@@ -21,6 +21,7 @@ REOPENABLE_STATUS_RE = re.compile(
     r"^-\s*Status:\s*(?P<status>consolidated|stale-follow-up)\s*$",
     re.MULTILINE,
 )
+REOPENED_LINE_RE = re.compile(r"^-\s*Reopened:", re.MULTILINE)
 
 
 def instantiate_session_template(
@@ -167,7 +168,11 @@ def apply_reopen_transition(
     today: str,
     safe_root: Path | None = None,
 ) -> str:
-    """Flip a consolidated/stale-follow-up Status to open with a dated Reopened line."""
+    """Flip a consolidated/stale-follow-up Status to open with a dated Reopened line.
+
+    The first reopen keeps the plain format; later ones carry `reopen #N` so
+    several reopens on the same day stay distinguishable.
+    """
     descriptor = _open_regular_no_follow(note_path, os.O_RDWR, safe_root)
     stream = os.fdopen(descriptor, "r+", encoding="utf-8")
     descriptor = -1
@@ -176,7 +181,11 @@ def apply_reopen_transition(
         match = REOPENABLE_STATUS_RE.search(text)
         if match is None:
             return "not-consolidated"
-        replacement = f"- Status: open\n- Reopened: {today} (from {match.group('status')})"
+        prior_reopens = len(REOPENED_LINE_RE.findall(text))
+        origin = match.group("status")
+        if prior_reopens:
+            origin = f"{origin}; reopen #{prior_reopens + 1}"
+        replacement = f"- Status: open\n- Reopened: {today} (from {origin})"
         new_text = REOPENABLE_STATUS_RE.sub(replacement, text, count=1)
         stream.seek(0)
         stream.write(new_text)

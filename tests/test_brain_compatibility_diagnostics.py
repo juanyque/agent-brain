@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -174,7 +175,7 @@ class Task18BrainCompatibilityDiagnosticsTests(unittest.TestCase):
         # Given: the task-local diagnostic CLI is inspected directly.
         # When: help text is rendered without scanning a brain.
         result = subprocess.run(
-            ["python3", str(ROOT / "model" / "SCRIPTS" / "model_check_brain_compat.py"), "--help"],
+            [sys.executable, str(ROOT / "model" / "SCRIPTS" / "model_check_brain_compat.py"), "--help"],
             cwd=ROOT,
             text=True,
             capture_output=True,

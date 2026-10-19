@@ -131,6 +131,8 @@ When editing this repo, the granular rule files are the source of truth for thei
 
 ## Test Commands
 
+The code uses `match` statements, so the tests need Python 3.10 or newer. If the default `python3` is older (for example a pyenv 3.9), prefix commands with `uv run --python 3.12 --with 'jsonschema>=4.25,<5' --with 'pydantic>=2.10,<3' --with 'pyyaml>=6.0.2,<7'` as shown in `tests/README.md`.
+
 Run the focused operating-model contract first:
 
 ```bash

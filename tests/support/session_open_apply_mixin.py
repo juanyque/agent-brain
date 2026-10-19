@@ -241,6 +241,24 @@ class SessionOpenApplyMixin:
         self.assertEqual(len(registrations), 1)
         self.assertIn(f"[[{prior_stem}]]", registrations[0])
 
+    def test_repeated_reopens_are_numbered(self) -> None:
+        sys.path.insert(0, str(SCRIPTS_DIR))
+        from session_open_registration import apply_reopen_transition
+
+        with tempfile.TemporaryDirectory() as raw:
+            note = Path(raw) / "note.md"
+            note.write_text("# Session\n- Status: consolidated\n", encoding="utf-8")
+            for _ in range(2):
+                self.assertEqual(apply_reopen_transition(note, "2026-10-19"), "reopened")
+                text = note.read_text(encoding="utf-8")
+                note.write_text(
+                    text.replace("- Status: open", "- Status: consolidated", 1),
+                    encoding="utf-8",
+                )
+            content = note.read_text(encoding="utf-8")
+        self.assertIn("- Reopened: 2026-10-19 (from consolidated)", content)
+        self.assertIn("- Reopened: 2026-10-19 (from consolidated; reopen #2)", content)
+
     def test_stale_follow_up_resume_is_refused_like_consolidated(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             brain = Path(raw)

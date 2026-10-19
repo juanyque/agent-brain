@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Literal, assert_never
@@ -29,7 +30,7 @@ ROUTE_CODES: tuple[RouteCode, ...] = (
 
 def _run_cli(*args: str, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["python3", str(CLI), *args],
+        [sys.executable, str(CLI), *args],
         cwd=cwd,
         text=True,
         capture_output=True,

@@ -1,6 +1,6 @@
 # Session id resolver
 
-`resolve_session_id.py` resolves the current OpenCode or Codex session id
+`resolve_session_id.py` resolves the current OpenCode, Codex, or Claude Code session id
 through runtime-specific deterministic signals, never by history list order.
 It is the executable form of the "Identify the current session id" rule in
 `RULES-SESSION-LIFECYCLE.common.md`.
@@ -24,7 +24,22 @@ python3 ~/.agents/skills/brain/scripts/resolve_session_id.py \
   --cwd "$(pwd)"
 ```
 
+For Claude Code, read `$CLAUDE_CODE_SESSION_ID` on every call: the id can rotate
+mid-conversation, so re-resolve instead of caching it. The resolver never guesses
+from the newest transcript file:
+
+```bash
+python3 ~/.claude/skills/brain/scripts/resolve_session_id.py \
+  --runtime claude \
+  --cwd "$(pwd)"
+```
+
 Resolution chain (first hit wins):
+
+Claude Code:
+
+1. `claude_session_id_env` — `$CLAUDE_CODE_SESSION_ID`, injected by Claude Code.
+2. unresolved — exit 3 with `ask_user` true when the variable is unset.
 
 Codex:
 

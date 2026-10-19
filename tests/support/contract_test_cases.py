@@ -20,7 +20,7 @@ from evidence_implementation import implementation_git_state_sha, implementation
 
 def cli(*args: str) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
-        ["python3", "-B", str(CLI), *args],
+        [sys.executable, "-B", str(CLI), *args],
         cwd=ROOT,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         capture_output=True,
@@ -30,7 +30,7 @@ def cli(*args: str) -> subprocess.CompletedProcess[bytes]:
 
 def cli_with_env(environment: dict[str, str], *args: str) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
-        ["python3", "-B", str(CLI), *args],
+        [sys.executable, "-B", str(CLI), *args],
         cwd=ROOT,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", **environment},
         capture_output=True,

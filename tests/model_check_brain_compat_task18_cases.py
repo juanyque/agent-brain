@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -80,7 +81,7 @@ def materialize_legacy_fixture(root: Path) -> tuple[Path, Path]:
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["python3", str(CLI), *args],
+        [sys.executable, str(CLI), *args],
         cwd=ROOT,
         text=True,
         capture_output=True,

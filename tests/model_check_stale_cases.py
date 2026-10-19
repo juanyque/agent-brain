@@ -212,7 +212,7 @@ class StaleReferenceHelperTests(unittest.TestCase):
 
             json_result = subprocess.run(
                 [
-                    "python3",
+                    sys.executable,
                     str(SCRIPTS / "model_check_stale.py"),
                     "--root",
                     str(root),
@@ -228,7 +228,7 @@ class StaleReferenceHelperTests(unittest.TestCase):
             )
             text_result = subprocess.run(
                 [
-                    "python3",
+                    sys.executable,
                     str(SCRIPTS / "model_check_stale.py"),
                     "--root",
                     str(root),

@@ -32,7 +32,7 @@ STALE_TEMPLATE_PATTERN = "TEMPLATE.daily" + "-note.md"
 
 def run_cli(*args: str, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["python3", str(CLI), *args],
+        [sys.executable, str(CLI), *args],
         cwd=cwd,
         text=True,
         capture_output=True,

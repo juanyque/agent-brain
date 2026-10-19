@@ -100,12 +100,14 @@ bootstrap runs never open an editor or a GPG prompt. Nothing is pushed automatic
 
 ## Skills
 
-Two skills ship with agent-brain, but only the operating skill is installed automatically:
+Agent-brain ships several skills, but only the operating skill is installed automatically; the rest are opt-in:
 
 | Skill | Command | Installation | Purpose |
 |---|---|---|---|
 | **brain** | `/brain` (Codex: `$brain`) | Automatic | Connect to the brain, manage session lifecycle, daily notes, stand-up reports (`/brain daily`), and standardization |
 | **boyscout** | `/boyscout` (Codex: `$boyscout`) | Opt-in | Spot improvement opportunities and route them to an explicit remediation workflow or backlog |
+| **explain-with-cards** | `/explain-with-cards` (Codex: `$explain-with-cards`) | Opt-in | Tutor mode: teach a session topic through small cards with comprehension checks and a persistent learning plan |
+| **step-by-step** | `/step-by-step` (Codex: `$step-by-step`) | Opt-in | Guide mode: turn pending questions and tasks into an ordered checklist and close them one card at a time |
 
 Skills live outside the brain and are symlinked to the repo. Codex and OpenCode share
 `~/.agents/skills/`; Claude uses `~/.claude/skills/`; Antigravity CLI uses
@@ -117,7 +119,7 @@ upserts exactly one daily recovery entry keyed by the full session ID, preserves
 edited summary, and checks the resulting session/daily state. Active WIP notes can be checked
 against the `WIP/WIP.md` dashboard with the bundled read-only `brain_check.py` tool.
 
-Install `boyscout` for Codex only when wanted. Review the dry-run first:
+Install an opt-in skill (here `boyscout`, for Codex) only when wanted. Review the dry-run first; the other opt-in skills install the same way with their directory name:
 
 ```bash
 bash ~/.local/share/agent-brain/model/SCRIPTS/skill_link.sh boyscout ~/.agents

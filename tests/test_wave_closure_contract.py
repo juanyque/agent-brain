@@ -48,7 +48,7 @@ def write_json(path: Path, value: JsonValue) -> None:
 
 def run_cli(*args: str) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
-        ["python3", "-B", str(CLI), *args],
+        [sys.executable, "-B", str(CLI), *args],
         cwd=ROOT,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         capture_output=True,

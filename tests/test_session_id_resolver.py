@@ -285,6 +285,7 @@ class CliTests(unittest.TestCase):
                 "OPENCODE_PID",
                 "CODEX_SESSION_ID",
                 "CODEX_THREAD_ID",
+                "CLAUDE_CODE_SESSION_ID",
             )
         }
         env.update(env_extra or {})
@@ -331,8 +332,23 @@ class CliTests(unittest.TestCase):
         self.assertIn("app_server_error", result.stdout)
         self.assertNotIn("thread-only", result.stdout)
 
-    def test_unsupported_runtime(self):
+    def test_claude_session_id_env_resolves(self):
+        result = self.run_cli(
+            "--runtime", "claude", env_extra={"CLAUDE_CODE_SESSION_ID": "claude-session"}
+        )
+        self.assertEqual(result.returncode, EXIT_RESOLVED)
+        self.assertIn('"session_id": "claude-session"', result.stdout)
+        self.assertIn('"resolution": "claude_session_id_env"', result.stdout)
+        self.assertIn('"environment": "CLAUDE_CODE_SESSION_ID"', result.stdout)
+
+    def test_claude_without_env_is_unresolved(self):
         result = self.run_cli("--runtime", "claude")
+        self.assertEqual(result.returncode, EXIT_UNRESOLVED)
+        self.assertIn('"ask_user": true', result.stdout)
+        self.assertNotIn('"session_id"', result.stdout)
+
+    def test_unsupported_runtime(self):
+        result = self.run_cli("--runtime", "generic")
         self.assertEqual(result.returncode, EXIT_UNSUPPORTED)
 
     def test_unresolved_emits_candidates_and_exit_3(self):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve the current OpenCode or Codex session id deterministically.
+"""Resolve the current OpenCode, Codex, or Claude Code session id deterministically.
 
 Chain (first hit wins):
   1. plugin_env     — $OPENCODE_SESSION_ID, injected by the brain-session-env
@@ -16,6 +16,10 @@ Chain (first hit wins):
 Codex uses the local App Server daemon: enumerate loaded threads, filter by
 cwd, and read ``thread.sessionId`` from the sole matching thread. If the daemon
 is unavailable or more than one thread matches, fail closed.
+
+Claude Code reads ``$CLAUDE_CODE_SESSION_ID`` on every call (the id can rotate
+mid-conversation) and never guesses from transcript files; without it the
+result is unresolved.
 
 Exit codes: 0 resolved · 3 unresolved (candidates emitted) · 2 error ·
 4 unsupported runtime. Stdout is always a single JSON object.
@@ -48,7 +52,7 @@ EXIT_ERROR = 2
 EXIT_UNRESOLVED = 3
 EXIT_UNSUPPORTED = 4
 
-SUPPORTED_RUNTIMES = ("opencode", "codex")
+SUPPORTED_RUNTIMES = ("opencode", "codex", "claude")
 
 
 def emit(payload: dict, code: int) -> int:
@@ -480,6 +484,29 @@ def install_plugin(script_path: Path, force: bool) -> int:
 
 def resolve(args: argparse.Namespace, environ: dict[str, str]) -> int:
     chain: list[str] = []
+
+    if args.runtime == "claude":
+        env_session = environ.get("CLAUDE_CODE_SESSION_ID", "").strip()
+        if env_session:
+            chain.append("claude_session_id_env")
+            return emit(
+                {
+                    "session_id": env_session,
+                    "resolution": "claude_session_id_env",
+                    "chain": chain,
+                    "evidence": {"environment": "CLAUDE_CODE_SESSION_ID"},
+                },
+                EXIT_RESOLVED,
+            )
+        return emit(
+            {
+                "unresolved": "CLAUDE_CODE_SESSION_ID is not set",
+                "chain": chain,
+                "candidates": [],
+                "ask_user": True,
+            },
+            EXIT_UNRESOLVED,
+        )
 
     if args.runtime == "codex":
         env_session = environ.get("CODEX_SESSION_ID", "").strip()

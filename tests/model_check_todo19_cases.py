@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ QA_COMMANDS = ROOT / "tests" / "fixtures" / "operating-model-qa-commands.json"
 
 def run_cli(*args: str, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["python3", str(CLI), *args],
+        [sys.executable, str(CLI), *args],
         cwd=cwd,
         text=True,
         capture_output=True,
