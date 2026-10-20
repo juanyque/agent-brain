@@ -158,7 +158,7 @@ def render_session_digest(state: SessionDigestState) -> str:
         empty = frozenset(state.empty_open_sessions)
         for session in state.open_sessions:
             if session in empty:
-                lines.append(f"- {session}  ⚠ empty (never worked) — close it or resume it")
+                lines.append(f"- {session}  ⚠ empty note (no recorded work) — verify before closing it, or resume it")
             else:
                 lines.append(f"- {session}")
     else:

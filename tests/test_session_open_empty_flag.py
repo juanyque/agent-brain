@@ -221,7 +221,7 @@ class DigestEmptyFlagTests(unittest.TestCase):
     def test_flag_attaches_to_the_right_session_line(self) -> None:
         rendered = self._render((self.FLAGGED,))
         self.assertIn(
-            f"- {self.FLAGGED}  ⚠ empty (never worked) — close it or resume it\n",
+            f"- {self.FLAGGED}  ⚠ empty note (no recorded work) — verify before closing it, or resume it\n",
             rendered,
         )
         self.assertIn(f"- {self.PLAIN}\n", rendered)

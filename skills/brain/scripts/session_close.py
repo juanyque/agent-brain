@@ -7,6 +7,12 @@ Subcommands:
   handoff <session-id>              Mark session as handoff-only (same session continues another day).
   consolidate <session-id>          Mark session as consolidated (work preserved, session done).
     [--archive]                     Additionally move the note to QUARANTINE/TRASH/ via git mv.
+  close-empty [session-id ...]      List open session notes with no recorded work (dry-run), or
+    [--min-age-days N]              close the named ones (consolidate + archive) with --apply.
+    [--include-unverified]          Notes whose transcript shows activity are never closed here.
+
+An empty note consolidates without the checklist ceremony and gets one
+`never worked` reason line.
 
 Dry-run by default; pass --apply to write changes. State transitions and archives
 are idempotent. Archival preflights Git tracking and destination safety before
@@ -20,7 +26,7 @@ import argparse
 import re
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 
@@ -32,9 +38,13 @@ if str(MODEL_SCRIPTS) not in sys.path:
 from brain_state import current_brain_status, current_model_root  # noqa: E402
 from session_open_discovery import (  # noqa: E402
     JournalConfigError,
+    is_session_note_empty,
     list_daily_notes,
+    list_session_notes,
     load_journal_folder,
+    session_note_date,
 )
+from session_transcripts import HAS_ACTIVITY, NO_ACTIVITY, classify_session_activity  # noqa: E402
 from source_scheduler import registry_activated, summarize_due_sources  # noqa: E402
 
 
@@ -42,6 +52,9 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
     "handoff": ["open"],
     "consolidate": ["open", "handoff-only"],
 }
+
+DEFAULT_MIN_AGE_DAYS = 4
+NEVER_WORKED_REASON = "- Closed reason: never worked (empty session note, no recorded work)"
 
 STATUS_LINE_RE = re.compile(r"^(-\s+Status:)\s*(.+)$")
 WIP_TAG_RE = re.compile(r"\bwip\b")
@@ -91,6 +104,27 @@ def parse_args() -> argparse.Namespace:
         "--archive",
         action="store_true",
         help="Move the consolidated note to QUARANTINE/TRASH/ via git mv.",
+    )
+
+    close_empty_p = subparsers.add_parser(
+        "close-empty",
+        help="List open notes with no recorded work; close the named ones with --apply.",
+    )
+    close_empty_p.add_argument(
+        "session_ids",
+        nargs="*",
+        help="Session IDs (or unambiguous prefixes) to close; omit to only list.",
+    )
+    close_empty_p.add_argument(
+        "--min-age-days",
+        type=int,
+        default=DEFAULT_MIN_AGE_DAYS,
+        help=f"Only notes at least this many days old are candidates (default: {DEFAULT_MIN_AGE_DAYS}).",
+    )
+    close_empty_p.add_argument(
+        "--include-unverified",
+        action="store_true",
+        help="Allow closing named notes with no Claude transcript, after verifying them by hand.",
     )
 
     return parser.parse_args(normalize_apply_flag(sys.argv[1:]))
@@ -433,6 +467,96 @@ def git_stage(path: Path, brain_root: Path, apply: bool) -> bool:
     return True
 
 
+def stamp_never_worked_reason(note_path: Path, apply: bool) -> bool:
+    """Add the one-line `never worked` reason right after the Status line."""
+    text = note_path.read_text(encoding="utf-8")
+    if NEVER_WORKED_REASON in text:
+        return False
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if STATUS_LINE_RE.match(line.rstrip("\n")):
+            lines.insert(index + 1, NEVER_WORKED_REASON + "\n")
+            if apply:
+                note_path.write_text("".join(lines), encoding="utf-8")
+            return True
+    return False
+
+
+def empty_candidates(brain_root: Path, min_age_days: int) -> list[tuple[Path, str, int, str, str]]:
+    """Open, empty notes old enough to consider: (note, id, age, verdict, detail)."""
+    today = date.today()
+    found = []
+    for note in list_session_notes(brain_root):
+        note_day = session_note_date(note)
+        if note_day is None or read_session_status(note) != "open":
+            continue
+        age = (today - datetime.strptime(note_day, "%Y-%m-%d").date()).days
+        if age < min_age_days or not is_session_note_empty(note):
+            continue
+        token = note.stem.split("-session-", 1)[1]
+        full_id = resolve_full_session_id(note, token)
+        verdict, detail = classify_session_activity(full_id)
+        found.append((note, full_id, age, verdict, detail))
+    return found
+
+
+def run_close_empty(args: argparse.Namespace, brain_root: Path) -> int:
+    mode = "apply" if args.apply else "dry-run"
+    candidates = empty_candidates(brain_root, args.min_age_days)
+    print("# Session close — close-empty")
+    print(f"mode: {mode}")
+    print(f"min_age_days: {args.min_age_days}")
+    print("candidates:")
+    if not candidates:
+        print("- none")
+    for note, full_id, age, verdict, detail in candidates:
+        print(f"- {note.relative_to(brain_root)}  age={age}d  id={full_id}  {verdict} ({detail})")
+    if not args.session_ids:
+        print()
+        print(
+            "Verify each note before closing it (the transcript evidence is advisory), then "
+            "run: close-empty --apply <session-id> ..."
+        )
+        return 0
+
+    chosen = []
+    for wanted in args.session_ids:
+        matches = [c for c in candidates if wanted in c[0].name or c[1].startswith(wanted)]
+        if len(matches) != 1:
+            print(f"ERROR: '{wanted}' matches {len(matches)} candidates; expected exactly 1", file=sys.stderr)
+            return 1
+        note, full_id, _age, verdict, detail = matches[0]
+        if verdict == HAS_ACTIVITY:
+            print(
+                f"ERROR: {full_id} shows activity outside its note ({detail}); "
+                "consolidate it with its real content instead",
+                file=sys.stderr,
+            )
+            return 1
+        if verdict != NO_ACTIVITY and not args.include_unverified:
+            print(
+                f"ERROR: {full_id} is {verdict} ({detail}); verify it by hand and pass "
+                "--include-unverified to close it",
+                file=sys.stderr,
+            )
+            return 1
+        chosen.append(note.stem.split("-session-", 1)[1])
+
+    for token in chosen:
+        command = [
+            sys.executable, str(Path(__file__).resolve()),
+            "--brain-root", str(brain_root),
+            *(["--apply"] if args.apply else []),
+            *(["--cwd", args.cwd] if args.cwd else []),
+            "consolidate", token, "--archive",
+        ]
+        print()
+        result = subprocess.run(command, check=False)
+        if result.returncode != 0:
+            return result.returncode
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     brain_root = Path(args.brain_root).expanduser().resolve()
@@ -466,6 +590,9 @@ def main() -> int:
             # raise-or-not behavior.
             print(f"ERROR: invalid --cwd value: {args.cwd!r} (not a directory)", file=sys.stderr)
             return 1
+
+    if args.subcommand == "close-empty":
+        return run_close_empty(args, brain_root)
 
     mode = "apply" if args.apply else "dry-run"
     subcommand: str = args.subcommand
@@ -523,7 +650,9 @@ def main() -> int:
             else []
         )
         gate_state: tuple[str, list[str]] = ("missing", [])
-        if not already_target:
+        if not already_target and is_session_note_empty(note_path):
+            gate_state = ("empty", [])
+        elif not already_target:
             gate_state = consolidation_checklist_state(
                 note_path.read_text(encoding="utf-8")
             )
@@ -559,7 +688,13 @@ def main() -> int:
 
     if subcommand == "consolidate":
         if not already_target:
-            if gate_state[0] == "passing":
+            if gate_state[0] == "empty":
+                stamped = stamp_never_worked_reason(note_path, apply=args.apply)
+                action = "added" if args.apply else "would add"
+                print("  empty note: closing-gate checklist skipped (never worked)")
+                if stamped:
+                    print(f"  {action}: never-worked reason line")
+            elif gate_state[0] == "passing":
                 print(
                     "  verified: closing-gate checklist complete "
                     "(unchecked items carry inline reasons)"
