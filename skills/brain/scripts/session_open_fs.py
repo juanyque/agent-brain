@@ -124,6 +124,14 @@ def _restore_regular_file_no_follow(
     safe_root: Path,
 ) -> str | None:
     try:
+        with os.fdopen(
+            _open_regular_no_follow(path, os.O_RDONLY, safe_root), "rb"
+        ) as stream:
+            if stream.read() == content:
+                return None
+    except OSError:
+        pass
+    try:
         descriptor = _open_regular_no_follow(path, os.O_WRONLY, safe_root)
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(content)

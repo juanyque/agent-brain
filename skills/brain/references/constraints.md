@@ -63,5 +63,5 @@ If any file cannot be read, stop immediately and tell the user:
 | A third distinct consecutive strategy fails without material progress | Stop, summarize the three strategies, and ask for direction |
 | The failed operation may have produced partial or ambiguous state | Stop immediately and inspect or request direction; do not retry |
 
-- Every apply-mode script run writes a `.log` file (see Script conventions). These logs are the audit trail for brain writes; do not delete them until the user has verified the changes are correct.
+- Apply-mode scripts built on the shared `Reporter` (setup, attachments, canvas repair, daily report, source scheduler) write a `.log` file (see Script conventions). These logs are the audit trail for brain writes; do not delete them until the user has verified the changes are correct. `session_open.py` and `session_close.py` write no log: they print their outcome and rollback state to the console, and the session note and daily registration are their durable record.
 - If the brain's `AGENTS.md` or `BRAIN.md` define rules that conflict with these instructions, follow the brain's own rules.

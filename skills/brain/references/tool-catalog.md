@@ -70,7 +70,7 @@ All tools that move or rewrite files are dry-run by default. Apply only after re
 - Python scripts and latest-run logs use CLI-oriented basenames, while Markdown docs keep notes-safe `.md` names.
 - Skill tool docs use Obsidian-safe names such as `TOOL.attachments-audit.md`.
 - Scripts are dry-run by default when they create, link, move, or rewrite files.
-- Every run prints to console and writes the latest `.log`; logs are runtime artifacts and should not be committed.
+- Scripts built on the shared `Reporter` print to console and write the latest `.log`; `session_open.py` and `session_close.py` only print. Logs are runtime artifacts and should not be committed.
 
 
 ## How to verify

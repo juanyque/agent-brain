@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -773,6 +774,32 @@ class SessionCloseTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("- Status: consolidated", archived_content)
         self.assertNotIn("wip", archived_content.split("---", 2)[1])
+
+    def test_archive_refuses_up_front_when_git_dir_is_not_writable(self) -> None:
+        if os.geteuid() == 0:
+            self.skipTest("permission bits do not restrict root")
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            self.assertEqual(git(brain, "init", "-q").returncode, 0)
+            git(brain, "config", "user.email", "tests@example.invalid")
+            git(brain, "config", "user.name", "agent-brain tests")
+            note = create_note(brain, "session-ro-git")
+            git(brain, "add", str(note.relative_to(brain)))
+            self.assertEqual(git(brain, "commit", "-qm", "fixture").returncode, 0)
+            git_dir = brain / ".git"
+            original = note.read_text(encoding="utf-8")
+            git_dir.chmod(0o555)
+            try:
+                dry_run = run(
+                    "--brain-root", str(brain), "consolidate", "session-ro-git", "--archive"
+                )
+            finally:
+                git_dir.chmod(0o755)
+            content = note.read_text(encoding="utf-8")
+
+        self.assertEqual(dry_run.returncode, 1)
+        self.assertIn("Git directory is not writable", dry_run.stderr)
+        self.assertEqual(content, original)
 
     def test_archive_failure_rolls_back_note_content(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

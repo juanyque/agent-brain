@@ -78,6 +78,7 @@ def apply_session_transaction(
         else None
     )
     daily_write_started = False
+    mutation_started = False
     transaction_committed = False
     try:
         if request.existing_note:
@@ -86,6 +87,7 @@ def apply_session_transaction(
                 session_restore_path,
                 request.brain_root,
             )
+            mutation_started = True
             if request.reopen_status is not None:
                 reopen_action = apply_reopen_transition(
                     session_restore_path,
@@ -115,6 +117,7 @@ def apply_session_transaction(
                 session_restore_path,
                 request.brain_root,
             )
+            mutation_started = True
             recovery_action = upsert_session_recovery(
                 request.session_note_path,
                 request.session_id,
@@ -136,6 +139,7 @@ def apply_session_transaction(
                 request.runtime,
                 request.cwd,
             )
+            mutation_started = True
             try:
                 created_parents = _create_session_note_no_follow(
                     request.brain_root,
@@ -158,6 +162,7 @@ def apply_session_transaction(
             return 1
         if request.today_exists:
             try:
+                mutation_started = True
                 daily_write_started = True
                 daily_registration = hooks.upsert_sessions_entry(
                     request.today_path,
@@ -213,6 +218,11 @@ def apply_session_transaction(
         return 0
     finally:
         if not transaction_committed:
+            if sys.exc_info()[0] is not None and not mutation_started:
+                print(
+                    "ERROR: session-open failed before any write; no changes were made.",
+                    file=sys.stderr,
+                )
             rollback_errors: list[str] = []
             if daily_write_started and daily_original is not None:
                 daily_error = _restore_regular_file_no_follow(

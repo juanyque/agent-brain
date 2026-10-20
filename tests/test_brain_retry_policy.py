@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "brain" / "SKILL.md"
 CONSTRAINTS = ROOT / "skills" / "brain" / "references" / "constraints.md"
 HEADING = "### Failure recovery and retries"
-NEXT_LINE = "- Every apply-mode script run writes a `.log` file"
+NEXT_LINE = "- Apply-mode scripts built on the shared `Reporter`"
 
 
 def retry_policy(path: Path) -> str:

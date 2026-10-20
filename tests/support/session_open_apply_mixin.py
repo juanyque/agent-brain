@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -258,6 +259,52 @@ class SessionOpenApplyMixin:
             content = note.read_text(encoding="utf-8")
         self.assertIn("- Reopened: 2026-10-19 (from consolidated)", content)
         self.assertIn("- Reopened: 2026-10-19 (from consolidated; reopen #2)", content)
+
+    def test_unreadable_existing_note_reports_no_changes_instead_of_incomplete_rollback(
+        self,
+    ) -> None:
+        if os.geteuid() == 0:
+            self.skipTest("permission bits do not restrict root")
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw)
+            self.attach_current_model(brain)
+            session_id = "session-denied-id"
+            today = datetime.now().date()
+            session_dir = brain / "WIP" / "SESSIONS"
+            session_dir.mkdir(parents=True)
+            note = self._write_closed_note(
+                session_dir, session_id, today - timedelta(days=1), "open"
+            )
+            daily = brain / "JOURNAL" / f"{today}.md"
+            daily.parent.mkdir()
+            daily.write_text("# Sessions\n\n# Actions\n", encoding="utf-8")
+            note.chmod(0o000)
+            try:
+                result = self._run_resume(brain, session_id, "--apply")
+            finally:
+                note.chmod(0o644)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no changes were made", result.stderr)
+        self.assertNotIn("rollback was incomplete", result.stderr)
+
+    def test_restore_is_a_no_op_when_the_file_already_has_the_original_content(
+        self,
+    ) -> None:
+        if os.geteuid() == 0:
+            self.skipTest("permission bits do not restrict root")
+        sys.path.insert(0, str(SCRIPTS_DIR))
+        from session_open_fs import _restore_regular_file_no_follow
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            target = root / "note.md"
+            target.write_bytes(b"original\n")
+            target.chmod(0o444)
+            unchanged = _restore_regular_file_no_follow(target, b"original\n", root)
+            differs = _restore_regular_file_no_follow(target, b"other\n", root)
+        self.assertIsNone(unchanged)
+        self.assertIsNotNone(differs)
 
     def test_stale_follow_up_resume_is_refused_like_consolidated(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

@@ -23,6 +23,7 @@ original path and content if the move or staging step fails.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -434,6 +435,20 @@ def archive_preflight(brain_root: Path, src: Path, dst: Path) -> tuple[bool, str
     )
     if result.returncode != 0:
         return False, f"session note is not tracked by Git: {src_rel}"
+    git_dir = subprocess.run(
+        ["git", "rev-parse", "--absolute-git-dir"],
+        cwd=brain_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if git_dir.returncode == 0 and not os.access(git_dir.stdout.strip(), os.W_OK):
+        return (
+            False,
+            f"Git directory is not writable ({git_dir.stdout.strip()}); the archive "
+            "move would fail at git mv. Re-run where Git can write (for example with "
+            "escalated permissions in a sandboxed runtime).",
+        )
     return True, ""
 
 
