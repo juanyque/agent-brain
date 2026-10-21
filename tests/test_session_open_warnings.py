@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -49,8 +50,12 @@ class CwdWarningTests(unittest.TestCase):
 
     def test_omitted_cwd_or_unknown_process_cwd_is_silent(self) -> None:
         self.assertEqual(warn(cwd=""), ())
-        self.assertEqual(warn(cwd="   "), ())
         self.assertEqual(warn(cwd="/elsewhere", process_cwd=None), ())
+
+    def test_the_cwd_is_compared_exactly_as_given(self) -> None:
+        result = warn(cwd="/work/project ", process_cwd="/work/project")
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result[0].startswith("cwd-mismatch:"))
 
     def test_failed_resolution_is_not_fatal(self) -> None:
         self.assertEqual(warn(cwd="bad\0path", process_cwd="/work"), ())
@@ -103,10 +108,11 @@ class RuntimeWarningTests(unittest.TestCase):
 
 class DigestWarningTests(unittest.TestCase):
     def test_fixture_collection_ignores_request_warnings(self) -> None:
-        request = fixed_session_digest_request()
+        request = replace(fixed_session_digest_request(), request_warnings=("cwd-mismatch: from the host",))
         state = collect_session_digest_state(request)
         self.assertEqual(state.request_warnings, ())
         self.assertNotIn("request_warnings", render_session_digest(state))
+        self.assertNotIn("from the host", render_session_digest(state))
 
     def test_warnings_render_as_their_own_block_only_when_present(self) -> None:
         state = collect_session_digest_state(fixed_session_digest_request())
@@ -167,6 +173,29 @@ class CliWarningTests(unittest.TestCase):
 
         self.assertNotIn("runtime-env", single.stderr)
         self.assertEqual(both.stderr.count("runtime-env-ambiguous"), 1)
+
+    def test_a_failing_process_cwd_lookup_is_not_fatal(self) -> None:
+        import contextlib
+        import io
+        from unittest.mock import patch
+
+        import session_open
+
+        argv = [
+            "session_open.py", "--brain-root", str(self.brain), "--session-id", "ses-warn",
+            "--runtime", "codex", "--cwd", str(self.root / "other"),
+        ]
+        out, err = io.StringIO(), io.StringIO()
+        clean_env = {k: v for k, v in os.environ.items() if k not in MARKERS}
+        with patch.object(sys, "argv", argv), patch.dict(os.environ, clean_env, clear=True), patch(
+            "session_open_flow.os.getcwd", side_effect=OSError("gone")
+        ):
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = session_open.main()
+
+        self.assertEqual(code, 0, err.getvalue())
+        self.assertNotIn("cwd-mismatch", err.getvalue())
+        self.assertNotIn("request_warnings", out.getvalue())
 
     def test_apply_with_warnings_keeps_exit_status_and_is_idempotent(self) -> None:
         today = datetime.now().strftime("%Y-%m-%d")

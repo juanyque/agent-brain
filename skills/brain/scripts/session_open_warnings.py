@@ -29,10 +29,10 @@ def _resolved(path: str | Path, base: Path) -> Path | None:
 
 
 def _cwd_warning(cwd: str, process_cwd: str | Path | None) -> str | None:
-    if not cwd.strip() or process_cwd is None:
+    if not cwd or process_cwd is None:
         return None
     process = _resolved(process_cwd, Path("/"))
-    supplied = _resolved(cwd.strip(), process) if process is not None else None
+    supplied = _resolved(cwd, process) if process is not None else None
     if process is None or supplied is None or supplied == process:
         return None
     return (

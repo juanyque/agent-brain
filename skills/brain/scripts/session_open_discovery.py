@@ -231,6 +231,7 @@ def is_session_note_empty(note_path: Path) -> bool:
 NEXT_STEP_HEADING = "immediate next step"
 NEXT_STEP_SECTION_END_RE = re.compile(r"^#{1,2} +\S")
 NESTED_HEADING_RE = re.compile(r"^#{3,6} +\S")
+FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 NEXT_STEP_CLOSURES = frozenset({"none", "session closed"})
 LIST_MARKER_RE = re.compile(r"^(?:[-*+]|\d+[.)])\s+")
 CHECKBOX_RE = re.compile(r"^\[[ xX]\]\s*")
@@ -248,28 +249,56 @@ class SessionRolloverFacts:
     next_step: str
 
 
-def _next_step_lines(lines: list[str]) -> list[str] | None:
+def _strip_comments(raw: str, in_comment: bool) -> tuple[str, bool]:
+    """Remove HTML comment spans from one line outside a fence, keeping the visible text
+    around them; returns the remaining text and whether a comment is still open."""
+    kept: list[str] = []
+    rest = raw
+    while rest:
+        if in_comment:
+            end = rest.find("-->")
+            if end == -1:
+                return "".join(kept), True
+            rest, in_comment = rest[end + 3 :], False
+            continue
+        start = rest.find("<!--")
+        if start == -1:
+            kept.append(rest)
+            break
+        kept.append(rest[:start])
+        rest, in_comment = rest[start + 4 :], True
+    return "".join(kept), in_comment
+
+
+def _next_step_lines(text: str) -> list[str] | None:
     """Body of the single `## Immediate next step` section, or None when the
-    structure cannot be trusted (duplicate section, unclosed comment or fence)."""
+    structure cannot be trusted (duplicate section, unclosed comment or fence).
+
+    One ordered pass: inside a fence (opened by ``` or ~~~, closed only by a compatible
+    fence of at least the same length) every character is ignored, comment delimiters
+    included; outside fences HTML comments are removed, keeping the visible text around
+    them. Indented code blocks are not recognised and count as text."""
     sections: list[list[str]] = []
     current: list[str] | None = None
-    in_fence = False
+    fence: tuple[str, int] | None = None
     in_comment = False
-    for raw in lines:
-        stripped = raw.strip()
-        if in_comment:
-            if "-->" in stripped:
-                in_comment = False
+    for line in text.splitlines():
+        marker = FENCE_RE.match(line)
+        if fence is not None:
+            if (
+                marker is not None
+                and marker.group(1)[0] == fence[0]
+                and len(marker.group(1)) >= fence[1]
+                and not marker.group(2).strip()
+            ):
+                fence = None
             continue
-        if stripped.startswith("<!--"):
-            if "-->" not in stripped:
-                in_comment = True
+        if not in_comment and marker is not None and not (
+            marker.group(1)[0] == "`" and "`" in marker.group(2)
+        ):
+            fence = (marker.group(1)[0], len(marker.group(1)))
             continue
-        if stripped.startswith("```"):
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
+        raw, in_comment = _strip_comments(line, in_comment)
         if NEXT_STEP_SECTION_END_RE.match(raw):
             heading = HEADING_RE.match(raw)
             if (
@@ -285,8 +314,8 @@ def _next_step_lines(lines: list[str]) -> list[str] | None:
         if NESTED_HEADING_RE.match(raw):
             continue
         if current is not None:
-            current.append(stripped)
-    if in_comment or in_fence or len(sections) > 1:
+            current.append(raw.strip())
+    if in_comment or fence is not None or len(sections) > 1:
         return None
     return sections[0] if sections else []
 
@@ -302,7 +331,7 @@ def read_session_rollover_facts(note_path: Path) -> SessionRolloverFacts:
     text = _read_note_strict(note_path)
     if text is None:
         return SessionRolloverFacts(NEXT_STEP_UNKNOWN)
-    body = _next_step_lines(text.splitlines())
+    body = _next_step_lines(text)
     if body is None:
         return SessionRolloverFacts(NEXT_STEP_UNKNOWN)
     closure = pending = False

@@ -261,28 +261,156 @@ def collect_issues(
     return sorted(issues, key=lambda item: str(item["issue_id"]))
 
 
-def _normalize_reference_text(text: str) -> str:
-    """Spellings that name the same path: URL-encoded spaces in Markdown link targets."""
-    return text.replace("%20", " ")
+WIKI_TARGET_RE = re.compile(r"\[\[([^\]|#]+)[^\]]*\]\]")
+ANGLE_TARGET_RE = re.compile(r"<([^<>\n]+)>")
+BARE_PATH_RE = re.compile(r"(?<![\w./%+@~=-])((?:[\w.%+@~=-]+/)+[\w.%+@~=-]+)")
+URI_START_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://")
+BARE_PUNCTUATION = ".,;:!?)\"'"
 
 
-def _reference_candidates(rel_path: str, scan_dirs: frozenset[str]) -> list[str]:
-    """The file's own path and its folder ancestors, minus top-level and scan-root folders
-    (too generic to prove a reference). Independent of which scan root found the file."""
+def _strip_uris(text: str) -> str:
+    """Blank out whole external URIs, including balanced parentheses in their path, so no
+    fragment of one can be read as a local path."""
+    pieces: list[str] = []
+    cursor = 0
+    for match in URI_START_RE.finditer(text):
+        if match.start() < cursor:
+            continue
+        end, depth = match.end(), 0
+        while end < len(text):
+            char = text[end]
+            if char in " \t\n<>[]\"":
+                break
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+            end += 1
+        pieces.append(text[cursor : match.start()] + " ")
+        cursor = end
+    return "".join(pieces) + text[cursor:]
+
+
+def _clean_target(raw: str, *, delimited: bool) -> str | None:
+    """Normalize one reference target to a brain-relative path, or None when it names no
+    folder or file: a lone top-level folder proves nothing, and external URIs, absolute
+    paths outside the brain and `..` components are never attributed. Characters inside a
+    delimited target (link, wiki link, angle brackets) are kept; sentence punctuation is
+    trimmed only from bare prose tokens."""
+    target = raw.strip().replace("%20", " ").split("#", 1)[0]
+    if "://" in target:
+        return None
+    while target.startswith("./"):
+        target = target[2:]
+    if not delimited:
+        target = target.rstrip(BARE_PUNCTUATION)
+    target = target.rstrip("/")
+    parts = target.split("/")
+    if ".." in parts or "" in parts or len(parts) < 2:
+        return None
+    return target
+
+
+def _link_close(text: str, i: int) -> int | None:
+    """Index just after the `)` that closes a Markdown link whose destination ended at `i`,
+    consuming an optional quoted or parenthesised title (with backslash escapes)."""
+    while i < len(text) and text[i] in " \t":
+        i += 1
+    if i < len(text) and text[i] in "\"'(":
+        closer = {"\"": "\"", "'": "'", "(": ")"}[text[i]]
+        i += 1
+        while i < len(text) and text[i] != closer:
+            if text[i] == "\n":
+                return None
+            i += 2 if text[i] == "\\" else 1
+        i += 1
+        while i < len(text) and text[i] in " \t":
+            i += 1
+    return i + 1 if i < len(text) and text[i] == ")" else None
+
+
+def _markdown_destination(text: str, start: int) -> tuple[str, int] | None:
+    """Destination of the Markdown link whose `](` begins at `start`, and the index after its
+    closing parenthesis. Angle-delimited destinations end at `>`; plain ones may contain
+    balanced or backslash-escaped parentheses and end at whitespace (a title) or the closing one."""
+    i = start + 2
+    while i < len(text) and text[i] in " \t":
+        i += 1
+    if i < len(text) and text[i] == "<":
+        end = text.find(">", i + 1)
+        if end == -1 or "\n" in text[i:end]:
+            return None
+        destination, i = text[i + 1 : end], end + 1
+    else:
+        depth, chars = 0, []
+        while i < len(text):
+            char = text[i]
+            if char == "\\" and i + 1 < len(text) and text[i + 1] in "()":
+                chars.append(text[i + 1])
+                i += 2
+                continue
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif char in " \t\n" and depth == 0:
+                break
+            chars.append(char)
+            i += 1
+        destination = "".join(chars)
+    closed = _link_close(text, i)
+    return (destination, closed) if closed is not None else None
+
+
+def reference_targets(text: str, brain_root: Path) -> set[str]:
+    """Complete paths an issue note names: wiki links, Markdown link destinations and angle
+    brackets (spaces allowed), plus bare paths without spaces. External URIs and link spans are
+    removed before scanning for bare paths, so a fragment of `OUTBOX/my run/x` never reads as
+    `OUTBOX/my` and a URL query never reads as a local path."""
+    text = _strip_uris(text.replace(f"{brain_root}/", ""))
+    targets: set[str] = set()
+
+    def add(raw: str, *, delimited: bool) -> None:
+        cleaned = _clean_target(raw, delimited=delimited)
+        if cleaned:
+            targets.add(cleaned)
+
+    def take_wiki(match: re.Match[str]) -> str:
+        add(match.group(1), delimited=True)
+        return " "
+
+    text = WIKI_TARGET_RE.sub(take_wiki, text)
+    pieces, cursor = [], 0
+    while (found := text.find("](", cursor)) != -1:
+        parsed = _markdown_destination(text, found)
+        if parsed is None:
+            pieces.append(text[cursor : found + 2])
+            cursor = found + 2
+            continue
+        destination, end = parsed
+        add(destination, delimited=True)
+        pieces.append(text[cursor:found] + " ")
+        cursor = end
+    text = "".join(pieces) + text[cursor:]
+
+    def take_angle(match: re.Match[str]) -> str:
+        add(match.group(1), delimited=True)
+        return " "
+
+    text = ANGLE_TARGET_RE.sub(take_angle, text)
+    for match in BARE_PATH_RE.finditer(text):
+        add(match.group(1), delimited=False)
+    return targets
+
+
+def _path_prefixes(rel_path: str) -> list[str]:
+    """The file's own path and its folder ancestors with at least two components."""
     parts = rel_path.split("/")
-    candidates = [rel_path]
-    for end_index in range(len(parts) - 1, 1, -1):
-        folder = "/".join(parts[:end_index])
-        if folder not in scan_dirs:
-            candidates.append(folder)
-    return candidates
-
-
-def _mentions_path(text: str, candidate: str) -> bool:
-    """True when `candidate` appears as a whole path: not glued to other path characters, and
-    `OUTBOX/x` never matches `OUTBOX/x-old` or `OUTBOX/x.bak`."""
-    pattern = r"(?<![\w./-])" + re.escape(candidate) + r"(?![\w-])(?!\.\w)"
-    return re.search(pattern, text) is not None
+    return [rel_path] + ["/".join(parts[:end]) for end in range(len(parts) - 1, 1, -1)]
 
 
 def collect_generated_files(
@@ -292,12 +420,12 @@ def collect_generated_files(
     end: date,
     issue_texts: dict[str, str],
 ) -> list[dict[str, object]]:
-    """Files generated in range under the scan dirs, with the issue ids whose notes reference
-    the file's path or one of its folders. `issue_texts` maps every issue id to the text of all
-    its notes, touched or not. Overlapping scan dirs list a file once."""
+    """Files generated in range under the scan dirs, with the issue ids whose notes name the
+    file's path (or a folder holding it) as a complete path. `issue_texts` maps every issue id to
+    the text of all its notes, touched or not. Attribution depends only on the file and the
+    notes, never on which scan dirs were requested; overlapping scan dirs list a file once."""
     normalized = list(dict.fromkeys(name.strip("/") for name in scan_dirs if name.strip("/")))
-    generic = frozenset(normalized)
-    texts = {iid: _normalize_reference_text(text) for iid, text in issue_texts.items()}
+    targets = {iid: reference_targets(text, brain_root) for iid, text in issue_texts.items()}
     found: dict[str, dict[str, object]] = {}
     for name in normalized:
         root = brain_root / name
@@ -309,15 +437,13 @@ def collect_generated_files(
             rel = _rel(brain_root, path)
             if rel in found or not _in_range(_mtime_date(path), start, end):
                 continue
-            candidates = _reference_candidates(rel, generic)
+            prefixes = _path_prefixes(rel)
             found[rel] = {
                 "path": rel,
                 "modified": _iso(_mtime_date(path)),
                 "size": path.stat().st_size,
                 "referenced_by": sorted(
-                    iid
-                    for iid, text in texts.items()
-                    if any(_mentions_path(text, candidate) for candidate in candidates)
+                    iid for iid, named in targets.items() if any(prefix in named for prefix in prefixes)
                 ),
             }
     return [found[rel] for rel in sorted(found)]
@@ -328,7 +454,6 @@ def collect_referenced_issues(
     notes: list[IssueNote],
     issues: list[dict[str, object]],
     generated_files: list[dict[str, object]],
-    warnings: list[str],
 ) -> list[dict[str, object]]:
     """Existing issue notes that in-range files point at but that were not touched in range:
     context for the report, never activity. The primary note supplies the metadata."""
@@ -339,13 +464,7 @@ def collect_referenced_issues(
     referenced = []
     for issue_id in wanted:
         group = sorted((n for n in notes if n.issue_id == issue_id), key=lambda n: str(n.path))
-        primaries = [n for n in group if n.is_primary]
-        chosen = (primaries or group)[0]
-        if len({(n.meta.get("work_type", ""), n.meta.get("status", "")) for n in primaries}) > 1:
-            warnings.append(
-                f"issue {issue_id}: several primary notes disagree on work_type/status; "
-                f"using {_rel(brain_root, chosen.path)}"
-            )
+        chosen = ([n for n in group if n.is_primary] or group)[0]
         referenced.append(
             {
                 "issue_id": issue_id,
@@ -355,6 +474,21 @@ def collect_referenced_issues(
             }
         )
     return referenced
+
+
+def conflicting_primary_warnings(
+    brain_root: Path, notes: list[IssueNote], issue_ids: set[str]
+) -> list[str]:
+    """One warning per reported issue id whose primary notes disagree on work_type or status."""
+    warnings = []
+    for issue_id in sorted(issue_ids):
+        primaries = sorted(
+            (n for n in notes if n.issue_id == issue_id and n.is_primary), key=lambda n: str(n.path)
+        )
+        if len({(n.meta.get("work_type", ""), n.meta.get("status", "")) for n in primaries}) > 1:
+            listed = ", ".join(_rel(brain_root, n.path) for n in primaries[:4])
+            warnings.append(f"issue {issue_id}: primary notes disagree on work_type/status: {listed}")
+    return warnings
 
 
 def default_start(daily_dates: list[date], today: date) -> date | None:
@@ -427,7 +561,9 @@ def collect(
         end,
         {iid: "\n".join(texts) for iid, texts in issue_texts.items()},
     )
-    referenced_issues = collect_referenced_issues(brain_root, notes, issues, generated_files, warnings)
+    referenced_issues = collect_referenced_issues(brain_root, notes, issues, generated_files)
+    reported = {str(item["issue_id"]) for item in issues} | {str(item["issue_id"]) for item in referenced_issues}
+    warnings.extend(conflicting_primary_warnings(brain_root, notes, reported))
     return {
         "range": {"from": _iso(start), "to": _iso(end), "today": _iso(today)},
         "days": days,

@@ -31,7 +31,7 @@ The tool is read-only and uses Python's standard library. It never writes a log 
 | `issues` | Issue notes (frontmatter `issue_id`) touched in range (a dated entry or a modification date in range), with `status`, `work_type`, `url`, `summary`, `dated_entries` and `status_section`. Untouched issue notes are not listed here |
 | `referenced_issues` | Existing issue notes that an in-range generated file references but that were not touched in range: `issue_id`, `path`, `work_type`, `status`. Context only, never activity |
 | `generated_files` | Files under `OUTBOX/` (plus any `--scan-dir`) modified in range, listed once even when scan dirs overlap, with `referenced_by` (sorted issue ids) |
-| `warnings` | Registered sessions whose note could not be found, and issue ids whose primary notes disagree on `work_type` or `status` |
+| `warnings` | Registered sessions whose note could not be found, and reported issue ids (in `issues` or `referenced_issues`) whose primary notes disagree on `work_type` or `status` |
 
 ## Attribution rules
 
@@ -44,12 +44,14 @@ The tool is read-only and uses Python's standard library. It never writes a log 
   `folder/folder.md` note are listed in that note's `facets`.
 - `work_type` is returned verbatim. An empty value means the user has not answered it yet; the report
   must ask instead of guessing.
-- **Generated files are attributed against every issue note**, touched or not, together with its facets.
-  A note references a file when its text names the file's path or one of its folders as a whole
-  path (`OUTBOX/run-1/out.log` or `OUTBOX/run-1`, also as a wiki link, a Markdown link target, in
-  angle brackets, or with `%20` for spaces). `OUTBOX/run-1` never matches `OUTBOX/run-1-old`, a bare
-  file name is never enough, and the scan folder itself (`OUTBOX`) proves nothing. Shorthand
-  references stay unattributed.
+- **Generated files are attributed against every issue note**, touched or not, together with its
+  facets. A note references a file when it names the file's path, or a folder holding it, as a
+  complete path: a wiki link, a Markdown link target or angle brackets (spaces allowed), or a bare
+  path without spaces (`%20` and a trailing `#anchor` are accepted; absolute paths under the brain root are too). External URLs, other absolute paths and `..` components are never attributed. A link to
+  one file references only that file; a folder reference covers every file under it. Paths match
+  whole: `OUTBOX/run-1` is not `OUTBOX/run-1-old`, `OUTBOX/my` is not `OUTBOX/my run`. A bare file
+  name, the top-level folder alone and shorthand stay unattributed. Extraction is a text heuristic: an unusual Markdown form can be missed or, rarely, mis-read, so treat `referenced_by` as a hint. The result does not depend on
+  which scan dirs were requested.
 - A `generated_files` entry with an empty `referenced_by` has no matching reference in any issue
   note. Report it as unattributed; that does not prove that no issue note exists.
 - Modification dates come from the filesystem and can be reset by a checkout, so treat them as a

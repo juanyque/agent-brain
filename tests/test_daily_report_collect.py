@@ -329,6 +329,175 @@ class DailyReportCollectTests(unittest.TestCase):
         self.assertEqual(files["OUTBOX/orphan/stray.txt"], ["PROJ-10", "PROJ-9"])
         self.assertEqual(list(self._referenced(result)), ["PROJ-10", "PROJ-9"])
 
+    def test_an_exact_file_link_does_not_attribute_its_siblings(self) -> None:
+        _write(self.brain / "OUTBOX" / "run" / "only.txt", "x\n", "2026-03-09")
+        _write(self.brain / "OUTBOX" / "run" / "unrelated.txt", "x\n", "2026-03-09")
+        self._issue_note("PROJ-13", "PROJ-13", "See [one](OUTBOX/run/only.txt) and [[OUTBOX/run/only.txt]].")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/run/only.txt"], ["PROJ-13"])
+        self.assertEqual(files["OUTBOX/run/unrelated.txt"], [])
+
+    def test_a_folder_reference_covers_every_file_under_it(self) -> None:
+        _write(self.brain / "OUTBOX" / "run" / "deep" / "a.txt", "x\n", "2026-03-09")
+        _write(self.brain / "OUTBOX" / "run" / "b.txt", "x\n", "2026-03-09")
+        self._issue_note("PROJ-14", "PROJ-14", "Outputs in OUTBOX/run/ (all of them).")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/run/deep/a.txt"], ["PROJ-14"])
+        self.assertEqual(files["OUTBOX/run/b.txt"], ["PROJ-14"])
+
+    def test_attribution_is_identical_whatever_scan_dirs_are_requested(self) -> None:
+        _write(self.brain / "OUTBOX" / "run" / "only.txt", "x\n", "2026-03-09")
+        self._issue_note("PROJ-15", "PROJ-15", "Outputs: OUTBOX/run.")
+
+        outcomes = []
+        for dirs in (["OUTBOX"], ["OUTBOX", "OUTBOX/run"], ["OUTBOX/run", "OUTBOX"], ["OUTBOX/run"]):
+            result = collector.collect(self.brain, date(2026, 3, 9), TODAY, TODAY, dirs)
+            outcomes.append(
+                {f["path"]: f["referenced_by"] for f in result["generated_files"] if f["path"].startswith("OUTBOX/run/")}
+            )
+        self.assertEqual(outcomes[0], {"OUTBOX/run/only.txt": ["PROJ-15"]})
+        self.assertTrue(all(outcome == outcomes[0] for outcome in outcomes))
+
+    def test_longer_components_are_not_whole_path_matches(self) -> None:
+        _write(self.brain / "OUTBOX" / "my" / "x.txt", "x\n", "2026-03-09")
+        _write(self.brain / "OUTBOX" / "my run" / "y.txt", "x\n", "2026-03-09")
+        _write(self.brain / "OUTBOX" / "run" / "z.txt", "x\n", "2026-03-09")
+        _write(self.brain / "OUTBOX" / "run+old" / "w.txt", "x\n", "2026-03-09")
+        self._issue_note("PROJ-16", "PROJ-16", "[[OUTBOX/my run/y.txt]] and OUTBOX/run+old/w.txt")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/my run/y.txt"], ["PROJ-16"])
+        self.assertEqual(files["OUTBOX/run+old/w.txt"], ["PROJ-16"])
+        self.assertEqual(files["OUTBOX/my/x.txt"], [])
+        self.assertEqual(files["OUTBOX/run/z.txt"], [])
+
+    def test_absolute_paths_under_the_brain_root_and_a_lone_top_folder(self) -> None:
+        self._issue_note(
+            "PROJ-17", "PROJ-17", f"Saved to {self.brain}/OUTBOX/orphan/stray.txt. Everything is in OUTBOX."
+        )
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/orphan/stray.txt"], ["PROJ-17"])
+        self.assertEqual(files["OUTBOX/proj-1-run/result.log"], [])
+
+    def test_conflicting_primaries_warn_even_when_the_issue_was_touched(self) -> None:
+        self._issue_note("PROJ-1 - Example Archived", "PROJ-1", work_type="unplanned", status="done", root="MEMORY/Projects")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        self.assertIn("PROJ-1", {i["issue_id"] for i in result["issues"]})
+        self.assertEqual(
+            len([w for w in result["warnings"] if "PROJ-1:" in w and "disagree" in w]), 1  # type: ignore[union-attr]
+        )
+
+    def test_conflicts_of_unreported_issues_stay_silent(self) -> None:
+        self._issue_note("PROJ-18", "PROJ-18", work_type="sprint")
+        self._issue_note("PROJ-18 archived", "PROJ-18", work_type="unplanned", root="MEMORY/Projects")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        self.assertFalse(any("PROJ-18" in w for w in result["warnings"]))  # type: ignore[union-attr]
+
+    def test_reference_target_extraction_table(self) -> None:
+        brain = Path("/brain")
+        cases = {
+            "dot directory kept": ("[[./.hidden/result.txt]]", [".hidden/result.txt"]),
+            "parent components rejected": ("[[./../OUTBOX/run]] [[../x/y]]", []),
+            "punctuation kept inside delimiters": (
+                "[[OUTBOX/run!]] [[OUTBOX/run/report(v1)]]",
+                ["OUTBOX/run!", "OUTBOX/run/report(v1)"],
+            ),
+            "prose punctuation trimmed": ("See OUTBOX/run. Also (OUTBOX/b/c.txt), done!", ["OUTBOX/b/c.txt", "OUTBOX/run"]),
+            "balanced parentheses": ("[r](OUTBOX/run/report(v1).md)", ["OUTBOX/run/report(v1).md"]),
+            "angle destination with parentheses": ("[r](<OUTBOX/my run/report(v1).md>)", ["OUTBOX/my run/report(v1).md"]),
+            "escaped parentheses": (r"[r](OUTBOX/run/report\(v1\).md)", ["OUTBOX/run/report(v1).md"]),
+            "anchor removed": ("[r](OUTBOX/run/report.md#section)", ["OUTBOX/run/report.md"]),
+            "title removed": ('[r](OUTBOX/run/a.md "the title")', ["OUTBOX/run/a.md"]),
+            "wiki anchor and alias": ("[[OUTBOX/run/file.md#heading|label]]", ["OUTBOX/run/file.md"]),
+            "standalone angle": ("<OUTBOX/run/report(v1).md>", ["OUTBOX/run/report(v1).md"]),
+            "url fragments and queries ignored": (
+                "https://example.test/#OUTBOX/run and https://e.test/?OUTBOX/run/file.txt",
+                [],
+            ),
+            "url link ignored, local link kept": ("[x](https://e.test/a/b) [y](OUTBOX/ok/f.txt)", ["OUTBOX/ok/f.txt"]),
+            "absolute under the brain": ("/brain/OUTBOX/x/y.txt", ["OUTBOX/x/y.txt"]),
+            "absolute elsewhere ignored": ("/etc/other/file", []),
+            "lone top folder ignored": ("Everything is in OUTBOX and [[OUTBOX]].", []),
+            "parentheses in a link title are not paths": (
+                '[report](OUTBOX/run/a.md "summary (done), see OUTBOX/other")',
+                ["OUTBOX/run/a.md"],
+            ),
+            "parenthesised title": ("[r](OUTBOX/run/a.md (a title) )", ["OUTBOX/run/a.md"]),
+            "url with parentheses is removed whole": (
+                "https://example.test/page_(v1)#OUTBOX/run and [ok](OUTBOX/keep/x.txt)",
+                ["OUTBOX/keep/x.txt"],
+            ),
+            "markdown url with parentheses is removed whole": (
+                "[remote](https://example.test/page_(v1)#OUTBOX/run) [ok](OUTBOX/keep/x.txt)",
+                ["OUTBOX/keep/x.txt"],
+            ),
+            "quotes in a delimited filename are kept": (
+                '[[OUTBOX/run "final"/report.txt]]',
+                ['OUTBOX/run "final"/report.txt'],
+            ),
+        }
+        for name, (text, expected) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(sorted(collector.reference_targets(text, brain)), sorted(expected))
+
+    def test_hidden_and_punctuated_folders_do_not_leak_onto_ordinary_ones(self) -> None:
+        _write(self.brain / "OUTBOX" / "hidden" / "a.txt", "x\n", "2026-03-09")
+        _write(self.brain / "OUTBOX" / "run" / "b.txt", "x\n", "2026-03-09")
+        self._issue_note("PROJ-19", "PROJ-19", "[[./.hidden/a.txt]] and [[OUTBOX/run!]] and [[./../OUTBOX/run]]")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/hidden/a.txt"], [])
+        self.assertEqual(files["OUTBOX/run/b.txt"], [])
+
+    def test_external_url_fragments_never_attribute_local_files(self) -> None:
+        self._issue_note(
+            "PROJ-20", "PROJ-20", "Viewer: https://example.test/#OUTBOX/orphan and [v](https://e.test/?OUTBOX/orphan/stray.txt)"
+        )
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/orphan/stray.txt"], [])
+
+    def test_title_and_url_fragments_do_not_attribute_unrelated_files(self) -> None:
+        self._issue_note(
+            "PROJ-22", "PROJ-22",
+            '[r](OUTBOX/run/a.md "summary (done), see OUTBOX/orphan") and https://e.test/page_(v1)#OUTBOX/orphan/stray.txt',
+        )
+        _write(self.brain / "OUTBOX" / "run" / "a.md", "x\n", "2026-03-09")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/run/a.md"], ["PROJ-22"])
+        self.assertEqual(files["OUTBOX/orphan/stray.txt"], [])
+
+    def test_a_markdown_link_with_parentheses_and_an_anchor_attributes_the_real_file(self) -> None:
+        _write(self.brain / "OUTBOX" / "run" / "report(v1).md", "x\n", "2026-03-09")
+        self._issue_note("PROJ-21", "PROJ-21", "[report](OUTBOX/run/report(v1).md#summary)")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/run/report(v1).md"], ["PROJ-21"])
+
     def test_untouched_unreferenced_issue_stays_absent(self) -> None:
         self._issue_note("PROJ-11", "PROJ-11", "Nothing about outputs here.")
 

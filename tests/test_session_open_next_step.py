@@ -70,6 +70,21 @@ class NextStepParserTests(unittest.TestCase):
         ),
         "unclosed comment": ("## Immediate next step\n<!-- oops\n- a\n", "unknown"),
         "unclosed fence": ("## Immediate next step\n```\n- a\n", "unknown"),
+        "tilde fenced example": ("## Immediate next step\n~~~md\n- sample pending task\n~~~\n", "missing"),
+        "longer fence containing a shorter one": (
+            "## Immediate next step\n````\n```\n- sample\n```\n````\n",
+            "missing",
+        ),
+        "mismatched fence delimiters": ("## Immediate next step\n~~~\n- a\n```\n", "unknown"),
+        "closure with an inline comment": ("## Immediate next step\n- none <!-- all finished -->\n", "none"),
+        "pending after an inline comment": ("## Immediate next step\n<!-- x --> - wait for CI\n", "present"),
+        "pending after a fenced example": ("## Immediate next step\n```\nx\n```\n- wait for CI\n", "present"),
+        "unbalanced comment inside a fence": (
+            "## Immediate next step\n```html\n<!--\n```\n- wait for CI\n",
+            "present",
+        ),
+        "fence marker inside a comment": ("## Immediate next step\n<!--\n```\n-->\n- wait\n", "present"),
+        "fence before the section": ("```\n## Immediate next step\n```\n## Immediate next step\n- go\n", "present"),
     }
 
     def classify(self, content: str | bytes) -> str:
@@ -174,6 +189,28 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(dict(state.open_session_next_steps), {bad: "unknown"})
         self.assertNotIn(bad, state.empty_open_sessions)
 
+    def test_peer_disappearing_after_status_detection_degrades_conservatively(self) -> None:
+        import session_open_context as context
+
+        path = self.brain / "WIP" / "SESSIONS" / "2000-01-01-session-ses_a-t.md"
+        path.write_text(note(objective="-"), encoding="utf-8")
+        real = context.is_session_open
+
+        def open_then_vanish(candidate: Path) -> bool:
+            result = real(candidate)
+            candidate.unlink(missing_ok=True)
+            return result
+
+        from unittest.mock import patch
+
+        with patch.object(context, "is_session_open", open_then_vanish):
+            state = self.collect()
+
+        rel = "WIP/SESSIONS/2000-01-01-session-ses_a-t.md"
+        self.assertIn(rel, state.open_sessions)
+        self.assertNotIn(rel, state.empty_open_sessions)
+        self.assertEqual(dict(state.open_session_next_steps), {rel: "unknown"})
+
     def test_unreadable_peer_never_gets_the_empty_flag(self) -> None:
         if os.geteuid() == 0:
             self.skipTest("permission bits do not restrict root")
@@ -186,6 +223,33 @@ class CollectionTests(unittest.TestCase):
 
         self.assertEqual(state.empty_open_sessions, ())
         self.assertEqual(state.open_session_next_steps, ())
+
+
+class FixtureAndRuleContractTests(unittest.TestCase):
+    def test_a_fixture_with_next_steps_collects_and_renders_without_touching_the_host(self) -> None:
+        from dataclasses import replace
+
+        from session_digest import fixed_session_digest_fixture_data, fixed_session_digest_request
+
+        path = "WIP/SESSIONS/1999-12-31-session-previous.md"
+        fixture = replace(
+            fixed_session_digest_fixture_data(),
+            open_session_next_steps=((path, "present"),),
+        )
+        request = replace(fixed_session_digest_request(), fixture_data=fixture)
+
+        state = collect_session_digest_state(request)
+
+        self.assertEqual(state.open_session_next_steps, ((path, "present"),))
+        self.assertIn(f"- {path}  next_step=present\n", render_session_digest(state))
+
+    def test_the_rule_skips_only_present_and_keeps_empty_peers_in_the_pass(self) -> None:
+        rule = (Path(__file__).resolve().parents[1] / "model" / "RULES-SESSION-LIFECYCLE.common.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Only `present` skips the pass", rule)
+        self.assertIn("including peers that carry the empty-note flag", rule)
+        self.assertIn("explicit session review and the recurring stale-session inspection", rule)
 
 
 class DigestScaleTests(unittest.TestCase):
