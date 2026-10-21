@@ -6,11 +6,16 @@
 # is installed automatically by bootstrap-zero.sh during home wiring.
 #
 # Usage:
-#   skill_link.sh <skill_name_or_path> [runtime_home] [--apply]
+#   skill_link.sh <skill_name_or_path> [runtime_home] [--as <link_name>] [--apply]
 #   skill_link.sh boyscout                       # agent-brain skill, all detected runtimes
 #   skill_link.sh /path/to/skills/confold        # external skill, all detected runtimes
 #   skill_link.sh boyscout ~/.agents             # link into one runtime only
 #   skill_link.sh boyscout ~/.agents --apply     # execute (default: dry-run)
+#   skill_link.sh /path/to/team-memory_jane --as team-memory   # link under another name
+#
+# --as <link_name> names the symlink when it must differ from the source directory name,
+# for example a draft stored as `<skill>_<username>`. The name follows the same rules as a
+# directory name (letters, digits, dot, underscore, hyphen; no leading punctuation).
 #
 # Idempotent: skips if the target is already the correct symlink.
 # Safe: backs up an existing target to .backup-<ts> if it is not our symlink.
@@ -44,10 +49,18 @@ sayf() {
 APPLY=0
 SKILL_SPEC=""
 RUNTIME_HOME=""
+LINK_NAME=""
+AS_GIVEN=0
+NAME_PATTERN='^[A-Za-z0-9][A-Za-z0-9._-]*$'
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply) APPLY=1; shift ;;
+    --as)
+      [[ $# -ge 2 ]] || { say_error "ERROR: --as requires a link name"; exit 2; }
+      LINK_NAME="$2"; AS_GIVEN=1; shift 2
+      ;;
+    --as=*) LINK_NAME="${1#--as=}"; AS_GIVEN=1; shift ;;
     -h|--help)
       help_text="$(grep '^#' "$0" | sed 's/^# \{0,1\}//')"
       say "$help_text"
@@ -86,9 +99,16 @@ if [[ ! -d "$SOURCE" ]]; then
   say_error "  (expected a directory at \$REPO_ROOT/skills/$SKILL)"
   exit 2
 fi
-if [[ ! "$SKILL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+if [[ ! "$SKILL" =~ $NAME_PATTERN ]]; then
   say_error "ERROR: invalid skill directory name: $SKILL"
   exit 2
+fi
+if [[ $AS_GIVEN -eq 1 ]]; then
+  if [[ ! "$LINK_NAME" =~ $NAME_PATTERN ]]; then
+    say_error "ERROR: invalid --as link name: $LINK_NAME"
+    exit 2
+  fi
+  SKILL="$LINK_NAME"
 fi
 if [[ ! -f "$SOURCE/SKILL.md" ]]; then
   say_error "ERROR: skill source has no SKILL.md: $SOURCE"

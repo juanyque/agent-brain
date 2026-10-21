@@ -28,10 +28,15 @@ skill_link.sh boyscout ~/.agents
 
 # Execute
 skill_link.sh boyscout ~/.agents --apply
+
+# Link a source under another name (for example a draft stored as <skill>_<username>)
+skill_link.sh /path/to/team-memory_jane --as team-memory ~/.claude --apply
 ```
 
 An explicit source directory must contain `SKILL.md`. Its directory basename becomes the installed
-skill name. The source remains owned by its project; runtime homes receive symlinks rather than copies.
+skill name unless `--as <link_name>` is given, which names the symlink instead (same character rules
+as a directory name; an invalid or empty value is refused, and an existing link is replaced only
+through the usual backup). The source remains owned by its project; runtime homes receive symlinks rather than copies.
 Automatic detection deduplicates Codex and OpenCode into the shared `~/.agents/skills/` store. It
 does not target `~/.codex/skills/`, `~/.config/opencode/skills/`, or the legacy Gemini CLI path.
 
