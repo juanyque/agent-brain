@@ -28,9 +28,10 @@ The tool is read-only and uses Python's standard library. It never writes a log 
 | `days` | One entry per existing daily in range: its registered `sessions` and the raw `work` lines of `* [[WORK]]:` |
 | `missing_dailies` | The `--from` day when it has no daily note |
 | `sessions` | Session notes registered in a daily of the range, plus unregistered notes created or modified in range. Each has `status`, `empty`, `objective`, `next_step`, `open_questions`, `modified`, `registered_in` and `reason` |
-| `issues` | Issue notes (frontmatter `issue_id`) touched in range, with `status`, `work_type`, `url`, `summary`, `dated_entries` and `status_section` |
-| `generated_files` | Files under `OUTBOX/` (plus any `--scan-dir`) modified in range, with `referenced_by` |
-| `warnings` | Registered sessions whose note could not be found |
+| `issues` | Issue notes (frontmatter `issue_id`) touched in range (a dated entry or a modification date in range), with `status`, `work_type`, `url`, `summary`, `dated_entries` and `status_section`. Untouched issue notes are not listed here |
+| `referenced_issues` | Existing issue notes that an in-range generated file references but that were not touched in range: `issue_id`, `path`, `work_type`, `status`. Context only, never activity |
+| `generated_files` | Files under `OUTBOX/` (plus any `--scan-dir`) modified in range, listed once even when scan dirs overlap, with `referenced_by` (sorted issue ids) |
+| `warnings` | Registered sessions whose note could not be found, and issue ids whose primary notes disagree on `work_type` or `status` |
 
 ## Attribution rules
 
@@ -43,7 +44,13 @@ The tool is read-only and uses Python's standard library. It never writes a log 
   `folder/folder.md` note are listed in that note's `facets`.
 - `work_type` is returned verbatim. An empty value means the user has not answered it yet; the report
   must ask instead of guessing.
-- A `generated_files` entry with an empty `referenced_by` is not mentioned by any issue note in range.
-  Report it as unattributed.
+- **Generated files are attributed against every issue note**, touched or not, together with its facets.
+  A note references a file when its text names the file's path or one of its folders as a whole
+  path (`OUTBOX/run-1/out.log` or `OUTBOX/run-1`, also as a wiki link, a Markdown link target, in
+  angle brackets, or with `%20` for spaces). `OUTBOX/run-1` never matches `OUTBOX/run-1-old`, a bare
+  file name is never enough, and the scan folder itself (`OUTBOX`) proves nothing. Shorthand
+  references stay unattributed.
+- A `generated_files` entry with an empty `referenced_by` has no matching reference in any issue
+  note. Report it as unattributed; that does not prove that no issue note exists.
 - Modification dates come from the filesystem and can be reset by a checkout, so treat them as a
   hint, never as proof of when work happened.

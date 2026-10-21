@@ -203,6 +203,155 @@ class DailyReportCollectTests(unittest.TestCase):
         self.assertEqual(files["OUTBOX/proj-1-run/result.log"]["referenced_by"], ["PROJ-1"])
         self.assertEqual(files["OUTBOX/orphan/stray.txt"]["referenced_by"], [])
 
+    # --- attribution against every issue note, touched or not -------------------------------
+
+    def _issue_note(self, folder: str, issue_id: str, text: str = "", day: str = "2026-02-15",
+                    root: str = "WIP", work_type: str = "unplanned", status: str = "in-progress") -> Path:
+        """An issue note outside the range (dated entries and mtime before 2026-03-09)."""
+        body = (
+            f"---\ntags: [issue]\nissue_id: {issue_id}\nstatus: {status}\nwork_type: {work_type}\n---\n"
+            f"# {issue_id}\n\n## Status\n\n### 2026-01-09: old\n- Old work.\n{text}\n"
+        )
+        note = self.brain / root / "area" / "repo" / folder / f"{folder}.md"
+        return _write(note, body, day)
+
+    def _referenced(self, result: dict[str, object]) -> dict[str, dict[str, object]]:
+        return {i["issue_id"]: i for i in result["referenced_issues"]}  # type: ignore[index,union-attr]
+
+    def test_untouched_issue_referenced_by_an_artifact_is_context_not_activity(self) -> None:
+        self._issue_note("PROJ-3", "PROJ-3", "Outputs in OUTBOX/orphan.")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        self.assertEqual({i["issue_id"] for i in result["issues"]}, {"PROJ-1"})
+        referenced = self._referenced(result)
+        self.assertEqual(list(referenced), ["PROJ-3"])
+        self.assertEqual(
+            {k: referenced["PROJ-3"][k] for k in ("work_type", "status")},
+            {"work_type": "unplanned", "status": "in-progress"},
+        )
+        self.assertTrue(str(referenced["PROJ-3"]["path"]).endswith("PROJ-3/PROJ-3.md"))
+        files = {f["path"]: f for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/orphan/stray.txt"]["referenced_by"], ["PROJ-3"])
+
+    def test_same_attribution_under_memory_projects_and_with_inclusive_range_edges(self) -> None:
+        self._issue_note("PROJ-4", "PROJ-4", "See OUTBOX/edge-start and OUTBOX/edge-end.", root="MEMORY/Projects")
+        _write(self.brain / "OUTBOX" / "edge-start" / "a.txt", "x\n", "2026-03-09")
+        _write(self.brain / "OUTBOX" / "edge-end" / "b.txt", "x\n", "2026-03-11")
+        _write(self.brain / "OUTBOX" / "edge-before" / "c.txt", "x\n", "2026-03-08")
+
+        result = self.run_collect(date(2026, 3, 9), date(2026, 3, 11))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/edge-start/a.txt"], ["PROJ-4"])
+        self.assertEqual(files["OUTBOX/edge-end/b.txt"], ["PROJ-4"])
+        self.assertNotIn("OUTBOX/edge-before/c.txt", files)
+        self.assertEqual(list(self._referenced(result)), ["PROJ-4"])
+
+    def test_reference_only_in_an_untouched_facet_still_attributes(self) -> None:
+        folder = self.brain / "WIP" / "area" / "repo" / "PROJ-5"
+        _write(folder / "PROJ-5.md", "---\nissue_id: PROJ-5\nstatus: open\nwork_type: sprint\n---\n# PROJ-5\n", "2026-02-15")
+        _write(folder / "proj-5.analysis.md", "---\nissue_id: PROJ-5\n---\nResults: OUTBOX/orphan\n", "2026-02-15")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/orphan/stray.txt"], ["PROJ-5"])
+        referenced = self._referenced(result)["PROJ-5"]
+        self.assertTrue(str(referenced["path"]).endswith("PROJ-5/PROJ-5.md"))
+        self.assertEqual(referenced["work_type"], "sprint")
+
+    def test_touched_facet_with_untouched_primary_keeps_its_activity_and_adds_no_reference_only_entry(self) -> None:
+        folder = self.brain / "WIP" / "area" / "repo" / "PROJ-6"
+        _write(folder / "PROJ-6.md", "---\nissue_id: PROJ-6\nstatus: open\nwork_type: sprint\n---\n# PROJ-6\n", "2026-02-15")
+        _write(
+            folder / "proj-6.analysis.md",
+            "---\nissue_id: PROJ-6\n---\n### 2026-03-10: analysed\n- Found it. See OUTBOX/orphan\n",
+            "2026-03-10",
+        )
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        issues = {i["issue_id"]: i for i in result["issues"]}
+        self.assertIn("PROJ-6", issues)
+        self.assertEqual(issues["PROJ-6"]["dated_entries"][0]["date"], "2026-03-10")
+        self.assertNotIn("PROJ-6", self._referenced(result))
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/orphan/stray.txt"], ["PROJ-6"])
+
+    def test_touched_primary_referencing_an_artifact_is_not_duplicated_as_context(self) -> None:
+        note = self.brain / "WIP" / "area" / "repo" / "PROJ-1 - Example" / "PROJ-1 - Example.md"
+        _write(note, ISSUE + "\nOutputs live in OUTBOX/proj-1-run.\n", "2026-03-10")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        self.assertEqual(result["referenced_issues"], [])
+
+    def test_generic_names_and_prefix_collisions_stay_unattributed(self) -> None:
+        self._issue_note("PROJ-7", "PROJ-7", "Mentions result.log and OUTBOX/proj-1-run-old and OUTBOX/proj-1-run.bak.")
+        _write(self.brain / "OUTBOX" / "other" / "result.log", "x\n", "2026-03-09")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/proj-1-run/result.log"], [])
+        self.assertEqual(files["OUTBOX/other/result.log"], [])
+        self.assertEqual(result["referenced_issues"], [])
+
+    def test_path_spellings_and_unreferenced_ticket_like_folders(self) -> None:
+        _write(self.brain / "OUTBOX" / "my run" / "out file.txt", "x\n", "2026-03-09")
+        _write(self.brain / "OUTBOX" / "proj-8-run" / "r.txt", "x\n", "2026-03-09")
+        self._issue_note(
+            "PROJ-8", "PROJ-8",
+            "[[OUTBOX/my run/out file.txt|log]] and [r](OUTBOX/proj-1-run/result.log) and "
+            "<OUTBOX/orphan/stray.txt> and OUTBOX/my%20run.",
+        )
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/my run/out file.txt"], ["PROJ-8"])
+        self.assertEqual(files["OUTBOX/proj-1-run/result.log"], ["PROJ-8"])
+        self.assertEqual(files["OUTBOX/orphan/stray.txt"], ["PROJ-8"])
+        self.assertEqual(files["OUTBOX/proj-8-run/r.txt"], [])
+
+    def test_overlapping_scan_dirs_list_a_file_once_with_sorted_distinct_references(self) -> None:
+        self._issue_note("PROJ-9", "PROJ-9", "OUTBOX/orphan/stray.txt")
+        self._issue_note("PROJ-10", "PROJ-10", "[[OUTBOX/orphan/stray.txt]]")
+
+        result = collector.collect(
+            self.brain, date(2026, 3, 9), TODAY, TODAY, ["OUTBOX", "OUTBOX/orphan", "OUTBOX/"]
+        )
+
+        paths = [f["path"] for f in result["generated_files"]]
+        self.assertEqual(len(paths), len(set(paths)))
+        files = {f["path"]: f["referenced_by"] for f in result["generated_files"]}
+        self.assertEqual(files["OUTBOX/orphan/stray.txt"], ["PROJ-10", "PROJ-9"])
+        self.assertEqual(list(self._referenced(result)), ["PROJ-10", "PROJ-9"])
+
+    def test_untouched_unreferenced_issue_stays_absent(self) -> None:
+        self._issue_note("PROJ-11", "PROJ-11", "Nothing about outputs here.")
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        self.assertNotIn("PROJ-11", {i["issue_id"] for i in result["issues"]})
+        self.assertEqual(result["referenced_issues"], [])
+
+    def test_empty_work_type_and_conflicting_primaries(self) -> None:
+        self._issue_note("PROJ-12", "PROJ-12", "OUTBOX/orphan", work_type="")
+        folder = self.brain / "MEMORY" / "Projects" / "area" / "repo" / "PROJ-12"
+        _write(
+            folder / "PROJ-12.md",
+            "---\nissue_id: PROJ-12\nstatus: done\nwork_type: sprint\n---\n# PROJ-12\n",
+            "2026-02-15",
+        )
+
+        result = self.run_collect(date(2026, 3, 9))
+
+        referenced = self._referenced(result)["PROJ-12"]
+        self.assertTrue(str(referenced["path"]).startswith("MEMORY/Projects/"))
+        self.assertTrue(any("PROJ-12" in w and "disagree" in w for w in result["warnings"]))  # type: ignore[union-attr]
+
     def test_collection_never_writes_to_the_brain(self) -> None:
         def snapshot() -> dict[str, tuple[float, str]]:
             return {

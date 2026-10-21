@@ -4,6 +4,11 @@
 Read-only: it never writes to the brain. It gathers the raw material (daily notes,
 session notes, issue notes, generated deliverables) and attributes each piece to the
 day it belongs to; composing the report from it is the calling agent's job.
+
+`issues` lists only issue notes touched in range (a dated entry or a modification date in
+range). Generated files are attributed against every issue note, touched or not, by
+explicit path or folder reference; issue notes referenced that way but not touched are
+listed separately in `referenced_issues` as context, never as activity.
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ import argparse
 import json
 import re
 import sys
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
@@ -182,12 +188,25 @@ def dated_entries(lines: list[str], start: date, end: date) -> list[dict[str, ob
     return kept
 
 
-def collect_issues(brain_root: Path, start: date, end: date) -> list[dict[str, object]]:
-    """Issue notes touched in range. Facet files (`<id>.analysis.md`, evidence, drafts) that share the
-    `issue_id` of a primary `folder/folder.md` note are attached to it as `facets`; a facet whose
-    primary note was not touched stays a standalone item so its activity is not lost."""
-    issues: list[dict[str, object]] = []
-    facets: list[dict[str, object]] = []
+@dataclass(frozen=True, slots=True)
+class IssueNote:
+    path: Path
+    meta: dict[str, str]
+    body: list[str]
+    text: str
+
+    @property
+    def issue_id(self) -> str:
+        return self.meta["issue_id"]
+
+    @property
+    def is_primary(self) -> bool:
+        return self.path.stem == self.path.parent.name
+
+
+def scan_issue_notes(brain_root: Path) -> list[IssueNote]:
+    """Every note carrying an `issue_id`, touched or not; the base for activity and attribution."""
+    notes: list[IssueNote] = []
     for root_name in ISSUE_ROOTS:
         root = brain_root / root_name
         if not root.exists():
@@ -201,25 +220,38 @@ def collect_issues(brain_root: Path, start: date, end: date) -> list[dict[str, o
             meta, body = split_frontmatter(text)
             if not meta.get("issue_id"):
                 continue
-            entries = dated_entries(body, start, end)
-            touched = _in_range(_mtime_date(path), start, end)
-            if not entries and not touched:
-                continue
-            status_text = "\n".join(_meaningful(section(body, "Status")))
-            summary = next((line[1:].strip() for line in body if line.startswith(">")), "")
-            item = {
-                "issue_id": meta["issue_id"],
-                "path": _rel(brain_root, path),
-                "status": meta.get("status", ""),
-                "work_type": meta.get("work_type", ""),
-                "url": meta.get("url", ""),
-                "summary": summary,
-                "dated_entries": entries,
-                "status_section": status_text[:MAX_STATUS_CHARS],
-                "modified": _iso(_mtime_date(path)),
-                "facets": [],
-            }
-            (issues if path.stem == path.parent.name else facets).append(item)
+            notes.append(IssueNote(path, meta, body, text))
+    return notes
+
+
+def collect_issues(
+    brain_root: Path, start: date, end: date, notes: list[IssueNote] | None = None
+) -> list[dict[str, object]]:
+    """Issue notes touched in range. Facet files (`<id>.analysis.md`, evidence, drafts) that share the
+    `issue_id` of a primary `folder/folder.md` note are attached to it as `facets`; a facet whose
+    primary note was not touched stays a standalone item so its activity is not lost."""
+    issues: list[dict[str, object]] = []
+    facets: list[dict[str, object]] = []
+    for note in notes if notes is not None else scan_issue_notes(brain_root):
+        entries = dated_entries(note.body, start, end)
+        touched = _in_range(_mtime_date(note.path), start, end)
+        if not entries and not touched:
+            continue
+        status_text = "\n".join(_meaningful(section(note.body, "Status")))
+        summary = next((line[1:].strip() for line in note.body if line.startswith(">")), "")
+        item = {
+            "issue_id": note.issue_id,
+            "path": _rel(brain_root, note.path),
+            "status": note.meta.get("status", ""),
+            "work_type": note.meta.get("work_type", ""),
+            "url": note.meta.get("url", ""),
+            "summary": summary,
+            "dated_entries": entries,
+            "status_section": status_text[:MAX_STATUS_CHARS],
+            "modified": _iso(_mtime_date(note.path)),
+            "facets": [],
+        }
+        (issues if note.is_primary else facets).append(item)
     for facet in facets:
         primary = next((i for i in issues if i["issue_id"] == facet["issue_id"]), None)
         if primary is None:
@@ -229,34 +261,100 @@ def collect_issues(brain_root: Path, start: date, end: date) -> list[dict[str, o
     return sorted(issues, key=lambda item: str(item["issue_id"]))
 
 
+def _normalize_reference_text(text: str) -> str:
+    """Spellings that name the same path: URL-encoded spaces in Markdown link targets."""
+    return text.replace("%20", " ")
+
+
+def _reference_candidates(rel_path: str, scan_dirs: frozenset[str]) -> list[str]:
+    """The file's own path and its folder ancestors, minus top-level and scan-root folders
+    (too generic to prove a reference). Independent of which scan root found the file."""
+    parts = rel_path.split("/")
+    candidates = [rel_path]
+    for end_index in range(len(parts) - 1, 1, -1):
+        folder = "/".join(parts[:end_index])
+        if folder not in scan_dirs:
+            candidates.append(folder)
+    return candidates
+
+
+def _mentions_path(text: str, candidate: str) -> bool:
+    """True when `candidate` appears as a whole path: not glued to other path characters, and
+    `OUTBOX/x` never matches `OUTBOX/x-old` or `OUTBOX/x.bak`."""
+    pattern = r"(?<![\w./-])" + re.escape(candidate) + r"(?![\w-])(?!\.\w)"
+    return re.search(pattern, text) is not None
+
+
 def collect_generated_files(
-    brain_root: Path, scan_dirs: list[str], start: date, end: date, issues: list[dict[str, object]]
+    brain_root: Path,
+    scan_dirs: list[str],
+    start: date,
+    end: date,
+    issue_texts: dict[str, str],
 ) -> list[dict[str, object]]:
-    """Files generated in range under the scan dirs, with the issue notes that mention their folder."""
-    issue_texts = {
-        str(item["issue_id"]): read_text_safe(brain_root / str(item["path"])) for item in issues
-    }
-    found = []
-    for name in scan_dirs:
+    """Files generated in range under the scan dirs, with the issue ids whose notes reference
+    the file's path or one of its folders. `issue_texts` maps every issue id to the text of all
+    its notes, touched or not. Overlapping scan dirs list a file once."""
+    normalized = list(dict.fromkeys(name.strip("/") for name in scan_dirs if name.strip("/")))
+    generic = frozenset(normalized)
+    texts = {iid: _normalize_reference_text(text) for iid, text in issue_texts.items()}
+    found: dict[str, dict[str, object]] = {}
+    for name in normalized:
         root = brain_root / name
         if not root.exists():
             continue
         for path in sorted(root.rglob("*")):
             if not path.is_file() or path.name == ".DS_Store":
                 continue
-            if not _in_range(_mtime_date(path), start, end):
+            rel = _rel(brain_root, path)
+            if rel in found or not _in_range(_mtime_date(path), start, end):
                 continue
-            top = path.relative_to(root).parts[0]
-            referenced_by = [iid for iid, text in issue_texts.items() if top in text or path.name in text]
-            found.append(
-                {
-                    "path": _rel(brain_root, path),
-                    "modified": _iso(_mtime_date(path)),
-                    "size": path.stat().st_size,
-                    "referenced_by": referenced_by,
-                }
+            candidates = _reference_candidates(rel, generic)
+            found[rel] = {
+                "path": rel,
+                "modified": _iso(_mtime_date(path)),
+                "size": path.stat().st_size,
+                "referenced_by": sorted(
+                    iid
+                    for iid, text in texts.items()
+                    if any(_mentions_path(text, candidate) for candidate in candidates)
+                ),
+            }
+    return [found[rel] for rel in sorted(found)]
+
+
+def collect_referenced_issues(
+    brain_root: Path,
+    notes: list[IssueNote],
+    issues: list[dict[str, object]],
+    generated_files: list[dict[str, object]],
+    warnings: list[str],
+) -> list[dict[str, object]]:
+    """Existing issue notes that in-range files point at but that were not touched in range:
+    context for the report, never activity. The primary note supplies the metadata."""
+    touched = {str(item["issue_id"]) for item in issues}
+    wanted = sorted(
+        {str(iid) for file in generated_files for iid in file["referenced_by"]} - touched  # type: ignore[union-attr]
+    )
+    referenced = []
+    for issue_id in wanted:
+        group = sorted((n for n in notes if n.issue_id == issue_id), key=lambda n: str(n.path))
+        primaries = [n for n in group if n.is_primary]
+        chosen = (primaries or group)[0]
+        if len({(n.meta.get("work_type", ""), n.meta.get("status", "")) for n in primaries}) > 1:
+            warnings.append(
+                f"issue {issue_id}: several primary notes disagree on work_type/status; "
+                f"using {_rel(brain_root, chosen.path)}"
             )
-    return found
+        referenced.append(
+            {
+                "issue_id": issue_id,
+                "path": _rel(brain_root, chosen.path),
+                "work_type": chosen.meta.get("work_type", ""),
+                "status": chosen.meta.get("status", ""),
+            }
+        )
+    return referenced
 
 
 def default_start(daily_dates: list[date], today: date) -> date | None:
@@ -317,14 +415,26 @@ def collect(
                 {"session_id": None, "registered_in": [], "reason": "+".join(reasons), **parse_session_note(brain_root, note)}
             )
 
-    issues = collect_issues(brain_root, start, end)
-    generated_files = collect_generated_files(brain_root, scan_dirs or list(DEFAULT_SCAN_DIRS), start, end, issues)
+    notes = scan_issue_notes(brain_root)
+    issues = collect_issues(brain_root, start, end, notes)
+    issue_texts: dict[str, list[str]] = {}
+    for note in notes:
+        issue_texts.setdefault(note.issue_id, []).append(note.text)
+    generated_files = collect_generated_files(
+        brain_root,
+        scan_dirs or list(DEFAULT_SCAN_DIRS),
+        start,
+        end,
+        {iid: "\n".join(texts) for iid, texts in issue_texts.items()},
+    )
+    referenced_issues = collect_referenced_issues(brain_root, notes, issues, generated_files, warnings)
     return {
         "range": {"from": _iso(start), "to": _iso(end), "today": _iso(today)},
         "days": days,
         "missing_dailies": missing_dailies,
         "sessions": sessions,
         "issues": issues,
+        "referenced_issues": referenced_issues,
         "generated_files": generated_files,
         "warnings": warnings,
     }

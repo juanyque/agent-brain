@@ -18,6 +18,7 @@ The report is a reading of what the brain already records. It never invents acti
 3. **Collect.** Run `daily_report_collect.py --brain-root <brain> [--from <date>]` and read its JSON (see `TOOL.daily-report-collect.md`). Do not re-derive what it already attributes to a day. If you read the JSON in a single step, do not save it; if you need it across steps, save it under `WIP/scratch/daily-report/`.
 4. **Resolve gaps with the user.**
    - An issue with an empty `work_type`: ask once whether it is `sprint` or `unplanned` (or another value) and, once answered, write only that frontmatter field. See "Work type" in `RULES-ISSUE-DOCS.md`.
+   - `issues` is evidence of work in range. `referenced_issues` lists existing notes that in-range files point at without being touched: use them for context (ticket, `work_type`) and to group the artifact under its ticket once, never as new activity, and do not turn an old status into a newly completed action.
    - A ticket worked on in a session or a WORK entry that has no issue note: propose creating it per `RULES-ISSUE-DOCS.md`, and create it only with approval. Pure PR reviews do not need an issue note or a session note unless they produced further work.
 5. **Compose** the report in the language of the conversation (see "Report format").
 6. **Show it, then write it.** Present the report in the conversation first. Write it into today's daily note only after the user approves (see "Storing the report").
@@ -43,7 +44,7 @@ Each Sprint / Unplanned item reads:
 - When the range spans several days, name the day of each detail (for example `Fri 10-09:`), using the issue notes' dated entries rather than the session note's file date.
 - Use exact identifiers (ticket, PR, commit, build) as recorded. Do not round numbers or soften unresolved items.
 - Say what is verified and what is not; never claim a test, check or deployment that the notes do not record.
-- Finish with `Unattributed files:` when the collector returned generated files that no issue note references, and with `Sources:` listing the wikilinks of the notes the report was built from.
+- Finish with `Unattributed files:` when the collector returned generated files with an empty `referenced_by` (no matching reference found; say so instead of claiming there is no issue note), and with `Sources:` listing the wikilinks of the notes the report was built from.
 - Spoken length: enough to cover everything the user may want to mention, not more. The user decides what to say; a shorter or translated version is a separate request.
 
 ## Storing the report
