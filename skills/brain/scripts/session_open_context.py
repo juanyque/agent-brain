@@ -162,6 +162,7 @@ def collect_session_digest_state(
         existing_note = find_existing_session_note(brain_root, request.session_id)
         session_note_exists = session_note_path.exists()
         injected_project_agents = False
+        request_warnings = request.request_warnings
     else:
         journal_folder = fixture.journal_folder
         latest_daily = fixture.daily_notes[-1] if fixture.daily_notes else "NONE"
@@ -174,6 +175,7 @@ def collect_session_digest_state(
         sources_due = fixture.sources_due
         empty_open_sessions = fixture.empty_open_sessions
         next_steps = fixture.open_session_next_steps
+        request_warnings = fixture.request_warnings
         existing_note = (
             brain_root / fixture.existing_session_note
             if fixture.existing_session_note is not None
@@ -243,6 +245,7 @@ def collect_session_digest_state(
         open_sessions=open_sessions,
         empty_open_sessions=empty_open_sessions,
         open_session_next_steps=next_steps,
+        request_warnings=request_warnings,
         operational_files=operational_files,
         wip_context=wip_context,
         task_types=task_types,

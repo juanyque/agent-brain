@@ -79,5 +79,6 @@ def main(hooks: SessionOpenHooks) -> int:
         prepare_daily=args.prepare_daily,
         apply=args.apply,
         reopen_consolidated=args.reopen_consolidated,
+        runtime_explicit=args.runtime is not None,
     )
     return run_flow(request, hooks)

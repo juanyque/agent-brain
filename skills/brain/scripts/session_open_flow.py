@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,6 +15,7 @@ from session_open_discovery import JournalConfigError, find_existing_session_not
 from session_open_registration import build_sessions_entry
 from session_open_transaction import SessionTransactionRequest, apply_session_transaction
 from session_open_validation import validate_daily_navigation
+from session_open_warnings import session_request_warnings
 
 class InstantiateSessionHook(Protocol):
     def __call__(self, template_path: Path, date: str, topic: str, session_id: str, runtime: str, cwd: str) -> str: ...
@@ -44,6 +46,7 @@ class SessionOpenRequest:
     prepare_daily: bool
     apply: bool
     reopen_consolidated: bool = False
+    runtime_explicit: bool = True
 
 
 def run_flow(request: SessionOpenRequest, hooks: SessionOpenHooks) -> int:
@@ -119,6 +122,19 @@ def run_flow(request: SessionOpenRequest, hooks: SessionOpenHooks) -> int:
         effective_note_rel = session_note_rel
         effective_slug = slug
     try:
+        process_cwd: str | None = os.getcwd()
+    except OSError:
+        process_cwd = None
+    request_warnings = session_request_warnings(
+        request.runtime,
+        request.cwd,
+        runtime_explicit=request.runtime_explicit,
+        process_cwd=process_cwd,
+        environ=os.environ,
+    )
+    for warning in request_warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
+    try:
         digest_state = collect_session_digest_state(
             SessionDigestRequest(
                 brain_root=str(brain_root),
@@ -129,6 +145,7 @@ def run_flow(request: SessionOpenRequest, hooks: SessionOpenHooks) -> int:
                 prepare_daily=request.prepare_daily,
                 apply=request.apply,
                 today=today,
+                request_warnings=request_warnings,
             )
         )
     except JournalConfigError as exc:

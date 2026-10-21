@@ -32,6 +32,7 @@ class SessionDigestFixtureData:
     injected_project_agents: bool
     empty_open_sessions: tuple[str, ...] = ()
     open_session_next_steps: tuple[tuple[str, str], ...] = ()
+    request_warnings: tuple[str, ...] = ()
     preflight: SessionPreflight = SessionPreflight()
 
 
@@ -60,6 +61,7 @@ class SessionDigestState:
     injected_project_agents: bool
     empty_open_sessions: tuple[str, ...] = ()
     open_session_next_steps: tuple[tuple[str, str], ...] = ()
+    request_warnings: tuple[str, ...] = ()
     preflight: SessionPreflight = SessionPreflight()
 
 
@@ -74,6 +76,7 @@ class SessionDigestRequest:
     apply: bool
     today: str | None = None
     fixture_data: SessionDigestFixtureData | None = None
+    request_warnings: tuple[str, ...] = ()
 
 
 def normalize_cwd(cwd: str) -> str:
@@ -123,6 +126,9 @@ def render_session_digest(state: SessionDigestState) -> str:
     ]
     if state.injected_project_agents:
         lines.append("project_agents_injected: yes")
+    if state.request_warnings:
+        lines.extend(["", "request_warnings:"])
+        lines.extend(f"- {warning}" for warning in state.request_warnings)
     lines.extend(["", "preflight:"])
     if state.preflight.git_root is None:
         if state.preflight.git_unavailable:
