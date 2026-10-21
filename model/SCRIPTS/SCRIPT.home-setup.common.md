@@ -53,16 +53,28 @@ _COMMON:
 Broken symlinks retain their raw and resolved target with `target missing`; regular files and
 directories are identified as non-symlink entries instead of being described as pointers.
 
+### Relinking only `_COMMON` (`--relink-common`)
+
+A dangling `_COMMON` (`conflict-invalid-target`) has no model to preserve. The typical case is a
+linked worktree of a brain whose tracked relative link was written for another depth:
+`find_home.py` reports it as a conflict with a `hint`. `--relink-common` repoints only the link (dry-run by
+default), with no backup, scaffolding, staging or wrapper creation, and refuses anything else: a
+valid link to another model or a real directory still needs `--switch-model`, and a missing link in
+a folder without wrapper files needs the normal setup. When `_COMMON` is tracked in a linked
+worktree, the output suggests marking the local link skip-worktree (a suggestion only, never executed) so
+it stays out of commits.
+
 ## Usage
 
 ```bash
-python3 home_setup.py --brain <path> [--common <model_path>] [--apply] [--switch-model] [--skip-full-reorder] [--symlink-policy copy|keep]
+python3 home_setup.py --brain <path> [--common <model_path>] [--apply] [--switch-model | --relink-common] [--skip-full-reorder] [--symlink-policy copy|keep]
 ```
 
 - `--brain` (required): path to the brain root.
 - `--common`: path to the model root. Defaults to this script's `../` (the `model/` directory).
 - `--apply`: execute (default: dry-run).
 - `--switch-model`: repoint `_COMMON` on conflict (D25).
+- `--relink-common`: repoint only a dangling or missing `_COMMON`, nothing else; cannot be combined with `--switch-model`, `--skip-full-reorder` or `--symlink-policy`.
 - `--skip-full-reorder`: skip the staging sweep (only attach `_COMMON` + wrappers).
 - `--symlink-policy`: required in apply mode when the staging sweep finds
   top-level symlinks. `copy` ingests their content; `keep` leaves only

@@ -32,7 +32,7 @@ MODEL_SCRIPTS = REPO_ROOT / "model" / "SCRIPTS"
 if str(MODEL_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(MODEL_SCRIPTS))
 
-from brain_state import current_brain_status, current_model_root  # noqa: E402
+from brain_state import current_brain_status, current_model_root, is_linked_worktree  # noqa: E402
 
 SKIP_DIRS = {
     ".git", "node_modules", ".Trash", ".cache", ".Trash-0",
@@ -112,13 +112,35 @@ def brain_info(path: Path) -> dict:
     }
 
 
+def repair_hint(path: Path, status: str) -> str | None:
+    """How to fix a dangling `_COMMON`, which is the only conflict with a lightweight repair."""
+    if status != "conflict-invalid-target":
+        return None
+    script = current_model_root() / "SCRIPTS" / "home_setup.py"
+    command = f"python3 {script} --brain {path} --relink-common"
+    cause = (
+        "this brain is a linked git worktree and _COMMON is a relative symlink that does not "
+        "resolve at this depth"
+        if is_linked_worktree(path)
+        else "_COMMON is a symlink whose target does not exist"
+    )
+    return (
+        f"{cause}; preview with `{command}`, then repoint only _COMMON with "
+        f"`{command} --apply`"
+    )
+
+
 def conflict_info(path: Path, status: str) -> dict:
     resolved = path.resolve()
-    return {
+    info = {
         "path": str(resolved),
         "name": resolved.name,
         "model_status": status,
     }
+    hint = repair_hint(resolved, status)
+    if hint is not None:
+        info["hint"] = hint
+    return info
 
 
 def _mark_nested(homes: list[dict]) -> None:

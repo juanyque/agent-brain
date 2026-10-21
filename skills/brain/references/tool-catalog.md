@@ -20,7 +20,7 @@
 
 The runtime skill exposes deterministic helper tools under its installed `scripts/` directory (see the Runtime path note above). Prefer these tools over brain-local copies.
 
-- `find_home.py` — resolve only brains implanted with the current agent-brain model. Its explicit `--candidates` mode retains notes-agnostic destination suggestions for bootstrap and must not be used to open sessions.
+- `find_home.py` — resolve only brains implanted with the current agent-brain model. Its explicit `--candidates` mode retains notes-agnostic destination suggestions for bootstrap and must not be used to open sessions. A dangling `_COMMON` (for example in a git worktree at a different depth) is reported as a conflict with a `hint` naming `home_setup.py --relink-common`, which repoints only that link.
 - `find_related_notes.py` — find notes related to project keywords.
 - `memory_query.py` — rank a few curated-memory candidates from index metadata without loading note bodies. Use only when prior cross-session guidance may help; open only relevant returned notes.
 - `profile_context.py` — resolve one or more generic capabilities through the active environment profile. It can inspect sanitized Codex MCP registry/auth readiness with `--live`, returns runtime invocation hints without credentials/endpoints, and optionally includes issue-tracking policy. A caller that can enumerate its active tool names safely may pass `--available-tool` plus `--tool-catalog-complete`; an absent exact MCP invocation then fails closed. Claude live discovery is refused because its registry command may rewrite settings. Profile resolution never grants tool permission.

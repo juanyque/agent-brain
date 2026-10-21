@@ -7,6 +7,8 @@ from pathlib import Path
 from brain_state import (  # noqa: E402  (lives next to this script)
     COMMON_LINK_NAME,
     STAGING_DIR_NAME,
+    has_markers,
+    is_linked_worktree,
     link_status,
     staging_status,
 )
@@ -195,6 +197,63 @@ def apply(
     apply_managed_content(brain_root, common, reporter)
 
 
+def relink_common(brain_root: Path, common: Path, apply_changes: bool, reporter: Reporter) -> int:
+    """Repoint only a dangling or missing _COMMON symlink: no backup, scaffolding or staging.
+
+    Meant for a checkout where the tracked relative link does not resolve, typically a git
+    worktree at a different depth. A link to another valid model is never touched here.
+    """
+    import subprocess
+
+    status, desired = link_status(brain_root, common)
+    link_path = brain_root / COMMON_LINK_NAME
+    reporter.write("# Relink _COMMON only")
+    reporter.write(f"mode: {'apply' if apply_changes else 'dry-run'}")
+    reporter.write(f"brain: {brain_root}")
+    reporter.write(f"status: {status}")
+    if status == "ok":
+        reporter.write(f"  {COMMON_LINK_NAME} already resolves to the model; nothing to do.")
+        reporter.flush()
+        return 0
+    if status not in {"missing", "conflict-invalid-target"}:
+        raise SystemExit(
+            f"--relink-common only repairs a missing or dangling {COMMON_LINK_NAME} "
+            f"(status: {status}); use --switch-model to replace a different entry."
+        )
+    if status == "missing" and not has_markers(brain_root):
+        raise SystemExit(
+            f"{COMMON_LINK_NAME} is missing and this folder has no brain wrapper files; "
+            "use the normal setup instead of --relink-common."
+        )
+    reporter.write(f"  current: {describe_common_entry(link_path)}")
+    reporter.write(f"  desired: {describe_desired_common(common, desired)}")
+    if not apply_changes:
+        reporter.write("Dry run only. Re-run with --apply to repoint _COMMON (nothing else is touched).")
+        reporter.flush()
+        return 0
+    if link_path.is_symlink():
+        link_path.unlink()
+    link_path.symlink_to(desired, target_is_directory=True)
+    if link_status(brain_root, common)[0] != "ok":
+        reporter.write(f"ERROR: {COMMON_LINK_NAME} still does not resolve after relinking")
+        reporter.flush()
+        return 1
+    reporter.write(f"  RELINKED {COMMON_LINK_NAME}")
+    tracked = subprocess.run(
+        ["git", "-C", str(brain_root), "ls-files", "--error-unmatch", COMMON_LINK_NAME],
+        capture_output=True,
+        check=False,
+    ).returncode == 0
+    if tracked and is_linked_worktree(brain_root):
+        reporter.write(
+            f"  note: {COMMON_LINK_NAME} is tracked, so this worktree now differs from the index; "
+            "to keep the local link out of commits run (not executed): "
+            f"git -C {brain_root} update-index --skip-worktree {COMMON_LINK_NAME}"
+        )
+    reporter.flush()
+    return 0
+
+
 def validate(brain_root: Path, common: Path) -> list[str]:
     errors: list[str] = []
     status, _desired = link_status(brain_root, common)
@@ -211,6 +270,7 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true", help="Apply changes. Default is dry-run.")
     parser.add_argument("--skip-full-reorder", action="store_true", help="Skip staging sweep. Only attach _COMMON + wrappers.")
     parser.add_argument("--switch-model", action="store_true", help="Repoint _COMMON if it conflicts (D25). A .backup-<ts> is created.")
+    parser.add_argument("--relink-common", action="store_true", help="Repoint only a dangling or missing _COMMON (for example in a git worktree); no backup, scaffolding or staging.")
     parser.add_argument("--symlink-policy", choices=("copy", "keep"), help="Top-level symlink handling during staging: copy (recommended) or keep non-canonical links.")
     args = parser.parse_args()
     reporter = Reporter(script_log_path(Path(__file__)))
@@ -224,6 +284,11 @@ def main() -> int:
             raise SystemExit(f"Brain directory not found: {brain_root}")
         if not common.is_dir():
             raise SystemExit(f"Model directory not found: {common}")
+
+        if args.relink_common:
+            if args.switch_model or args.skip_full_reorder or args.symlink_policy:
+                raise SystemExit("--relink-common cannot be combined with --switch-model, --skip-full-reorder or --symlink-policy")
+            return relink_common(brain_root, common, args.apply, reporter)
 
         if not args.skip_full_reorder:
             run_cleanup_ds_store(common, brain_root, applied=args.apply, reporter=reporter)

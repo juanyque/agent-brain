@@ -16,6 +16,7 @@ States:
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 COMMON_LINK_NAME = "_COMMON"
@@ -55,6 +56,27 @@ def link_status(brain_root: Path, common_target: Path) -> tuple[str, str]:
     if resolved_target == common_target.resolve():
         return "ok", desired
     return "conflict-wrong-target", desired
+
+
+def is_linked_worktree(brain_root: Path) -> bool:
+    """True when brain_root is a linked git worktree rather than the primary checkout."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(brain_root), "rev-parse", "--git-common-dir", "--absolute-git-dir"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    lines = result.stdout.splitlines()
+    if result.returncode != 0 or len(lines) < 2:
+        return False
+    common = Path(lines[0])
+    if not common.is_absolute():
+        common = brain_root / common
+    return common.resolve() != Path(lines[1]).resolve()
 
 
 def current_brain_status(
