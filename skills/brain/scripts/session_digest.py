@@ -31,6 +31,7 @@ class SessionDigestFixtureData:
     sources_due: tuple[str, ...]
     injected_project_agents: bool
     empty_open_sessions: tuple[str, ...] = ()
+    open_session_next_steps: tuple[tuple[str, str], ...] = ()
     preflight: SessionPreflight = SessionPreflight()
 
 
@@ -58,6 +59,7 @@ class SessionDigestState:
     sources_due: tuple[str, ...]
     injected_project_agents: bool
     empty_open_sessions: tuple[str, ...] = ()
+    open_session_next_steps: tuple[tuple[str, str], ...] = ()
     preflight: SessionPreflight = SessionPreflight()
 
 
@@ -156,9 +158,12 @@ def render_session_digest(state: SessionDigestState) -> str:
     lines.extend(["", "open_sessions:"])
     if state.open_sessions:
         empty = frozenset(state.empty_open_sessions)
+        next_steps = dict(state.open_session_next_steps)
         for session in state.open_sessions:
             if session in empty:
                 lines.append(f"- {session}  ⚠ empty note (no recorded work) — verify before closing it, or resume it")
+            elif session in next_steps:
+                lines.append(f"- {session}  next_step={next_steps[session]}")
             else:
                 lines.append(f"- {session}")
     else:

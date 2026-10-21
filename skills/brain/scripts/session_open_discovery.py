@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -114,8 +115,24 @@ def find_daily_template(brain_root: Path) -> Path | None:
     return existing[0]
 
 
+def _read_note_lossy(path: Path) -> str:
+    """Read a peer note for Status detection: bad bytes never abort session-open."""
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _read_note_strict(path: Path) -> str | None:
+    """Read a peer note, or None when it cannot be read or decoded (no evidence)."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
 def is_session_open(note_path: Path) -> bool:
-    for line in read_lines_safe(note_path):
+    for line in _read_note_lossy(note_path).splitlines():
         match = STATUS_RE.match(line.strip())
         if match:
             return match.group(1).strip().lower() == "open"
@@ -144,10 +161,14 @@ def is_session_note_empty(note_path: Path) -> bool:
     shell sections, blank lines, bare ``-`` placeholders, and unchecked boxes
     inside the template's Consolidation checklist. Any other content —
     including a mid-document ``---`` rule — marks the note worked; on any
-    parse doubt (unclosed frontmatter or comment) the note is reported
-    worked, so the flag never fires on ambiguity.
+    parse doubt (unclosed frontmatter or comment, or a note that cannot be
+    read or decoded) the note is reported worked, so the flag never fires on
+    ambiguity.
     """
-    lines = read_lines_safe(note_path)
+    text = _read_note_strict(note_path)
+    if text is None:
+        return False
+    lines = text.splitlines()
     in_frontmatter = False
     frontmatter_closed = False
     in_comment = False
@@ -205,6 +226,115 @@ def is_session_note_empty(note_path: Path) -> bool:
     if in_frontmatter or in_comment:
         return False
     return True
+
+
+NEXT_STEP_HEADING = "immediate next step"
+NEXT_STEP_SECTION_END_RE = re.compile(r"^#{1,2} +\S")
+NESTED_HEADING_RE = re.compile(r"^#{3,6} +\S")
+NEXT_STEP_CLOSURES = frozenset({"none", "session closed"})
+LIST_MARKER_RE = re.compile(r"^(?:[-*+]|\d+[.)])\s+")
+CHECKBOX_RE = re.compile(r"^\[[ xX]\]\s*")
+
+NEXT_STEP_PRESENT = "present"
+NEXT_STEP_NONE = "none"
+NEXT_STEP_MISSING = "missing"
+NEXT_STEP_UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class SessionRolloverFacts:
+    """Mechanical facts about a peer note; policy stays in the lifecycle rule."""
+
+    next_step: str
+
+
+def _next_step_lines(lines: list[str]) -> list[str] | None:
+    """Body of the single `## Immediate next step` section, or None when the
+    structure cannot be trusted (duplicate section, unclosed comment or fence)."""
+    sections: list[list[str]] = []
+    current: list[str] | None = None
+    in_fence = False
+    in_comment = False
+    for raw in lines:
+        stripped = raw.strip()
+        if in_comment:
+            if "-->" in stripped:
+                in_comment = False
+            continue
+        if stripped.startswith("<!--"):
+            if "-->" not in stripped:
+                in_comment = True
+            continue
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if NEXT_STEP_SECTION_END_RE.match(raw):
+            heading = HEADING_RE.match(raw)
+            if (
+                raw.startswith("## ")
+                and heading is not None
+                and heading.group(1).strip().lower() == NEXT_STEP_HEADING
+            ):
+                current = []
+                sections.append(current)
+            else:
+                current = None
+            continue
+        if NESTED_HEADING_RE.match(raw):
+            continue
+        if current is not None:
+            current.append(stripped)
+    if in_comment or in_fence or len(sections) > 1:
+        return None
+    return sections[0] if sections else []
+
+
+def read_session_rollover_facts(note_path: Path) -> SessionRolloverFacts:
+    """Classify the `## Immediate next step` of a peer note.
+
+    present: meaningful pending content. none: only an exact closure item
+    (`none`, `session closed`). missing: no section, or only blanks, bare `-`
+    and comments. unknown: unreadable or undecodable note, duplicate section,
+    unclosed comment/fence, or closure and pending content together.
+    """
+    text = _read_note_strict(note_path)
+    if text is None:
+        return SessionRolloverFacts(NEXT_STEP_UNKNOWN)
+    body = _next_step_lines(text.splitlines())
+    if body is None:
+        return SessionRolloverFacts(NEXT_STEP_UNKNOWN)
+    closure = pending = False
+    for line in body:
+        item = CHECKBOX_RE.sub("", LIST_MARKER_RE.sub("", line)).strip()
+        if not item or item == "-":
+            continue
+        if item.lower().rstrip(".") in NEXT_STEP_CLOSURES:
+            closure = True
+        else:
+            pending = True
+    if closure and pending:
+        return SessionRolloverFacts(NEXT_STEP_UNKNOWN)
+    if pending:
+        return SessionRolloverFacts(NEXT_STEP_PRESENT)
+    if closure:
+        return SessionRolloverFacts(NEXT_STEP_NONE)
+    return SessionRolloverFacts(NEXT_STEP_MISSING)
+
+
+def open_session_next_steps(
+    brain_root: Path,
+    open_sessions: tuple[str, ...],
+    empty: frozenset[str],
+    exclude: frozenset[str],
+) -> tuple[tuple[str, str], ...]:
+    """(path, next_step) for non-empty peers; the current note is never included."""
+    return tuple(
+        (rel, read_session_rollover_facts(brain_root / rel).next_step)
+        for rel in open_sessions
+        if rel not in empty and rel not in exclude
+    )
 
 
 def empty_open_session_paths(

@@ -14,6 +14,7 @@ from session_open_discovery import (
     list_daily_notes,
     list_session_notes,
     load_journal_folder,
+    open_session_next_steps,
     read_lines_safe,
 )
 from session_open_preflight import collect_preflight
@@ -172,6 +173,7 @@ def collect_session_digest_state(
         maintenance_jobs = fixture.maintenance_jobs
         sources_due = fixture.sources_due
         empty_open_sessions = fixture.empty_open_sessions
+        next_steps = fixture.open_session_next_steps
         existing_note = (
             brain_root / fixture.existing_session_note
             if fixture.existing_session_note is not None
@@ -191,6 +193,12 @@ def collect_session_digest_state(
             open_sessions,
             today,
             exclude=frozenset(exclude_current),
+        )
+        next_steps = open_session_next_steps(
+            brain_root,
+            open_sessions,
+            frozenset(empty_open_sessions),
+            frozenset(exclude_current),
         )
         preflight = collect_preflight(
             cwd=request.cwd,
@@ -234,6 +242,7 @@ def collect_session_digest_state(
         daily_action=daily_action,
         open_sessions=open_sessions,
         empty_open_sessions=empty_open_sessions,
+        open_session_next_steps=next_steps,
         operational_files=operational_files,
         wip_context=wip_context,
         task_types=task_types,
