@@ -555,7 +555,7 @@ def run_close_empty(args: argparse.Namespace, brain_root: Path) -> int:
                 file=sys.stderr,
             )
             return 1
-        chosen.append(note.stem.split("-session-", 1)[1])
+        chosen.append(note.stem)
 
     for token in chosen:
         command = [
@@ -665,7 +665,18 @@ def main() -> int:
             else []
         )
         gate_state: tuple[str, list[str]] = ("missing", [])
+        empty_note = False
         if not already_target and is_session_note_empty(note_path):
+            verdict, detail = classify_session_activity(full_session_id)
+            if verdict == HAS_ACTIVITY:
+                print(
+                    f"NOTE: the session note is empty but the session shows activity ({detail}); "
+                    "not treating it as never worked.",
+                    file=sys.stderr,
+                )
+            else:
+                empty_note = True
+        if empty_note:
             gate_state = ("empty", [])
         elif not already_target:
             gate_state = consolidation_checklist_state(

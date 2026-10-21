@@ -25,8 +25,7 @@ from session_transcripts import (  # noqa: E402
 
 def run(*args: str, claude_config: Path | None = None) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
-    if claude_config is not None:
-        env["CLAUDE_CONFIG_DIR"] = str(claude_config)
+    env["CLAUDE_CONFIG_DIR"] = str(claude_config or "/nonexistent-claude-config")
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         text=True,
@@ -40,21 +39,24 @@ def git(brain: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=brain, text=True, capture_output=True, check=False)
 
 
-def write_transcript(config: Path, session_id: str, prompts: int, tool_uses: int) -> None:
+def write_transcript(
+    config: Path,
+    session_id: str,
+    prompts: int,
+    tool_uses: int,
+    tool_name: str = "Bash",
+    reply_chars: int = 0,
+) -> None:
     project = config / "projects" / "-some-project"
     project.mkdir(parents=True, exist_ok=True)
     entries = [
         {"type": "user", "message": {"role": "user", "content": f"prompt {n}"}}
         for n in range(prompts)
     ]
-    entries.append(
-        {
-            "type": "assistant",
-            "message": {
-                "content": [{"type": "tool_use", "name": "Bash"} for _ in range(tool_uses)]
-            },
-        }
-    )
+    blocks: list[dict] = [{"type": "tool_use", "name": tool_name} for _ in range(tool_uses)]
+    if reply_chars:
+        blocks.append({"type": "text", "text": "x" * reply_chars})
+    entries.append({"type": "assistant", "message": {"content": blocks}})
     entries.append(
         {"type": "user", "message": {"content": [{"type": "tool_result", "content": "x"}]}}
     )
@@ -120,6 +122,28 @@ class EmptyNoteFastPathTests(EmptyNoteFixture):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("would add: never-worked reason line", result.stdout)
         self.assertEqual(note.read_text(encoding="utf-8"), before)
+
+    def test_empty_note_with_transcript_activity_does_not_take_the_fast_path(self) -> None:
+        note = self.add_note("ses-busy", 5)
+        write_transcript(self.config, "ses-busy", prompts=1, tool_uses=40)
+
+        result = run(
+            "--brain-root", str(self.brain), "--apply", "consolidate", "ses-busy",
+            claude_config=self.config,
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("shows activity", result.stderr)
+        self.assertIn("closing gate incomplete", result.stderr)
+        self.assertIn("- Status: open", note.read_text(encoding="utf-8"))
+
+    def test_empty_note_without_transcript_still_takes_the_fast_path(self) -> None:
+        note = self.add_note("ses-codex", 5)
+
+        result = run("--brain-root", str(self.brain), "--apply", "consolidate", "ses-codex")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("- Status: consolidated", note.read_text(encoding="utf-8"))
 
     def test_note_with_content_still_hits_the_gate(self) -> None:
         note = self.add_note("ses-worked", 5, body="- reviewed the migration\n")
@@ -216,6 +240,21 @@ class CloseEmptyTests(EmptyNoteFixture):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(note.exists())
 
+    def test_apply_archives_only_the_validated_note_when_ids_repeat_across_days(self) -> None:
+        old = self.add_note("ses-dup", 10)
+        recent = self.add_note("ses-dup", 1, body="- still working\n")
+        write_transcript(self.config, "ses-dup", prompts=1, tool_uses=2)
+
+        result = run(
+            "--brain-root", str(self.brain), "--apply", "close-empty", "ses-dup",
+            claude_config=self.config,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(old.exists())
+        self.assertTrue(recent.exists())
+        self.assertIn("- Status: open", recent.read_text(encoding="utf-8"))
+
     def test_apply_refuses_unknown_id(self) -> None:
         self.add_note("ses-quiet", 6)
 
@@ -242,33 +281,68 @@ class CloseEmptyTests(EmptyNoteFixture):
 
 
 class TranscriptClassifierTests(unittest.TestCase):
-    def test_classification_levels(self) -> None:
+    def classify(self, setup) -> str:
         with tempfile.TemporaryDirectory() as raw:
             config = Path(raw)
-            write_transcript(config, "quiet", prompts=1, tool_uses=3)
-            write_transcript(config, "talkative", prompts=3, tool_uses=0)
-            write_transcript(config, "busy", prompts=1, tool_uses=9)
+            setup(config)
             old = os.environ.get("CLAUDE_CONFIG_DIR")
             os.environ["CLAUDE_CONFIG_DIR"] = raw
             try:
-                verdicts = {
-                    name: classify_session_activity(name)[0]
-                    for name in ("quiet", "talkative", "busy", "absent")
-                }
+                return classify_session_activity("sid")[0]
             finally:
                 if old is None:
                     del os.environ["CLAUDE_CONFIG_DIR"]
                 else:
                     os.environ["CLAUDE_CONFIG_DIR"] = old
-        self.assertEqual(
-            verdicts,
-            {
-                "quiet": NO_ACTIVITY,
-                "talkative": HAS_ACTIVITY,
-                "busy": HAS_ACTIVITY,
-                "absent": UNVERIFIED,
-            },
-        )
+
+    def test_classification_levels(self) -> None:
+        cases = {
+            "quiet": (lambda c: write_transcript(c, "sid", prompts=1, tool_uses=3), NO_ACTIVITY),
+            "talkative": (lambda c: write_transcript(c, "sid", prompts=3, tool_uses=0), HAS_ACTIVITY),
+            "eight calls": (lambda c: write_transcript(c, "sid", prompts=1, tool_uses=8), NO_ACTIVITY),
+            "nine calls": (lambda c: write_transcript(c, "sid", prompts=1, tool_uses=9), HAS_ACTIVITY),
+            "single edit": (
+                lambda c: write_transcript(c, "sid", prompts=1, tool_uses=1, tool_name="Edit"),
+                HAS_ACTIVITY,
+            ),
+            "mcp call": (
+                lambda c: write_transcript(
+                    c, "sid", prompts=1, tool_uses=1, tool_name="mcp__x__post"
+                ),
+                HAS_ACTIVITY,
+            ),
+            "long reply without tools": (
+                lambda c: write_transcript(c, "sid", prompts=1, tool_uses=0, reply_chars=2500),
+                HAS_ACTIVITY,
+            ),
+            "short reply": (
+                lambda c: write_transcript(c, "sid", prompts=1, tool_uses=0, reply_chars=200),
+                NO_ACTIVITY,
+            ),
+            "absent": (lambda c: None, UNVERIFIED),
+        }
+        for name, (setup, expected) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self.classify(setup), expected)
+
+    def test_unreadable_transcripts_are_unverified(self) -> None:
+        def write(content: str):
+            def setup(config: Path) -> None:
+                project = config / "projects" / "-p"
+                project.mkdir(parents=True)
+                (project / "sid.jsonl").write_text(content, encoding="utf-8")
+
+            return setup
+
+        cases = {
+            "empty file": "",
+            "garbage": "not json at all\n{broken\n",
+            "truncated": '{"type": "user", "message": {"content": "hi"',
+            "unknown schema": '{"kind": "other"}\n[1, 2]\n',
+        }
+        for name, content in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self.classify(write(content)), UNVERIFIED)
 
 
 if __name__ == "__main__":

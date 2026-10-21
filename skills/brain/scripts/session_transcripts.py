@@ -11,11 +11,18 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import NamedTuple
 
 # A bare brain open already costs a handful of tool calls; more than this
 # means the session did something else.
 ACTIVITY_TOOL_USE_THRESHOLD = 8
 ACTIVITY_PROMPT_THRESHOLD = 2
+# Tools that change files or act outside the session count as work on their own,
+# whatever the total number of calls.
+OUTWARD_TOOL_NAMES = frozenset({"Edit", "Write", "NotebookEdit", "Agent", "Workflow", "SendMessage"})
+OUTWARD_TOOL_PREFIX = "mcp__"
+# A long assistant reply is work too, even in a session that made no tool calls.
+ACTIVITY_TEXT_CHARS = 2000
 
 UNVERIFIED = "unverified"
 NO_ACTIVITY = "no-activity-evidence"
@@ -51,10 +58,27 @@ def _is_user_prompt(entry: dict) -> bool:
     return False
 
 
-def transcript_counts(path: Path) -> tuple[int, int]:
-    """Return (user prompts, tool calls) found in a Claude transcript."""
-    prompts = 0
-    tool_uses = 0
+class TranscriptCounts(NamedTuple):
+    prompts: int
+    tool_uses: int
+    outward_tool_uses: int
+    text_chars: int
+    records: int
+
+
+def _is_outward_tool(name: object) -> bool:
+    return isinstance(name, str) and (
+        name in OUTWARD_TOOL_NAMES or name.startswith(OUTWARD_TOOL_PREFIX)
+    )
+
+
+def transcript_counts(path: Path) -> TranscriptCounts:
+    """Count prompts, tool calls and assistant text in a Claude transcript.
+
+    `records` is the number of readable user/assistant entries; a file with none
+    (empty, truncated, unknown schema) carries no evidence either way.
+    """
+    prompts = tool_uses = outward = text_chars = records = 0
     with path.open(encoding="utf-8", errors="replace") as stream:
         for line in stream:
             try:
@@ -63,17 +87,26 @@ def transcript_counts(path: Path) -> tuple[int, int]:
                 continue
             if not isinstance(entry, dict):
                 continue
-            if _is_user_prompt(entry):
-                prompts += 1
+            if entry.get("type") == "user":
+                records += 1
+                if _is_user_prompt(entry):
+                    prompts += 1
             elif entry.get("type") == "assistant":
+                records += 1
                 content = entry.get("message", {}).get("content")
                 if isinstance(content, list):
-                    tool_uses += sum(
-                        1
-                        for block in content
-                        if isinstance(block, dict) and block.get("type") == "tool_use"
-                    )
-    return prompts, tool_uses
+                    for block in content:
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") == "tool_use":
+                            tool_uses += 1
+                            if _is_outward_tool(block.get("name")):
+                                outward += 1
+                        elif block.get("type") == "text":
+                            text = block.get("text")
+                            if isinstance(text, str):
+                                text_chars += len(text)
+    return TranscriptCounts(prompts, tool_uses, outward, text_chars, records)
 
 
 def classify_session_activity(session_id: str) -> tuple[str, str]:
@@ -82,10 +115,20 @@ def classify_session_activity(session_id: str) -> tuple[str, str]:
     if transcript is None:
         return UNVERIFIED, "no Claude transcript found"
     try:
-        prompts, tool_uses = transcript_counts(transcript)
+        counts = transcript_counts(transcript)
     except OSError as error:
         return UNVERIFIED, f"transcript unreadable: {error}"
-    detail = f"{prompts} prompts, {tool_uses} tool calls"
-    if tool_uses > ACTIVITY_TOOL_USE_THRESHOLD or prompts >= ACTIVITY_PROMPT_THRESHOLD:
+    if counts.records == 0:
+        return UNVERIFIED, "transcript has no readable records"
+    detail = (
+        f"{counts.prompts} prompts, {counts.tool_uses} tool calls, "
+        f"{counts.outward_tool_uses} outward, {counts.text_chars} reply chars"
+    )
+    if (
+        counts.tool_uses > ACTIVITY_TOOL_USE_THRESHOLD
+        or counts.prompts >= ACTIVITY_PROMPT_THRESHOLD
+        or counts.outward_tool_uses > 0
+        or counts.text_chars > ACTIVITY_TEXT_CHARS
+    ):
         return HAS_ACTIVITY, detail
     return NO_ACTIVITY, detail
