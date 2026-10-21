@@ -96,6 +96,8 @@ Never duplicate common content verbatim in a wrapper. Omit unchanged sections en
 - When adding a new rule file, follow the `RULES-<SCOPE>-<TOPIC>.common.md` naming pattern and add a trigger entry in `AGENTS.common.md` → "Rule triggers".
 - When adding a new template, use the `TEMPLATE.<name>.common.md` pattern.
 - When adding a new skill tool, add both the Python script and a `TOOL.<name>.md` doc, then update `skills/brain/SKILL.md` → "Available skill tools".
+- When adding, renaming or deleting any Markdown file under `model/` or `skills/brain/` (rules, templates, task types, `TOOL.*.md`, references), keep `model/OPERATING-MODEL.json` in step: list the path in `governed_inventory` and give it an `audience_contract` entry. `test_governed_inventory_matches_model_markdown` compares the inventory with the files on disk, so a missing registration only shows up as a failing test. Markdown under other skills (`skills/boyscout/`, `skills/<other>/`) is not governed.
+- When a change alters what a route loads (rule or reference text, `SKILL.md`, a tool doc, or the digest rendering), regenerate the context baseline: `python3 model/SCRIPTS/model_check_context_baseline.py --output tests/fixtures/model-context-baseline.json --digest-output tests/fixtures/model-context-baseline.sha256`. Regenerating recomputes the budget caps from the new sizes, so before overwriting compare each scenario's new bytes with the caps in the committed baseline (`budgets`) and report the before/after bytes; review the fixture diff afterwards.
 - Log files (`*.log`) are execution artifacts and are gitignored. Never commit them.
 
 ## Rule triggers
@@ -140,3 +142,5 @@ python3 -m unittest tests.test_operating_model_evidence.OperatingModelContractTe
 ```
 
 For broader verification, run the pinned baseline, full suite, strict checker, canonical JSON, compile, and diff checks described by `tests/fixtures/operating-model-qa-commands.json`.
+
+Run every test command with `PYTHONDONTWRITEBYTECODE=1`: the complete local gate fails its last clause if any `__pycache__` directory exists in the repository. Any Python process that imports these scripts without the variable can recreate them between runs; they are gitignored, so if that clause fails, delete the stray `__pycache__` directories and re-run it.
