@@ -296,7 +296,7 @@ def parse_added_lines(diff_text: str) -> list[tuple[int, str]]:
             continue
         if not in_hunk:
             continue
-        if raw.startswith("+") and not raw.startswith("+++"):
+        if raw.startswith("+"):
             added.append((line_no, raw[1:]))
             line_no += 1
         elif raw.startswith("-") or raw.startswith("\\"):

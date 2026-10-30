@@ -24,6 +24,7 @@ from pre_push_audit import (  # noqa: E402
     forbidden_patterns,
     load_forbidden_values,
     main,
+    parse_added_lines,
     redact,
 )
 
@@ -90,6 +91,27 @@ class DetectorTests(unittest.TestCase):
         )
         self.assertIn("github-pat-classic", kinds(findings))
         self.assertIn("github-token-family", kinds(findings))
+
+    def test_added_line_starting_with_double_plus_is_scanned(self) -> None:
+        diff = """diff --git a/src/a.py b/src/a.py
+index 1234567..89abcde 100644
+--- a/src/a.py
++++ b/src/a.py
+@@ -0,0 +1,2 @@
++++ token = "{}"
++ordinary = True
+""".format(FAKE_GHP)
+        parsed = parse_added_lines(diff)
+        self.assertEqual(
+            parsed,
+            [(1, f'++ token = "{FAKE_GHP}"'), (2, "ordinary = True")],
+        )
+        findings = audit_diff(
+            {"src/a.py": parsed}, [("A", "src/a.py", None)], self.config
+        )
+        token_findings = [f for f in findings if f.kind == "github-pat-classic"]
+        self.assertEqual(len(token_findings), 1)
+        self.assertEqual(token_findings[0].line, 1)
 
     def test_slack_and_jwt_shapes_are_detected(self) -> None:
         findings = audit_diff(
