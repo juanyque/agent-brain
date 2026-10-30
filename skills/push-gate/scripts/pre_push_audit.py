@@ -451,13 +451,21 @@ def audit_diff(
 def audit_commit_metadata(
     repo_root: Path, commit: str, config: GateConfig
 ) -> list[Finding]:
-    """Scan one commit's message and author/committer emails for forbidden values."""
-    if not config.forbidden_patterns:
-        return []
+    """Scan one commit's message and author/committer emails for sensitive values."""
     raw = git(repo_root, ["show", "-s", "--format=%ae%n%ce%n%B", commit])
     findings: list[Finding] = []
     for line_no, text in enumerate(raw.splitlines(), start=1):
         label = "<author/committer email>" if line_no <= 2 else "<commit message>"
+        _scan_line(
+            SECRET_PATTERNS,
+            "secrets",
+            "-in-metadata",
+            label,
+            None,
+            text,
+            config,
+            findings,
+        )
         _scan_line(
             config.forbidden_patterns,
             FORBIDDEN_DETECTOR,

@@ -691,6 +691,31 @@ class ForbiddenValuesCliTests(GitRepoCase):
             )
         self.assertEqual(code, 1)
 
+    def test_commit_message_secret_shape_blocks_without_values_file(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = self._repo(Path(raw))
+            self._commit_message(root, f"fix auth token {FAKE_GHP}")
+            code = main(
+                ["--repo-root", str(root), "--range", "HEAD~1..HEAD"]
+            )
+        self.assertEqual(code, 1)
+
+    def test_commit_message_secret_shape_respects_disabled_detector(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = self._repo(Path(raw))
+            self._commit_message(root, f"fix auth token {FAKE_GHP}")
+            config = Path(raw) / "push-gate.json"
+            config.write_text(
+                json.dumps(
+                    {"schema_version": CONFIG_SCHEMA, "disabled_detectors": ["secrets"]}
+                ),
+                encoding="utf-8",
+            )
+            code = main(
+                ["--repo-root", str(root), "--config", str(config), "--range", "HEAD~1..HEAD"]
+            )
+        self.assertEqual(code, 0)
+
     def test_missing_file_skips_the_check_with_a_warning(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = self._repo(Path(raw))
