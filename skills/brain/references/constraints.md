@@ -30,7 +30,7 @@ If any file cannot be read, stop immediately and tell the user:
 
 ## Constraints
 
-- Never write to the brain without the user's awareness. If unsure whether something should be documented, ask.
+- Document substantive work in the brain as soon as it exists, without waiting to be asked (see `AGENTS.common.md` → "Documenting work"). Report what was written. Ask only when the destination is ambiguous, the content may be sensitive, or the decision is the user's. Writing is not committing: Git operations still need the user's explicit request.
 - Never modify `.obsidian/` unless the user explicitly requests it.
 - Never delete content from the brain. Prefer moving, renaming, or consolidating. If cleanup suggests deletion, move the candidate to `QUARANTINE/TRASH/` with traceability and wait for explicit user approval before permanent deletion.
 - `home_setup.py` may rewrite external symlinks under canonical agent runtime homes (`~/.agents`, `~/.claude`, `~/.codex`, plus any `--runtime-home`) when it moves runtime-tied directories into `_AGENTS/`. Originals are preserved as `.bak.<timestamp>` siblings and the rewrites are recorded in `WIP/AGENTS_MIGRATION.<date>.md`. Never delete the `.bak` files automatically — they belong to the user to verify and clean up.

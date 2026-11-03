@@ -21,6 +21,12 @@ Never duplicate common content verbatim in a wrapper. Omit unchanged sections en
 
 When agents produce prose for brains (notes, drafts, comments, summaries), avoid em-dash and en-dash characters (`—`, `–`) as sentence separators. Real people rarely type them; agent output stands out as machine-generated when it leans on them. Use natural punctuation instead: a period to end a clause, a comma when the thought continues, parentheses for asides, a colon when introducing a list or definition, a semicolon when joining two related independent clauses. The same applies to text agents draft for users to paste elsewhere (Google Docs comments, Jira tickets, PR descriptions, Slack messages). Identifier formatting (backticks, code fences) and hyphenated compound words (`day-one`, `cross-issuer`) are unaffected; the rule targets only the long-dash separator.
 
+## Documenting work
+
+Agents document substantive work in the brain as soon as it exists, without waiting for a phase to end, a checkpoint, or a request. Record each decision, outcome, review, publish to an external system, fix or validation in the current session note and today's daily note (plus the ticket working doc when one exists) right after it happens. Reporting what was written satisfies user awareness. Ask only when the destination is ambiguous, the content may be sensitive, or the decision is the user's (for example TODO carryover or closing ambiguous sessions).
+
+Documenting is not publishing. Writing files in the brain is routine, but commit, push and PR actions on the brain or any shared repository need the user's explicit request for that specific action; an earlier authorization covers only the action it named. See "Git ownership for brains".
+
 ## Rule triggers
 
 Load the narrow rule payload before acting when a trigger matches:
