@@ -55,34 +55,55 @@ Do not run broad brain maintenance, standardization, or semantic reorganization 
 
 ## Brain resolution
 
-Run strict discovery from the current directory first. It accepts only brains whose
-`_COMMON` symlink resolves to the current agent-brain model:
+Run strict discovery from the current directory. It accepts only brains whose `_COMMON`
+symlink resolves to the current agent-brain model, and it falls back on its own when the
+directory is outside every brain (for example a git worktree under `/tmp`):
 
 ```bash
 python3 ~/.agents/skills/brain/scripts/find_home.py "$PWD"
 ```
 
-If that returns no brain, run it without a path to surface all current-model brains under
-the user's home. Never use `--candidates` for session resolution; that mode is reserved for
-bootstrap destination suggestions.
+Resolution order, handled inside the script (never re-implement it as manual steps):
 
-The script returns JSON. Handle each outcome:
+1. `source: ancestor` — the directory is inside a brain.
+2. `status: conflict` — the nearest `_COMMON` is not a valid implant. Stop; never fall back.
+3. `source: default` — this machine's default brain (`brain_default.py get`), if usable.
+4. `source: home-scan` — exactly one current-model brain under the user's home.
 
-**1 brain found** → use it directly, proceed to loading context.
+Never use `--candidates` for session resolution; that mode is reserved for bootstrap
+destination suggestions. Running the script with no path scans the user's home only.
 
-**Multiple brains found** → check for nested brains. Each brain object includes:
-- `has_agents_md` / `has_brain_md`: true if the brain has operational docs
-- `is_nested` / `parent_brain`: indicates this brain lives inside another found brain
+The script returns JSON with `status` (`resolved`, `ambiguous`, `conflict`, `none`) and, when
+resolved, `source`. Handle each outcome:
 
-If one brain has `has_agents_md: true` and others do not, prefer the one with operational docs. If still ambiguous, present the list to the user and ask them to pick.
+**`resolved` + `ancestor`** → use it directly, proceed to loading context.
 
-**No brains found** → tell the user no brain was found and ask them to provide the brain path manually. Then run the script again with that path.
+**`resolved` + `default` or `home-scan`** → the directory is not inside the brain, so say so
+explicitly when connecting: *"Connected to the default brain X (this directory is outside any
+brain). If you want another one, say so."* Connecting is safe here because the user invoked
+the brain skill. If the user asks for another brain, run `find_home.py --all "$PWD"`: it
+ignores the default and lists every brain reachable from the directory's tree, its ancestors
+and the user's home (deduplicated); present `homes` and let the user pick. If there is no
+default yet and the brain was found by `home-scan`, offer to set it with
+`brain_default.py set --brain-root <path> --apply`, only with the user's OK.
+
+**`ambiguous`** → several brains under the user's home and no default. `candidates` lists them
+(none is selected). Check nested brains (`is_nested` / `parent_brain`); if one has
+`has_agents_md: true` and the others do not, prefer it. Otherwise ask the user to pick, and
+offer to save the choice as the default.
+
+**`none`** → tell the user no brain was found and ask them to provide the brain path manually.
+Then run the script again with that path. A `default_problem` field explains why a configured
+default was ignored (removed brain, other model, corrupt file); report it.
 
 **Error (path does not exist)** → report the error and ask for a valid path.
 
-**Conflicting `_COMMON` found** → report that the directory targets another model or has an
-invalid `_COMMON` entry. Do not connect or pass it to lifecycle scripts; it requires an
-explicit repair or migration first.
+**`conflict`** → report that the directory targets another model or has an invalid `_COMMON`
+entry (the JSON `conflicts` entry may carry a repair `hint`). Do not connect or pass it to
+lifecycle scripts; it requires an explicit repair or migration first.
+
+The SessionStart hook never connects a default or scanned brain on its own: outside a brain it
+only suggests the default. A brain is connected when the user invokes the skill.
 
 ## After brain resolution
 

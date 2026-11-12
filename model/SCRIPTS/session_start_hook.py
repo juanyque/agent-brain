@@ -22,7 +22,10 @@ Codex, and the OpenCode bridge share the same shape (verified empirically agains
 0.150.1: hookSpecificOutput.additionalContext is genuinely injected into the
 agent's own turn, not just schema-accepted-but-ignored) --
 `{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "..."}}`
-when a brain is found, `{}` otherwise. A future runtime with a different
+when a brain is found, `{}` otherwise. Outside every brain the hook only
+SUGGESTS this machine's default brain (when one is configured) and never asks
+the agent to connect or write to it: a last-resort default says nothing about
+the project the session is actually about. A future runtime with a different
 contract gets its own branch in RUNTIME_MESSAGES plus (if the response shape
 itself differs) a conditional in main(), not a second copy of this script.
 
@@ -114,6 +117,21 @@ def build_message(
     return message
 
 
+def build_default_suggestion(brain: dict, session_id: str | None) -> str:
+    """Outside any brain: name the default brain but do not instruct a connection."""
+    message = (
+        "This session started outside any brain vault. This machine's default "
+        f"brain is {brain.get('name') or 'unnamed'} ({brain.get('path')}). Do NOT "
+        "connect it, read it or write to it on your own: it says nothing about the "
+        "project of this session. Only if the user asks to connect a brain (for "
+        "example `/brain`), connect that default and tell them it is the default "
+        "brain so they can ask for a different one."
+    )
+    if session_id:
+        message += f" Runtime session ID: `{session_id}`."
+    return message
+
+
 def resolve_agent_brain_home() -> Path:
     configured = os.environ.get("AGENT_BRAIN_HOME")
     if configured:
@@ -125,16 +143,21 @@ def resolve_agent_brain_home() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def find_brain(cwd: str, agent_brain_home: Path) -> dict | None:
-    """Return the nearest implanted brain's find_home.py record for `cwd`, or
-    None if none is found or discovery itself fails for any reason.
+def find_brain(cwd: str, agent_brain_home: Path) -> tuple[dict, str] | None:
+    """Return (brain record, resolution source) for `cwd`, or None when no brain
+    is cleanly resolved or discovery itself fails for any reason.
+
+    The source is "ancestor" (cwd is inside the brain) or "default" (cwd is
+    outside every brain and this machine has a default). HOME is never scanned
+    here: the hook must stay fast, and an ambiguous or conflicting result is
+    never guessed at.
     """
     find_home = agent_brain_home / "skills" / "brain" / "scripts" / "find_home.py"
     if not find_home.is_file():
         return None
     try:
         result = subprocess.run(
-            [sys.executable, str(find_home), cwd],
+            [sys.executable, str(find_home), "--no-scan", cwd],
             capture_output=True,
             text=True,
             timeout=3,
@@ -146,11 +169,15 @@ def find_brain(cwd: str, agent_brain_home: Path) -> dict | None:
         payload = json.loads(result.stdout)
     except (json.JSONDecodeError, TypeError):
         return None
-    homes = payload.get("homes") if isinstance(payload, dict) else None
-    if not homes or not isinstance(homes, list):
+    if not isinstance(payload, dict) or payload.get("status") != "resolved":
         return None
-    first = homes[0]
-    return first if isinstance(first, dict) else None
+    homes = payload.get("homes")
+    if not homes or not isinstance(homes, list) or not isinstance(homes[0], dict):
+        return None
+    resolution = payload.get("source")
+    if resolution not in ("ancestor", "default"):
+        return None
+    return homes[0], resolution
 
 
 def main() -> int:
@@ -181,18 +208,21 @@ def main() -> int:
         return 0
 
     cwd = resolve_cwd(hook_input)
-    brain = find_brain(cwd, resolve_agent_brain_home())
-    if brain is None:
+    found = find_brain(cwd, resolve_agent_brain_home())
+    if found is None:
         print("{}")
         return 0
 
-    name = brain.get("name") or "connected"
-    message = build_message(
-        args.runtime,
-        name,
-        resolve_source(hook_input),
-        resolve_session_id(hook_input),
-    )
+    brain, resolution = found
+    if resolution == "default":
+        message = build_default_suggestion(brain, resolve_session_id(hook_input))
+    else:
+        message = build_message(
+            args.runtime,
+            brain.get("name") or "connected",
+            resolve_source(hook_input),
+            resolve_session_id(hook_input),
+        )
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",

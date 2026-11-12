@@ -7,16 +7,30 @@ only through --candidates for bootstrap destination suggestions.
 
 Usage:
     python3 find_home.py                    # search for implanted brains under HOME
-    python3 find_home.py /path/inside/brain # resolve the nearest implanted ancestor
+    python3 find_home.py PATH               # resolve a brain for PATH (see below)
+    python3 find_home.py --no-scan PATH     # same, but never scan HOME (fast; for hooks)
+    python3 find_home.py --all PATH         # ignore the default; list every brain
+                                            # reachable from PATH's tree, its ancestors and HOME
     python3 find_home.py --candidates       # bootstrap destination suggestions
     python3 find_home.py --candidates PATH  # classify one bootstrap destination
 
+Resolution for PATH, in order (the first that applies wins):
+    1. ancestor  - PATH is inside an implanted brain.
+    2. conflict  - the nearest ancestor with a _COMMON entry is not a valid
+                   implant: stop, never fall back (needs repair/migration).
+    3. default   - this machine's default brain (see brain_default.py), if usable.
+    4. home-scan - exactly one implanted brain under HOME. More than one is
+                   "ambiguous": they are listed in `candidates`, none is selected.
+
 Exit codes:
-    0 - implanted brain(s) or bootstrap candidate(s) found
-    1 - no matching result, or path does not exist
+    0 - a brain was resolved (or, without PATH / with --all / --candidates,
+        implanted brain(s) or bootstrap candidate(s) were found)
+    1 - nothing resolved (none, ambiguous, conflict), or path does not exist
 
 Output is JSON. In default mode, homes contains only current-model brains and
 conflicts describes encountered _COMMON entries that are not valid implants.
+With PATH, `status` is resolved|ambiguous|conflict|none and `source` says how a
+resolved brain was found (ancestor|default|home-scan).
 """
 
 from __future__ import annotations
@@ -33,6 +47,7 @@ if str(MODEL_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(MODEL_SCRIPTS))
 
 from brain_state import current_brain_status, current_model_root, is_linked_worktree  # noqa: E402
+from default_brain import read_default  # noqa: E402
 
 SKIP_DIRS = {
     ".git", "node_modules", ".Trash", ".cache", ".Trash-0",
@@ -245,6 +260,64 @@ def nearest_implanted_ancestor(target: Path) -> tuple[list[dict], list[dict]]:
     return [], []
 
 
+def _dedupe(homes: list[dict]) -> list[dict]:
+    merged = sorted({home["path"]: home for home in homes}.values(), key=lambda h: h["path"])
+    for home in merged:
+        home["is_nested"] = False
+        home["parent_brain"] = None
+    _mark_nested(merged)
+    return merged
+
+
+def resolve_from_path(target: Path, scan_home: bool) -> tuple[dict, bool]:
+    """Resolve a brain for `target`. Returns (payload fields, resolved)."""
+    homes, conflicts = nearest_implanted_ancestor(target)
+    if homes:
+        return {"status": "resolved", "source": "ancestor", "homes": homes, "conflicts": []}, True
+    if conflicts:
+        # A conflicting _COMMON nearer than any valid brain must never be bypassed.
+        return {"status": "conflict", "source": None, "homes": [], "conflicts": conflicts}, False
+
+    extra: dict = {}
+    default = read_default()
+    if default.status == "ok" and default.brain is not None:
+        return {
+            "status": "resolved",
+            "source": "default",
+            "homes": [brain_info(default.brain)],
+            "conflicts": [],
+        }, True
+    if default.status == "invalid":
+        extra["default_problem"] = default.reason
+
+    if scan_home:
+        found, found_conflicts = find_implanted_under(Path.home().resolve())
+        if len(found) == 1:
+            return {
+                "status": "resolved", "source": "home-scan", "homes": found,
+                "conflicts": found_conflicts, **extra,
+            }, True
+        if len(found) > 1:
+            return {
+                "status": "ambiguous", "source": None, "homes": [],
+                "candidates": found, "conflicts": found_conflicts, **extra,
+            }, False
+    return {"status": "none", "source": None, "homes": [], "conflicts": [], **extra}, False
+
+
+def search_all(target: Path) -> tuple[list[dict], list[dict]]:
+    """Every brain reachable from `target`'s ancestors, its subtree and HOME (deduplicated)."""
+    ancestor_homes, ancestor_conflicts = nearest_implanted_ancestor(target)
+    tree_homes, tree_conflicts = find_implanted_under(target)
+    home_homes, home_conflicts = find_implanted_under(Path.home().resolve())
+    homes = _dedupe([*ancestor_homes, *tree_homes, *home_homes])
+    conflicts = sorted(
+        {item["path"]: item for item in [*ancestor_conflicts, *tree_conflicts, *home_conflicts]}.values(),
+        key=lambda item: item["path"],
+    )
+    return homes, conflicts
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Find current-model brains, or bootstrap candidates with --candidates."
@@ -253,6 +326,16 @@ def parse_args() -> argparse.Namespace:
         "--candidates",
         action="store_true",
         help="Use broad notes-folder heuristics for bootstrap destination suggestions.",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="With PATH: ignore the default and list every brain reachable from PATH and HOME.",
+    )
+    parser.add_argument(
+        "--no-scan",
+        action="store_true",
+        help="With PATH: never scan HOME (ancestor and default only). Fast; used by hooks.",
     )
     parser.add_argument("path", nargs="?", help="Path to validate or resolve from.")
     return parser.parse_args()
@@ -275,21 +358,27 @@ def main() -> int:
                 "error": f"Path does not exist: {target}",
             }))
             return 1
-        if args.candidates:
-            homes = [candidate_info(target)]
-            conflicts: list[dict] = []
-        else:
-            homes, conflicts = nearest_implanted_ancestor(target)
-        print(json.dumps({
+        base = {
             "search_root": str(target),
             "provided_path": True,
             "mode": "candidates" if args.candidates else "implanted",
             "expected_model_root": str(current_model_root()),
-            "homes": homes,
-            "conflicts": conflicts,
-            "count": len(homes),
-        }))
-        return 0 if homes else 1
+        }
+        if args.candidates:
+            homes = [candidate_info(target)]
+            print(json.dumps({**base, "homes": homes, "conflicts": [], "count": len(homes)}))
+            return 0
+        if args.all:
+            homes, conflicts = search_all(target)
+            print(json.dumps({
+                **base, "status": "candidates" if homes else "none", "source": "all",
+                "homes": homes, "candidates": [], "conflicts": conflicts, "count": len(homes),
+            }))
+            return 0 if homes else 1
+        fields, resolved = resolve_from_path(target, scan_home=not args.no_scan)
+        fields.setdefault("candidates", [])
+        print(json.dumps({**base, **fields, "count": len(fields["homes"])}))
+        return 0 if resolved else 1
 
     root = Path.home().resolve()
     if args.candidates:

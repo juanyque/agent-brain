@@ -20,18 +20,28 @@ class FindHomeCliTests(unittest.TestCase):
         *args: str,
         home: Path | None = None,
     ) -> tuple[subprocess.CompletedProcess[str], dict]:
+        # Hermetic: never read this machine's real HOME or default-brain config.
         env = os.environ.copy()
-        if home is not None:
-            env["HOME"] = str(home)
-        result = subprocess.run(
-            [sys.executable, str(FIND_HOME), *args],
-            text=True,
-            capture_output=True,
-            check=False,
-            env=env,
-        )
+        env.pop("XDG_CONFIG_HOME", None)
+        with tempfile.TemporaryDirectory() as empty_home:
+            env["HOME"] = str(home) if home is not None else empty_home
+            result = subprocess.run(
+                [sys.executable, str(FIND_HOME), *args],
+                text=True,
+                capture_output=True,
+                check=False,
+                env=env,
+            )
         payload = json.loads(result.stdout)
         return result, payload
+
+    @staticmethod
+    def set_default(home: Path, brain: Path) -> None:
+        config = home / ".config" / "agent-brain"
+        config.mkdir(parents=True)
+        (config / "default_brain.json").write_text(
+            json.dumps({"version": 1, "brain": str(brain.resolve())}), encoding="utf-8"
+        )
 
     @staticmethod
     def attach(brain: Path, model: Path = MODEL_ROOT) -> None:
@@ -199,6 +209,186 @@ class FindHomeCliTests(unittest.TestCase):
             [item["path"] for item in payload["homes"]],
             [str(brain.resolve())],
         )
+
+
+    def test_path_inside_brain_reports_ancestor_source(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw) / "brain"
+            self.attach(brain)
+            (brain / "WIP").mkdir()
+
+            result, payload = self.run_find_home(str(brain / "WIP"))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((payload["status"], payload["source"]), ("resolved", "ancestor"))
+
+    def test_outside_every_brain_uses_the_default_without_scanning(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home = Path(raw) / "home"
+            default, other, cwd = home / "ws" / "default", home / "ws" / "other", Path(raw) / "tmp-wt"
+            for brain in (default, other):
+                self.attach(brain)
+            cwd.mkdir()
+            self.set_default(home, default)
+
+            result, payload = self.run_find_home(str(cwd), home=home)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((payload["status"], payload["source"]), ("resolved", "default"))
+        self.assertEqual([h["path"] for h in payload["homes"]], [str(default.resolve())])
+
+    def test_ancestor_wins_over_the_default(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home = Path(raw) / "home"
+            default, local = home / "default", home / "local"
+            self.attach(default)
+            self.attach(local)
+            self.set_default(home, default)
+
+            result, payload = self.run_find_home(str(local), home=home)
+
+        self.assertEqual(payload["source"], "ancestor")
+        self.assertEqual([h["path"] for h in payload["homes"]], [str(local.resolve())])
+
+    def test_local_conflict_blocks_default_and_home_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home = Path(raw) / "home"
+            default, legacy, old_model = home / "default", home / "legacy", home / "old-model"
+            old_model.mkdir(parents=True)
+            self.attach(default)
+            self.attach(legacy, old_model)
+            self.set_default(home, default)
+
+            result, payload = self.run_find_home(str(legacy), home=home)
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(payload["status"], "conflict")
+        self.assertEqual(payload["homes"], [])
+
+    def test_unusable_default_is_ignored_and_reported(self) -> None:
+        cases = {
+            "missing-brain": lambda home: json.dumps({"version": 1, "brain": str(home / "gone")}),
+            "bad-json": lambda home: "{not json",
+            "bad-version": lambda home: json.dumps({"version": 99, "brain": str(home)}),
+            "relative": lambda home: json.dumps({"version": 1, "brain": "relative/path"}),
+        }
+        for name, content in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as raw:
+                home, cwd = Path(raw) / "home", Path(raw) / "cwd"
+                cwd.mkdir()
+                config = home / ".config" / "agent-brain"
+                config.mkdir(parents=True)
+                (config / "default_brain.json").write_text(content(home), encoding="utf-8")
+
+                result, payload = self.run_find_home("--no-scan", str(cwd), home=home)
+
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(payload["status"], "none")
+                self.assertIn("default_problem", payload)
+
+    def test_default_pointing_at_a_wrong_model_brain_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home, cwd, old_model = Path(raw) / "home", Path(raw) / "cwd", Path(raw) / "old"
+            old_model.mkdir()
+            cwd.mkdir()
+            legacy = home / "legacy"
+            self.attach(legacy, old_model)
+            self.set_default(home, legacy)
+
+            result, payload = self.run_find_home("--no-scan", str(cwd), home=home)
+
+        self.assertEqual(payload["status"], "none")
+        self.assertIn("default_problem", payload)
+
+    def test_home_scan_resolves_a_single_brain(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home, cwd = Path(raw) / "home", Path(raw) / "cwd"
+            brain = home / "ws" / "brain"
+            self.attach(brain)
+            cwd.mkdir()
+
+            result, payload = self.run_find_home(str(cwd), home=home)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((payload["status"], payload["source"]), ("resolved", "home-scan"))
+        self.assertEqual([h["path"] for h in payload["homes"]], [str(brain.resolve())])
+
+    def test_home_scan_with_several_brains_is_ambiguous_and_selects_none(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home, cwd = Path(raw) / "home", Path(raw) / "cwd"
+            brains = [home / "a", home / "b"]
+            for brain in brains:
+                self.attach(brain)
+            cwd.mkdir()
+
+            result, payload = self.run_find_home(str(cwd), home=home)
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(payload["status"], "ambiguous")
+        self.assertEqual(payload["homes"], [])
+        self.assertEqual({c["path"] for c in payload["candidates"]}, {str(b.resolve()) for b in brains})
+
+    def test_home_scan_with_no_brains_is_none(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home, cwd = Path(raw) / "home", Path(raw) / "cwd"
+            home.mkdir()
+            cwd.mkdir()
+
+            result, payload = self.run_find_home(str(cwd), home=home)
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(payload["status"], "none")
+
+    def test_no_scan_never_scans_home(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home, cwd = Path(raw) / "home", Path(raw) / "cwd"
+            self.attach(home / "brain")
+            cwd.mkdir()
+
+            result, payload = self.run_find_home("--no-scan", str(cwd), home=home)
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(payload["status"], "none")
+
+    def test_all_ignores_the_default_and_deduplicates_overlapping_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home = Path(raw) / "home"
+            default, other = home / "ws" / "default", home / "ws" / "other"
+            for brain in (default, other):
+                self.attach(brain)
+            self.set_default(home, default)
+            cwd = home / "ws"  # inside HOME, so the subtree and HOME scans overlap
+
+            result, payload = self.run_find_home("--all", str(cwd), home=home)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["source"], "all")
+        paths = [h["path"] for h in payload["homes"]]
+        self.assertEqual(sorted(paths), sorted([str(default.resolve()), str(other.resolve())]))
+        self.assertEqual(len(paths), len(set(paths)))
+
+    def test_all_finds_a_brain_below_the_cwd_outside_home(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home, cwd = Path(raw) / "home", Path(raw) / "cwd"
+            home.mkdir()
+            nested = cwd / "sub" / "brain"
+            self.attach(nested)
+
+            result, payload = self.run_find_home("--all", str(cwd), home=home)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([h["path"] for h in payload["homes"]], [str(nested.resolve())])
+
+    def test_candidates_mode_output_is_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            project = Path(raw) / "project"
+            (project / "WIP").mkdir(parents=True)
+
+            result, payload = self.run_find_home("--candidates", str(project))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("status", payload)
+        self.assertEqual(payload["mode"], "candidates")
 
 
 if __name__ == "__main__":

@@ -22,19 +22,28 @@ def attach(brain: Path, model: Path = MODEL_ROOT) -> None:
     (brain / "_COMMON").symlink_to(model, target_is_directory=True)
 
 
-def run_hook(runtime: str, stdin_payload: dict, agent_brain_home: Path) -> subprocess.CompletedProcess[str]:
+def run_hook(
+    runtime: str,
+    stdin_payload: dict,
+    agent_brain_home: Path,
+    home: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
     import os
 
+    # Hermetic: never read this machine's real HOME or default-brain config.
     env = os.environ.copy()
+    env.pop("XDG_CONFIG_HOME", None)
     env["AGENT_BRAIN_HOME"] = str(agent_brain_home)
-    return subprocess.run(
-        [sys.executable, str(HOOK), "--runtime", runtime],
-        input=json.dumps(stdin_payload),
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
-    )
+    with tempfile.TemporaryDirectory() as empty_home:
+        env["HOME"] = str(home) if home is not None else empty_home
+        return subprocess.run(
+            [sys.executable, str(HOOK), "--runtime", runtime],
+            input=json.dumps(stdin_payload),
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
 
 
 class SessionStartHookTests(unittest.TestCase):
@@ -280,6 +289,75 @@ class SessionStartHookTests(unittest.TestCase):
 
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(json.loads(result.stdout), {})
+
+
+    def _home_with_default(self, raw: str, brain: Path) -> Path:
+        home = Path(raw) / "home"
+        config = home / ".config" / "agent-brain"
+        config.mkdir(parents=True)
+        (config / "default_brain.json").write_text(
+            json.dumps({"version": 1, "brain": str(brain.resolve())}), encoding="utf-8"
+        )
+        return home
+
+    def test_outside_a_brain_with_a_default_only_suggests_it(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            brain = Path(raw) / "defaultvault"
+            attach(brain)
+            cwd = Path(raw) / "tmp-worktree"
+            cwd.mkdir()
+            home = self._home_with_default(raw, brain)
+
+            result = run_hook(
+                "claude",
+                {"cwd": str(cwd), "session_id": "sess-1"},
+                agent_brain_home=REPO_ROOT,
+                home=home,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("defaultvault", context)
+        self.assertIn("Do NOT connect it", context)
+        self.assertIn("`sess-1`", context)
+        self.assertNotIn("invoke the `brain` skill", context)
+        self.assertNotIn("--apply", context)
+
+    def test_inside_a_brain_ignores_the_default(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            local, default = Path(raw) / "localvault", Path(raw) / "defaultvault"
+            attach(local)
+            attach(default)
+            home = self._home_with_default(raw, default)
+
+            result = run_hook("claude", {"cwd": str(local)}, agent_brain_home=REPO_ROOT, home=home)
+
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("localvault", context)
+        self.assertIn("invoke the `brain` skill", context)
+
+    def test_outside_a_brain_without_default_stays_silent_even_if_brains_exist_in_home(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home = Path(raw) / "home"
+            attach(home / "ws" / "brain")
+            cwd = Path(raw) / "tmp-worktree"
+            cwd.mkdir()
+
+            result = run_hook("claude", {"cwd": str(cwd)}, agent_brain_home=REPO_ROOT, home=home)
+
+        self.assertEqual(json.loads(result.stdout), {})
+
+    def test_conflicting_local_brain_never_falls_back_to_the_default(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            default, legacy, old_model = Path(raw) / "defaultvault", Path(raw) / "legacy", Path(raw) / "old"
+            old_model.mkdir()
+            attach(default)
+            attach(legacy, old_model)
+            home = self._home_with_default(raw, default)
+
+            result = run_hook("claude", {"cwd": str(legacy)}, agent_brain_home=REPO_ROOT, home=home)
+
+        self.assertEqual(json.loads(result.stdout), {})
 
 
 if __name__ == "__main__":
