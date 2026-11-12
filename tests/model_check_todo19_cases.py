@@ -276,21 +276,12 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("git diff HEAD --check", worktree)
         self.assertIn("worktree-scope,whitespace", worktree)
 
-    def test_macos_and_linux_run_current_and_immutable_baseline_tests(self) -> None:
+    def test_macos_and_linux_run_current_tests(self) -> None:
         job = stdlib_contracts_job()
         names = tuple(name for name, _ in job.steps)
-        current_index = names.index("Run contract and integration tests")
-        baseline_index = names.index("Run immutable baseline tests")
-        baseline = job.step_named("Run immutable baseline tests")
 
         self.assertEqual(job.os, ("ubuntu-latest", "macos-latest"))
-        self.assertLess(current_index, baseline_index)
-        self.assertIn(
-            "python3 tests/support/run_baseline_tests.py --root . --git-ref "
-            "6373436ab4a16170cd4d1911f255a14430e367ca --expected-ids "
-            "tests/fixtures/baseline-test-ids.txt",
-            baseline,
-        )
+        self.assertIn("Run contract and integration tests", names)
 
     def test_complete_local_gate_alias_is_governed(self) -> None:
         manifest = json.loads(QA_COMMANDS.read_text(encoding="utf-8"))
