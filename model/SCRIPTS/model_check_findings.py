@@ -19,12 +19,12 @@ def _matching(findings: list[Finding], code: CodeDef) -> list[Finding]:
 
 
 def _duplicate_policy_findings(root: Path, model: dict[str, JsonValue], code: CodeDef) -> list[Finding]:
-    from model_check_content_boundaries import content_boundary_findings
+    from model_check_content_boundaries import required_content_boundary_findings
     from model_check_evidence_ownership import scan_evidence_ownership
 
     findings = policy_owner_findings(root, model, code)
     findings.extend(_matching(scan_evidence_ownership(root), code))
-    findings.extend(_matching(content_boundary_findings(root), code))
+    findings.extend(_matching(required_content_boundary_findings(root), code))
     return findings
 
 
@@ -55,9 +55,9 @@ def _default_findings(
     if code.code == "orphan-model-artifact":
         return orphan_rule_findings(root, model, root / "model" / "AGENTS.common.md")
     if code.code == "missing-task-target":
-        from model_check_content_boundaries import content_boundary_findings
+        from model_check_content_boundaries import required_content_boundary_findings
 
-        return _matching(content_boundary_findings(root), code)
+        return _matching(required_content_boundary_findings(root), code)
     if code.code in {"missing-skill-reference", "unreachable-conditional-artifact"}:
         from model_check_skill_dependencies import skill_dependency_findings
 
@@ -71,9 +71,9 @@ def _default_findings(
 
         return _matching(scan_evidence_ownership(root), code)
     if code.family == "content-boundary":
-        from model_check_content_boundaries import content_boundary_findings
+        from model_check_content_boundaries import required_content_boundary_findings
 
-        return _matching(content_boundary_findings(root), code)
+        return _matching(required_content_boundary_findings(root), code)
     if code.check == "git-authority-explicit":
         return git_authority_findings(root, code)
     return []

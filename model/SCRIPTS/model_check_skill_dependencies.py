@@ -51,8 +51,8 @@ def _router_destinations(root: Path) -> tuple[list[str], str | None]:
 
 def _readable_file(path: Path) -> bool:
     try:
-        path.read_bytes()
-    except OSError:
+        path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
         return False
     return True
 

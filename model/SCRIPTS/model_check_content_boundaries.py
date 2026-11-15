@@ -173,3 +173,9 @@ def content_boundary_findings(root: Path) -> list[Finding]:
     findings.extend(_duplicate_owner_findings(claims))
     findings.extend(startup_boundary_findings(root, startup_payloads=()))
     return sorted(findings, key=lambda item: (item.code, item.path, item.target))
+
+
+def required_content_boundary_findings(root: Path) -> list[Finding]:
+    """Gate entry point: the task-type index is mandatory, so a missing or unreadable one is fatal."""
+    read_required_text(root / "model" / "TASK_TYPES" / "TASK_TYPES.common.md", root)
+    return content_boundary_findings(root)

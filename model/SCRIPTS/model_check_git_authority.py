@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from model_check_contract import CodeDef, Finding
+from model_check_contract import CodeDef, Finding, read_required_text
 
 
 GIT_MUTATION_RE = re.compile(
@@ -42,8 +42,8 @@ class GitAuthority:
     repository_state_mutation: str
 
 
-def git_authority(common_path: Path) -> GitAuthority:
-    return git_authority_from_text(common_path.read_text(encoding="utf-8"))
+def git_authority(common_path: Path, root: Path | None = None) -> GitAuthority:
+    return git_authority_from_text(read_required_text(common_path, root))
 
 
 def git_authority_from_text(text: str) -> GitAuthority:
@@ -114,10 +114,7 @@ def _git_authorized(line: str, context: str) -> bool:
 def git_command_guard_findings(root: Path, code: CodeDef) -> list[Finding]:
     findings: list[Finding] = []
     for path in _model_markdown_paths(root):
-        try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
+        lines = read_required_text(path, root).splitlines()
         rel_path = path.relative_to(root).as_posix()
         for line_number, line in enumerate(lines, start=1):
             if GIT_MUTATION_RE.search(line) is None:

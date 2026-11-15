@@ -86,7 +86,7 @@ def audience_findings(model: dict[str, JsonValue], code: CodeDef) -> list[Findin
 
 def git_authority_findings(root: Path, code: CodeDef) -> list[Finding]:
     findings = git_command_guard_findings(root, code)
-    authority = git_authority(root / "model" / "AGENTS.common.md")
+    authority = git_authority(root / "model" / "AGENTS.common.md", root)
     if (
         authority.git_mv_condition == "brain-internal-standing-authorization"
         and authority.other_git_condition == "explicit-git-authorization"

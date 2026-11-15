@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from model_check_contract import CodeDef, Finding, JsonValue
+from model_check_contract import CodeDef, Finding, JsonValue, read_required_text
 
 
 def _brain_operational_prose_findings(root: Path, code: CodeDef) -> list[Finding]:
@@ -15,10 +15,7 @@ def _brain_operational_prose_findings(root: Path, code: CodeDef) -> list[Finding
         "invocation details, flags",
     )
     path = root / "model" / "BRAIN.common.md"
-    try:
-        text = path.read_text(encoding="utf-8").lower()
-    except OSError:
-        return []
+    text = read_required_text(path, root).lower()
     return [
         Finding(
             code.code,

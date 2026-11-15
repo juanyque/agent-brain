@@ -882,6 +882,81 @@ class UnreadableTerminalTests(unittest.TestCase):
         self.assert_usage_error(result, rel)
 
 
+class UnreadableRuleFileTests(unittest.TestCase):
+    """Mandatory rule files that a narrow check reads never pass silently or crash."""
+
+    INDEX = "model/TASK_TYPES/TASK_TYPES.common.md"
+    SCRIPTS_README = "model/SCRIPTS/README.scripts.common.md"
+    BRAIN = "model/BRAIN.common.md"
+    CONSTRAINTS = "skills/brain/references/constraints.md"
+
+    def run_mutated(self, mutate, *args: str) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            copy_repo_fixture(root)
+            mutate(root)
+            return run_cli("--root", str(root), *args)
+
+    def assert_no_crash(self, result: subprocess.CompletedProcess[str]) -> None:
+        output = result.stdout + result.stderr
+        self.assertNotIn("internal error", output)
+        self.assertNotIn("Traceback", output)
+
+    def assert_usage_error(self, result: subprocess.CompletedProcess[str], rel: str) -> None:
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("usage/metadata error", result.stderr)
+        self.assertIn(rel, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assert_no_crash(result)
+
+    def test_missing_task_type_index_is_a_usage_error_under_plain_strict(self) -> None:
+        result = self.run_mutated(lambda root: (root / self.INDEX).unlink(), "--strict")
+        self.assert_usage_error(result, self.INDEX)
+
+    def test_invalid_utf8_in_scripts_readme_is_a_usage_error_for_git_authority(self) -> None:
+        def mutate(root: Path) -> None:
+            path = root / self.SCRIPTS_README
+            path.write_bytes(path.read_bytes() + b"\n\xff\xfe\x80\n")
+
+        result = self.run_mutated(mutate, "--strict", "--only", "git-authority-explicit")
+        self.assert_usage_error(result, self.SCRIPTS_README)
+
+    def test_missing_common_agents_file_is_a_usage_error_for_git_authority(self) -> None:
+        rel = "model/AGENTS.common.md"
+        result = self.run_mutated(
+            lambda root: (root / rel).unlink(), "--strict", "--only", "git-authority-explicit"
+        )
+        self.assert_usage_error(result, rel)
+
+    def test_missing_brain_guide_is_a_usage_error_for_policy_owner_check(self) -> None:
+        result = self.run_mutated(
+            lambda root: (root / self.BRAIN).unlink(),
+            "--strict",
+            "--only",
+            "misplaced-policy-owner",
+        )
+        self.assert_usage_error(result, self.BRAIN)
+
+    def test_undecodable_skill_reference_is_a_missing_skill_reference_finding(self) -> None:
+        def mutate(root: Path) -> None:
+            path = root / self.CONSTRAINTS
+            path.write_bytes(path.read_bytes() + b"\n\xff\xfe\x80\n")
+
+        result = self.run_mutated(
+            mutate, "--strict", "--only", "missing-skill-reference", "--format", "json"
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assert_no_crash(result)
+        findings = parsed_json(result)["findings"]
+        # One finding per skill route that shares this terminal.
+        self.assertTrue(findings)
+        self.assertEqual(
+            {(f["code"], f["path"]) for f in findings},
+            {("missing-skill-reference", self.CONSTRAINTS)},
+        )
+        self.assertIn("missing or unreadable", findings[0]["message"])
+
+
 class TrackedTextWhitespaceTests(unittest.TestCase):
     def test_tracked_markdown_and_jinja_files_carry_no_trailing_whitespace(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
