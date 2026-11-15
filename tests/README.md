@@ -31,7 +31,7 @@ For a fast check of the model and public-boundary gates (about 1.5 minutes
 instead of the full suite's ~14), run:
 
 ```bash
-python3 -m unittest tests.test_model_check tests.test_public_boundary -v
+python3 -m unittest tests.test_model_check tests.test_model_gates tests.test_public_boundary -v
 python3 model/SCRIPTS/model_check.py --strict --format json
 ```
 
@@ -80,8 +80,7 @@ summary and process exit code.
 | `test_profile_integration.py` | End-to-end profile selection, value-free preflight, conflict quarantine, projection, and double-apply behavior under an isolated temporary `HOME`. |
 | `test_runtime_provider_discovery.py` | Sanitized Codex/Claude MCP registry discovery and readiness normalization. |
 | `test_profile_context.py` | Skill-facing capability resolution, runtime invocation hints, and fail-closed exact matching against complete caller-supplied active tool catalogs. |
-| `test_model_check.py::StrictGateTests` | Negative probes for orphan model artifacts, startup budget overflow, untracked out-of-scope files, and untracked whitespace. |
-| `test_model_check.py::WorkflowContractTests` | Static workflow contract for full-history checkout, `MODEL_BASE` object verification, PR/push/root fallback selection, and macOS/Linux committed/worktree gates. |
+| `test_model_gates.py` | `StrictGateTests`: negative probes for orphan model artifacts, startup budget overflow, untracked out-of-scope files, and untracked whitespace. `WorkflowContractTests`: static workflow contract for full-history checkout, `MODEL_BASE` object verification, PR/push/root fallback selection, and macOS/Linux committed/worktree gates and test steps. `OperatingModelContractTests`: canonical `OPERATING-MODEL.json`, governed inventory matching on-disk Markdown, and exact/disjoint future routes. `TrackedTextWhitespaceTests`: tracked `*.md`/`*.j2` files carry no trailing whitespace. |
 
 ## Test design rules
 

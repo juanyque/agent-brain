@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from tests.model_check_todo19_cases import ROOT, stdlib_contracts_job
+from tests.test_model_gates import ROOT, stdlib_contracts_job
 
 
 class CiWorkflowContractTests(unittest.TestCase):

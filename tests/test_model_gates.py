@@ -14,7 +14,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "model" / "SCRIPTS" / "model_check.py"
 MODEL = ROOT / "model" / "OPERATING-MODEL.json"
 WORKFLOW = ROOT / ".github" / "workflows" / "tests.yml"
-QA_COMMANDS = ROOT / "tests" / "fixtures" / "operating-model-qa-commands.json"
 
 
 def run_cli(*args: str, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
@@ -283,12 +282,75 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(job.os, ("ubuntu-latest", "macos-latest"))
         self.assertIn("Run contract and integration tests", names)
 
-    def test_complete_local_gate_alias_is_governed(self) -> None:
-        manifest = json.loads(QA_COMMANDS.read_text(encoding="utf-8"))
-        todo19 = next(item for item in manifest["todos"] if item["todo"] == 19)
 
+def canonical_model() -> dict[str, object]:
+    raw = MODEL.read_bytes()
+    parsed = json.loads(raw)
+    expected = (
+        json.dumps(
+            parsed, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        ).encode()
+        + b"\n"
+    )
+    if raw != expected:
+        raise AssertionError(f"{MODEL} is not canonical JSON")
+    return parsed
+
+
+class OperatingModelContractTests(unittest.TestCase):
+    def test_governed_inventory_matches_model_markdown(self) -> None:
+        model = canonical_model()
+        governed = set(model["governed_inventory"])
+        discovered = {
+            str(path.relative_to(ROOT))
+            for parent in (ROOT, ROOT / "model", ROOT / "skills" / "brain")
+            for path in parent.rglob("*.md")
+            if parent != ROOT or path.name == "AGENTS.md"
+        }
+        self.assertEqual(governed, discovered)
+
+    def test_future_routes_are_exact_disjoint_and_fully_named(self) -> None:
+        routes = canonical_model()["future_routes"]
         self.assertEqual(
-            manifest["aliases"],
-            [{"alias": "complete-local-gate", "step": 1, "todo": 19}],
+            {route["route_id"] for route in routes},
+            {
+                "skill.session-routing",
+                "skill.documentation",
+                "skill.tool-catalog",
+                "skill.constraints",
+            },
         )
-        self.assertEqual(todo19["steps"][0]["alias"], "complete-local-gate")
+        self.assertEqual(len({route["scenario_id"] for route in routes}), 4)
+        temporary = {item for route in routes for item in route["temporary_payloads"]}
+        final = {item for route in routes for item in route["final_payloads"]}
+        self.assertTrue(temporary.isdisjoint(final))
+
+
+class TrackedTextWhitespaceTests(unittest.TestCase):
+    def test_tracked_markdown_and_jinja_files_carry_no_trailing_whitespace(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        listing = subprocess.run(
+            ["git", "ls-files", "--", "*.md", "*.j2"],
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        offenders: list[str] = []
+        for rel in listing.stdout.splitlines():
+            for lineno, line in enumerate(
+                (repo_root / rel).read_text(encoding="utf-8", errors="replace").splitlines(),
+                start=1,
+            ):
+                if line != line.rstrip(" \t"):
+                    offenders.append(f"{rel}:{lineno}")
+        self.assertEqual(
+            offenders,
+            [],
+            "trailing whitespace reintroduced (git diff --check would fail on "
+            "any future diff touching these lines)",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
