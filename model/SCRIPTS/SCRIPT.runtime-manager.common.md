@@ -2,7 +2,7 @@
 
 ## Purpose
 
-All runtime wiring for a brain (D21/D26). Replaces the runtime logic previously in `home_setup.py` (removed in A.2).
+All runtime wiring for a brain. `home_setup.py` handles brain structure only.
 
 ## What it does
 

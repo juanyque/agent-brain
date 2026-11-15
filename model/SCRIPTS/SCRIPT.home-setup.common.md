@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Attach a brain to the agent-brain model — **structure only** (D21). Creates the
+Attach a brain to the agent-brain model — **structure only**. Creates the
 content directories, `_COMMON` symlink, local maintenance state, wrapper files, and
 template symlinks. Handles staging for virgin brains. All runtime logic is in
 `runtime_manager.py`.
@@ -19,7 +19,7 @@ template symlinks. Handles staging for virgin brains. All runtime logic is in
    - `keep` leaves links at the brain root for the user to manage and stages the
      remaining content. It is rejected when a link occupies a canonical scaffold
      directory such as `JOURNAL/` or `WIP/`.
-3. **`_COMMON` attachment** — creates the `_COMMON` symlink pointing to the model root. Handles conflicts per D25 (see below).
+3. **`_COMMON` attachment** — creates the `_COMMON` symlink pointing to the model root. Handles conflicts as described in `_COMMON` conflict below.
 4. **Content directories** — creates every missing top-level content layer:
    `INBOX/`, `WIP/`, `JOURNAL/`, `MEMORY/`, `BACKLOG/`, `ARCHIVED/`, `REPORTS/`,
    `OUTBOX/`, and `QUARANTINE/`. It also creates the operational destinations
@@ -73,7 +73,7 @@ python3 home_setup.py --brain <path> [--common <model_path>] [--apply] [--switch
 - `--brain` (required): path to the brain root.
 - `--common`: path to the model root. Defaults to this script's `../` (the `model/` directory).
 - `--apply`: execute (default: dry-run).
-- `--switch-model`: repoint `_COMMON` on conflict (D25).
+- `--switch-model`: repoint `_COMMON` on conflict.
 - `--relink-common`: repoint only a dangling or missing `_COMMON`, nothing else; cannot be combined with `--switch-model`, `--skip-full-reorder` or `--symlink-policy`.
 - `--skip-full-reorder`: skip the staging sweep (only attach `_COMMON` + wrappers).
 - `--symlink-policy`: required in apply mode when the staging sweep finds
@@ -88,4 +88,4 @@ python3 home_setup.py --brain <path> [--common <model_path>] [--apply] [--switch
 | attached-link-missing | missing | present | — | Re-create `_COMMON` + wrappers, no staging |
 | initial | ok | — | has content | No re-stage; standardize drains `_STAGING` |
 | maintenance | ok | — | absent | No re-order; idempotent refresh |
-| conflict | wrong target | — | — | D25: ask switch / `--switch-model` |
+| conflict | wrong target | — | — | Ask switch / `--switch-model` |

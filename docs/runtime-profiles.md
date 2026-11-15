@@ -123,7 +123,7 @@ provider is an explicit fallback, not silent permission to invent a result.
 
 ## Issue-tracking conventions
 
-`issue_tracking` captures environment policy that was previously embedded in skills:
+`issue_tracking` captures environment policy that skills do not embed:
 
 - recognized project keys and issue-key patterns;
 - branch naming patterns;

@@ -1,4 +1,4 @@
-"""Shared helpers for obsidian skill runtime scripts.
+"""Shared helpers for brain skill runtime scripts.
 
 Internal module (leading underscore) — not intended to be invoked directly.
 """

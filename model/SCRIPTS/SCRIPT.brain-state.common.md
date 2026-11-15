@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Authoritative brain state machine (D21/D24). Shared by `home_setup`, `runtime_manager`, and `bootstrap`. Consulted before any mutation to decide the correct flow.
+Authoritative brain state machine. Shared by `home_setup`, `runtime_manager`, and `bootstrap`. Consulted before any mutation to decide the correct flow.
 
 ## States
 
@@ -12,7 +12,7 @@ Authoritative brain state machine (D21/D24). Shared by `home_setup`, `runtime_ma
 | `attached-link-missing` | missing | present | — | Re-create `_COMMON` + wrappers, no staging |
 | `initial` | ok | — | has content | No re-stage; standardize drains `_STAGING` |
 | `maintenance` | ok | — | absent | No re-order; idempotent refresh |
-| `conflict` | wrong target | — | — | D25: ask switch / `--switch-model` |
+| `conflict` | wrong target | — | — | Ask switch / `--switch-model` |
 
 ## Interface
 

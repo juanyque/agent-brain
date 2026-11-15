@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runtime manager — all runtime wiring for a brain (D21/D26).
+"""Runtime manager — all runtime wiring for a brain.
 
 Handles: runtime discovery, Direction A (ingest local -> brain _AGENTS/),
 Direction B (implant brain -> local via runtime_install.sh), conflict
@@ -336,7 +336,7 @@ def process_runtime(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Runtime manager — wire runtime config for a brain (D21)")
+    parser = argparse.ArgumentParser(description="Runtime manager — wire runtime config for a brain")
     parser.add_argument("--brain", required=True, help="Path to the brain root")
     parser.add_argument("--common", help="Path to the model root (for repo resolution). Defaults to this script's model/.")
     parser.add_argument("--apply", action="store_true", help="Apply changes. Default is dry-run.")

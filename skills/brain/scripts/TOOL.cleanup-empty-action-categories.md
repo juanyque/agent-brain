@@ -46,12 +46,12 @@ Current placeholder map (extend in-place as the template grows):
 - `WORK`: `[[Project or context]]`, `Detailed work performed for that project/context today`
 
 ## When this runs
-- **At day rollover** — invokable by the `brain` skill during Flow 1 step 3 (*"Clean the previous existing daily note by removing empty action categories"*), scoped to the previous daily via `--glob <prev-date>.md`, once wired into the maintenance scheduler. Today still callable on demand.
+- **At day rollover** — invokable by the `brain` skill during Flow 1 step 3 (*"Clean the previous existing daily note by removing empty action categories"*), scoped to the previous daily via `--glob <prev-date>.md`. The maintenance scheduler does not run it.
 - **As a batch pass** to clean up an accumulated stack of dailies.
 - **On demand**, invoked manually by the user or agent.
 
 ## Known limitations
-- Legacy-shape dailies (`## Daily Tasks`, `## Daily Objetives`) without `# Actions` are skipped. Migration is tracked separately (see `WIP/WIP.md` — JOURNAL legacy bulk migration task).
+- Legacy-shape dailies (`## Daily Tasks`, `## Daily Objetives`) without `# Actions` are skipped.
 - Placeholder detection is substring-based per category. New template scaffolding lines require manual additions to `PLACEHOLDER_SUBSTRINGS`.
 - Individual placeholder children inside a category that also has real content are NOT removed; the script's unit of removal is the full category, not the line.
 

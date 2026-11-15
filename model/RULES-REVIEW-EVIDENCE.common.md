@@ -158,7 +158,7 @@ When a report moves to `ARCHIVED/Reviews/`, its own attachments (if any, added d
 ## Report aging (maintenance)
 
 - Reports live in `WIP/` while being curated or while the cycle is open.
-- A maintenance job (part of the obsidian skill's `maintenance_scheduler.py`) periodically reviews aged reports in `WIP/` and proposes moving them to `ARCHIVED/Reviews/` once the cycle has closed and the report is no longer actively referenced.
+- A maintenance job (part of the brain skill's `maintenance_scheduler.py`) periodically reviews aged reports in `WIP/` and proposes moving them to `ARCHIVED/Reviews/` once the cycle has closed and the report is no longer actively referenced.
 - Evidence notes are never proposed for archival — they are permanent store.
 
 ## References

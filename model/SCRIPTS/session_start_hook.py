@@ -18,9 +18,9 @@ stdin: the runtime's own SessionStart hook payload (JSON). `cwd`, `source`, and
 an error -- see the resolve_* helpers.
 
 stdout: the runtime's own SessionStart hook response contract. Claude Code,
-Codex, and the OpenCode bridge share the same shape (verified empirically against Codex CLI
-0.150.1: hookSpecificOutput.additionalContext is genuinely injected into the
-agent's own turn, not just schema-accepted-but-ignored) --
+Codex, and the OpenCode bridge share the same shape
+(hookSpecificOutput.additionalContext is injected into the agent's own turn,
+not just schema-accepted-but-ignored) --
 `{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "..."}}`
 when a brain is found, `{}` otherwise. Outside every brain the hook only
 SUGGESTS this machine's default brain (when one is configured) and never asks
@@ -44,11 +44,10 @@ import sys
 from pathlib import Path
 from typing import TypeAlias
 
-# The exact invocation phrase differs per runtime (confirmed empirically,
-# 2026-08-29): Claude Code's registered `/brain` slash command reliably runs
-# the session-start protocol from a plain "invoke the brain skill" reminder.
-# In Codex and OpenCode, `$brain` is plain chat text the agent has to interpret, not a
-# registered command -- leaving off the explicit "nueva sesion en español"
+# The exact invocation phrase differs per runtime: Claude Code's registered
+# `/brain` slash command reliably runs the session-start protocol from a plain
+# "invoke the brain skill" reminder. In Codex and OpenCode, `$brain` is plain
+# chat text the agent has to interpret, not a registered command -- leaving off the explicit "nueva sesion en español"
 # argument produced unreliable initialization and the wrong response
 # language, so that runtime's phrasing spells out the exact invocation.
 RUNTIME_MESSAGES = {

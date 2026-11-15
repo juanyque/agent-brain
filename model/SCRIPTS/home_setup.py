@@ -269,7 +269,7 @@ def main() -> int:
     parser.add_argument("--common", help="Path to the model root. Defaults to this script's repo model/.")
     parser.add_argument("--apply", action="store_true", help="Apply changes. Default is dry-run.")
     parser.add_argument("--skip-full-reorder", action="store_true", help="Skip staging sweep. Only attach _COMMON + wrappers.")
-    parser.add_argument("--switch-model", action="store_true", help="Repoint _COMMON if it conflicts (D25). A .backup-<ts> is created.")
+    parser.add_argument("--switch-model", action="store_true", help="Repoint _COMMON if it conflicts. A .backup-<ts> is created.")
     parser.add_argument("--relink-common", action="store_true", help="Repoint only a dangling or missing _COMMON (for example in a git worktree); no backup, scaffolding or staging.")
     parser.add_argument("--symlink-policy", choices=("copy", "keep"), help="Top-level symlink handling during staging: copy (recommended) or keep non-canonical links.")
     args = parser.parse_args()

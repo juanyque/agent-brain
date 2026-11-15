@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# bootstrap-zero.sh — agent-brain setup orchestrator for a brain (D21).
+# bootstrap-zero.sh — agent-brain setup orchestrator for a brain.
 #
 # Thin orchestrator: resolves the brain path, git-snapshots for rollback,
 # then DELEGATES to home_setup (structure) and runtime_manager (runtime).

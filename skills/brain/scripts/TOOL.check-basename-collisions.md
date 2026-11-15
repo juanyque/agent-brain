@@ -84,7 +84,7 @@ Some collision groups are governed by conventions outside Obsidian's wikilink sc
 Add new entries here as they are discovered.
 
 ## Pattern-driven duplicates
-For repeated-pattern duplicates (e.g. `plan.md` × 67 in per-ticket folders), the rename suggestions are technically correct but the right structural fix is the broader per-ticket consolidation tracked in `WIP/WIP.md`, not individual renames. The report's footer reminds the user.
+For repeated-pattern duplicates (e.g. `plan.md` × 67 in per-ticket folders), the rename suggestions are technically correct but the right structural fix is a broader per-ticket consolidation, not individual renames. The report's footer reminds the user.
 
 ## Listing references (interactive review)
 

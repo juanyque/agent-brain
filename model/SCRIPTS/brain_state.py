@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Brain state machine — authoritative state detection (D21/D24).
+"""Brain state machine — authoritative state detection.
 
 Shared by home_setup, runtime_manager, and bootstrap. Consulted before any
 mutation to decide the correct flow for the brain's current state.
@@ -7,10 +7,10 @@ mutation to decide the correct flow for the brain's current state.
 States:
   virgin                 — no _COMMON + no markers (wrappers). Fresh folder.
   attached-link-missing   — markers present + _COMMON missing/broken (cloned
-                           brain where _COMMON is gitignored per D3/D24).
+                           brain where _COMMON is gitignored).
   initial                — _COMMON ok + _STAGING with content (being reorganized).
   maintenance            — _COMMON ok + no _STAGING (organized, stable).
-  conflict               — _COMMON points to a different model (D25: ask switch).
+  conflict               — _COMMON points to a different model (ask switch).
 """
 
 from __future__ import annotations
@@ -102,7 +102,7 @@ def staging_status(brain_root: Path) -> tuple[str, int]:
 
 
 def has_markers(brain_root: Path) -> bool:
-    """Check if wrapper marker files exist at the brain root (D24).
+    """Check if wrapper marker files exist at the brain root.
 
     Markers are wrapper files (AGENTS.md, BRAIN.md, etc.) that survive a
     git clone even when _COMMON (gitignored) does not. Their presence
