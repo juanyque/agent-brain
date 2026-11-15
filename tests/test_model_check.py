@@ -1916,15 +1916,3 @@ class LoadingContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-def __getattr__(name: str) -> type[unittest.TestCase]:
-    if name == "LoadingTraceTests":
-        return LoadingContractTests
-    # Temporary: the QA manifest still selects these classes through this module.
-    # Removed together with the manifest when the evidence protocol is retired.
-    if name in {"StrictGateTests", "WorkflowContractTests"}:
-        from tests import test_model_gates
-
-        return getattr(test_model_gates, name)
-    raise AttributeError(name)

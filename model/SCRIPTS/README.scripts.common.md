@@ -88,7 +88,7 @@ references remain visible without failing the command.
 
 Read-only contract checker for the public operating model, local worktree gates, committed-range
 gates, context budgets, route/set equality, ownership metadata, and brain compatibility. It is the
-canonical script behind CI strict gates and the todo19 `complete-local-gate` QA-manifest alias.
+canonical script behind the CI strict gates and the local gate recipe in the repository `README.md`.
 
 ```bash
 python3 SCRIPTS/model_check.py --strict --format json

@@ -192,13 +192,27 @@ commands, and fixture rules.
 
 ### Local and CI gates
 
-The canonical local gate is the todo19 QA-manifest alias `complete-local-gate`, executed only
-through `tests/support/evidence_cli.py run-todo`. It runs the current unittest suite,
-Python compilation, shell syntax checks, committed diff whitespace checks, worktree
-scope/whitespace checks, the strict operating-model checker, and a zero-`__pycache__`
-assertion.
+The local gate is the list of commands below, run from the repository root. It runs the
+current unittest suite, Python compilation, shell syntax checks, a working-tree whitespace
+check (`git diff HEAD --check`), worktree scope/whitespace checks, the strict operating-model
+checker, and a zero-`__pycache__` assertion; every command must exit 0. It needs Python 3.10 or
+newer; `uv` supplies the test dependencies. These are local checks: the range of commits being
+pushed is audited only by CI (see below).
 
-GitHub Actions mirrors the strict local gate on `ubuntu-latest` and `macos-latest`. The workflow
+```bash
+export PYTHONDONTWRITEBYTECODE=1
+uv run --python 3.12 --with 'jsonschema>=4.25,<5' --with 'pydantic>=2.10,<3' --with 'pyyaml>=6.0.2,<7' \
+  python3 -m unittest discover -s tests -v
+python3 tests/support/compile_sources.py model/SCRIPTS skills tests
+find bootstrap-zero.sh model/SCRIPTS -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+git diff HEAD --check
+python3 model/SCRIPTS/model_check.py --strict --only worktree-scope,whitespace --format json
+python3 model/SCRIPTS/model_check.py --strict --format json
+! find . -type d -name __pycache__ -not -path './.git/*' -print -quit | grep -q .
+```
+
+GitHub Actions runs the same checks on `ubuntu-latest` and `macos-latest`, plus the
+committed-range gates, and does not assert the zero-`__pycache__` condition. The workflow
 checks out full history (`fetch-depth: 0`), resolves `MODEL_BASE` from a valid pull-request base,
 push base, the pinned model baseline commit (`MODEL_BASELINE`), or root-commit fallback, proves the selected commit object,
 then runs committed-range gates before the suite and worktree gates after compile/shell checks.

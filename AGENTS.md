@@ -123,7 +123,7 @@ When editing this repo, the granular rule files are the source of truth for thei
 | Consumed model | `model/AGENTS.common.md` and `model/BRAIN.common.md` | brain-local wrappers through `_COMMON` |
 | Brain-local wrappers | local brain `AGENTS.md`, `BRAIN.md`, `TASK_TYPES/TASK_TYPES.md` | brain-local |
 | Runtime config | runtime homes and generated symlinks | user-owned runtime state |
-| Local and CI gates | `.github/workflows/tests.yml`, `tests/fixtures/operating-model-qa-commands.json`, and `model/SCRIPTS/model_check.py` | maintainer verification |
+| Local and CI gates | `.github/workflows/tests.yml`, the "Local and CI gates" recipe in `README.md`, and `model/SCRIPTS/model_check.py` | maintainer verification |
 | Rules | `model/RULES-*.common.md` | conditional route payloads |
 | Jobs | `model/JOBS.common.md` | maintenance job payloads |
 | Task types | `model/TASK_TYPES/*.common.md` | conditional task payloads |
@@ -138,9 +138,9 @@ The code uses `match` statements, so the tests need Python 3.10 or newer. If the
 Run the focused operating-model contract first:
 
 ```bash
-python3 -m unittest tests.test_operating_model_evidence.OperatingModelContractTests tests.test_model_check.OwnershipContractTests.test_missing_skills_audience_is_rejected -v
+python3 -m unittest tests.test_model_gates tests.test_model_check.OwnershipContractTests.test_missing_skills_audience_is_rejected -v
 ```
 
-For broader verification, run the full suite, strict checker, canonical JSON, compile, and diff checks described by `tests/fixtures/operating-model-qa-commands.json`.
+For broader verification, run the full suite, strict checker, canonical JSON, compile, and diff checks listed under "Local and CI gates" in `README.md`.
 
 Run every test command with `PYTHONDONTWRITEBYTECODE=1`: the complete local gate fails its last clause if any `__pycache__` directory exists in the repository. Any Python process that imports these scripts without the variable can recreate them between runs; they are gitignored, so if that clause fails, delete the stray `__pycache__` directories and re-run it.
