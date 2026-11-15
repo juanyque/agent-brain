@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,13 +66,17 @@ def _validate_digest(raw: bytes, digest_raw: bytes) -> list[ContextBaselineFindi
 
 
 def _duplicates(values: list[str]) -> set[str]:
-    seen: set[str] = set()
-    duplicates: set[str] = set()
-    for value in values:
-        if value in seen:
-            duplicates.add(value)
-        seen.add(value)
-    return duplicates
+    return {value for value, count in Counter(values).items() if count > 1}
+
+
+def _scenario_rows(value: JsonValue) -> list[dict[str, JsonValue]] | None:
+    if not isinstance(value, list):
+        return None
+    return [row for row in value if isinstance(row, dict)]
+
+
+def _triples(rows: list[dict[str, JsonValue]]) -> list[tuple[str, str, str]]:
+    return [(str(row.get("id")), str(row.get("route_id")), str(row.get("terminal"))) for row in rows]
 
 
 def _validate_sets(
@@ -79,20 +84,28 @@ def _validate_sets(
     expected: dict[str, JsonValue],
 ) -> list[ContextBaselineFinding]:
     findings: list[ContextBaselineFinding] = []
-    scenarios = baseline.get("scenarios", [])
-    expected_scenarios = expected.get("scenarios", [])
-    if not isinstance(scenarios, list) or not isinstance(expected_scenarios, list):
-        return [_finding("scenario-shape", "$.scenarios", "scenarios must be arrays")]
-    ids = [str(row.get("id")) for row in scenarios if isinstance(row, dict)]
-    terminals = [str(row.get("terminal")) for row in scenarios if isinstance(row, dict)]
-    expected_ids = [str(row["id"]) for row in expected_scenarios if isinstance(row, dict)]
-    expected_terminals = [str(row["terminal"]) for row in expected_scenarios if isinstance(row, dict)]
+    rows = _scenario_rows(baseline.get("scenarios"))
+    expected_rows = _scenario_rows(expected.get("scenarios"))
+    if rows is None or expected_rows is None or len(rows) != len(baseline["scenarios"]):
+        return [_finding("scenario-shape", "$.scenarios", "scenarios must be arrays of objects")]
+    ids = [str(row.get("id")) for row in rows]
+    terminals = [str(row.get("terminal")) for row in rows]
+    expected_ids = [str(row["id"]) for row in expected_rows]
+    expected_terminals = [str(row["terminal"]) for row in expected_rows]
     if ids != sorted(ids):
         findings.append(_finding("scenario-order", "$.scenarios", "scenarios must be sorted by ID"))
-    if set(ids) != set(expected_ids) or _duplicates(ids):
+    if Counter(ids) != Counter(expected_ids):
         findings.append(_finding("scenario-set", "$.scenarios", "scenario IDs differ from route graph"))
-    if set(terminals) != set(expected_terminals) or _duplicates(terminals):
+    if Counter(terminals) != Counter(expected_terminals):
         findings.append(_finding("terminal-set", "$.scenarios", "terminals differ from route graph"))
+    if Counter(_triples(rows)) != Counter(_triples(expected_rows)):
+        findings.append(
+            _finding(
+                "route-triple-set",
+                "$.scenarios",
+                "scenario/route/terminal triples differ from route graph",
+            )
+        )
     return findings
 
 
@@ -123,23 +136,44 @@ def _validate_segments(baseline: dict[str, JsonValue]) -> list[ContextBaselineFi
 
 def _validate_loading(baseline: dict[str, JsonValue]) -> list[ContextBaselineFinding]:
     findings: list[ContextBaselineFinding] = []
-    budgets = baseline["budgets"]
-    startup = budgets["startup"]
-    startup_segments = startup["segments"]
-    startup_paths = [str(segment["path"]) for segment in startup_segments if isinstance(segment, dict)]
-    startup_ids = [str(segment["id"]) for segment in startup_segments if isinstance(segment, dict)]
+    budgets = baseline.get("budgets")
+    startup = budgets.get("startup") if isinstance(budgets, dict) else None
+    if not isinstance(budgets, dict) or not isinstance(startup, dict):
+        return [_finding("budget-shape", "$.budgets", "budgets must contain a startup object")]
+    startup_segments = startup.get("segments", [])
+    if not isinstance(startup_segments, list):
+        return [_finding("budget-shape", "$.budgets.startup.segments", "startup segments must be an array")]
+    startup_paths = [str(segment.get("path")) for segment in startup_segments if isinstance(segment, dict)]
+    startup_ids = [str(segment.get("id")) for segment in startup_segments if isinstance(segment, dict)]
     if startup_ids.count("runtime.project-agents.injected") != 1:
         findings.append(_finding("runtime-agents-count", "$.budgets.startup.segments", "runtime AGENTS must be injected exactly once"))
     if "model/BRAIN.common.md" in startup_paths:
         findings.append(_finding("brain-eager", "$.budgets.startup.segments", "BRAIN must remain conditional"))
-    if int(startup["current_bytes"]) > int(startup["cap_bytes"]):
+    if not _int_pair(startup):
+        findings.append(_finding("budget-shape", "$.budgets.startup", "startup budget needs integer current_bytes and cap_bytes"))
+    elif int(startup["current_bytes"]) > int(startup["cap_bytes"]):
         findings.append(_finding("startup-budget", "$.budgets.startup.current_bytes", "startup exceeds 75% baseline cap"))
-    conditional = budgets["conditional_scenarios"]
-    if isinstance(conditional, dict):
-        for scenario_id, budget in conditional.items():
-            if isinstance(budget, dict) and int(budget["current_bytes"]) > int(budget["cap_bytes"]):
-                findings.append(_finding("conditional-budget", f"$.budgets.conditional_scenarios.{scenario_id}", "conditional scenario exceeds 110% baseline cap"))
+    conditional = budgets.get("conditional_scenarios")
+    if not isinstance(conditional, dict):
+        return [*findings, _finding("budget-shape", "$.budgets.conditional_scenarios", "conditional budgets must be an object")]
+    for scenario_id, budget in conditional.items():
+        if not isinstance(budget, dict) or not _int_pair(budget):
+            findings.append(_finding("budget-shape", f"$.budgets.conditional_scenarios.{scenario_id}", "budget needs integer current_bytes and cap_bytes"))
+        elif int(budget["current_bytes"]) > int(budget["cap_bytes"]):
+            findings.append(_finding("conditional-budget", f"$.budgets.conditional_scenarios.{scenario_id}", "conditional scenario exceeds 110% baseline cap"))
+    scenario_ids = [
+        str(row.get("id")) for row in baseline.get("scenarios", []) if isinstance(row, dict)
+    ]
+    if sorted(conditional) != sorted(scenario_ids):
+        findings.append(_finding("budget-coverage", "$.budgets.conditional_scenarios", "conditional budgets must cover exactly the scenarios"))
     return findings
+
+
+def _int_pair(budget: dict[str, JsonValue]) -> bool:
+    return all(
+        isinstance(budget.get(key), int) and not isinstance(budget.get(key), bool)
+        for key in ("current_bytes", "cap_bytes")
+    )
 
 
 def _validate_terminal_loading(baseline: dict[str, JsonValue]) -> list[ContextBaselineFinding]:
@@ -160,6 +194,37 @@ def _validate_terminal_loading(baseline: dict[str, JsonValue]) -> list[ContextBa
     return findings
 
 
+# Operational view of the frozen fixture: everything the loading contract measures. Fields
+# outside this view (for example historical labels carried by older fixtures) are ignored.
+OPERATIONAL_TOP_KEYS = ("budgets", "fixed_fixture_state", "frozen_route_sets", "schema_version")
+OPERATIONAL_SCENARIO_KEYS = (
+    "bytes",
+    "disk_reads",
+    "id",
+    "lines",
+    "route_id",
+    "segments",
+    "sha256",
+    "terminal",
+    "terminal_load_count",
+)
+
+
+def operational_projection(baseline: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    projection: dict[str, JsonValue] = {
+        key: baseline[key] for key in OPERATIONAL_TOP_KEYS if key in baseline
+    }
+    scenarios = baseline.get("scenarios")
+    if isinstance(scenarios, list):
+        projection["scenarios"] = [
+            {key: row[key] for key in OPERATIONAL_SCENARIO_KEYS if key in row}
+            if isinstance(row, dict)
+            else row
+            for row in scenarios
+        ]
+    return projection
+
+
 def validate_context_baseline(
     root: Path,
     model: dict[str, JsonValue],
@@ -172,9 +237,11 @@ def validate_context_baseline(
         return findings
     expected = canonical_context_baseline(root, model)
     findings.extend(_validate_sets(baseline, expected))
+    if any(finding.code == "scenario-shape" for finding in findings):
+        return findings
     findings.extend(_validate_segments(baseline))
     findings.extend(_validate_loading(baseline))
     findings.extend(_validate_terminal_loading(baseline))
-    if baseline != expected:
+    if operational_projection(baseline) != operational_projection(expected):
         findings.append(_finding("baseline-derived-mismatch", "$", "baseline differs from executable route harness"))
     return findings

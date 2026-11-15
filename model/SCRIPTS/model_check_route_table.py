@@ -22,8 +22,16 @@ class RouteGraphRow:
 
 
 @dataclass(frozen=True, slots=True)
+class RouteProblem:
+    code: str
+    target: str
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
 class ParsedRouteGraph:
     routes: tuple[RouteGraphRow, ...]
+    problems: tuple[RouteProblem, ...]
     findings: tuple[Finding, ...]
 
 
@@ -47,20 +55,65 @@ def route_finding(
     )
 
 
-def _route_metadata_finding(
-    codes: dict[str, CodeDef],
-    code: str,
-    target: str,
-    message: str,
-) -> tuple[Finding, ...]:
-    finding = route_finding(
-        codes,
-        code,
-        "model/OPERATING-MODEL.json",
-        target,
-        message,
-    )
-    return () if finding is None else (finding,)
+def _parse_route_graph(
+    model: dict[str, JsonValue],
+) -> tuple[tuple[RouteGraphRow, ...], tuple[RouteProblem, ...]]:
+    raw_routes = model.get("route_graph")
+    if not isinstance(raw_routes, list):
+        return (), (
+            RouteProblem(
+                "malformed-route-metadata",
+                "route_graph",
+                "route_graph must be a list of route rows",
+            ),
+        )
+    routes: list[RouteGraphRow] = []
+    problems: list[RouteProblem] = []
+    seen: dict[str, set[str]] = {"route_id": set(), "scenario_id": set(), "terminal": set()}
+    for index, row in enumerate(raw_routes):
+        match row:
+            case {"route_id": str(route_id), "scenario_id": str(scenario_id), "terminal": str(terminal)}:
+                if not route_id or not scenario_id or not terminal:
+                    problems.append(
+                        RouteProblem(
+                            "malformed-route-metadata",
+                            f"route_graph[{index}]",
+                            "route row requires non-empty route_id, scenario_id, and terminal strings",
+                        )
+                    )
+                    continue
+                duplicated = [
+                    (field, value)
+                    for field, value in (
+                        ("route_id", route_id),
+                        ("scenario_id", scenario_id),
+                        ("terminal", terminal),
+                    )
+                    if value in seen[field]
+                ]
+                for field, value in duplicated:
+                    problems.append(
+                        RouteProblem(
+                            "duplicate-route-id",
+                            value,
+                            f"route_graph {field} must be unique",
+                        )
+                    )
+                if duplicated:
+                    continue
+                seen["route_id"].add(route_id)
+                seen["scenario_id"].add(scenario_id)
+                seen["terminal"].add(terminal)
+                routes.append(RouteGraphRow(route_id, scenario_id, terminal))
+            case _:
+                problems.append(
+                    RouteProblem(
+                        "malformed-route-metadata",
+                        f"route_graph[{index}]",
+                        "route row requires route_id, scenario_id, and terminal strings",
+                    )
+                )
+    return tuple(routes), tuple(problems)
 
 
 def route_graph_from_model(
@@ -68,55 +121,22 @@ def route_graph_from_model(
     codes: dict[str, CodeDef] | None = None,
 ) -> ParsedRouteGraph:
     route_codes = codes if codes is not None else {}
-    raw_routes = model.get("route_graph")
-    if not isinstance(raw_routes, list):
-        return ParsedRouteGraph(
-            routes=(),
-            findings=_route_metadata_finding(
+    routes, problems = _parse_route_graph(model)
+    findings = tuple(
+        finding
+        for problem in problems
+        if (
+            finding := route_finding(
                 route_codes,
-                    "malformed-route-metadata",
-                    "route_graph",
-                    "route_graph must be a list of route rows",
-            ),
+                problem.code,
+                "model/OPERATING-MODEL.json",
+                problem.target,
+                problem.message,
+            )
         )
-    routes: list[RouteGraphRow] = []
-    findings: list[Finding] = []
-    route_ids: set[str] = set()
-    for index, row in enumerate(raw_routes):
-        match row:
-            case {"route_id": str(route_id), "scenario_id": str(scenario_id), "terminal": str(terminal)}:
-                if not route_id or not scenario_id or not terminal:
-                    findings.extend(
-                        _route_metadata_finding(
-                            route_codes,
-                            "malformed-route-metadata",
-                            f"route_graph[{index}]",
-                            "route row requires non-empty route_id, scenario_id, and terminal strings",
-                        )
-                    )
-                    continue
-                if route_id in route_ids:
-                    findings.extend(
-                        _route_metadata_finding(
-                            route_codes,
-                            "duplicate-route-id",
-                            route_id,
-                            "route_graph route_id must be unique",
-                        )
-                    )
-                    continue
-                route_ids.add(route_id)
-                routes.append(RouteGraphRow(route_id, scenario_id, terminal))
-            case _:
-                findings.extend(
-                    _route_metadata_finding(
-                        route_codes,
-                        "malformed-route-metadata",
-                        f"route_graph[{index}]",
-                        "route row requires route_id, scenario_id, and terminal strings",
-                    )
-                )
-    return ParsedRouteGraph(routes=tuple(routes), findings=tuple(findings))
+        is not None
+    )
+    return ParsedRouteGraph(routes=routes, problems=problems, findings=findings)
 
 
 def _pipe_cells(line: str) -> tuple[str, ...]:

@@ -44,6 +44,37 @@ def parsed_json(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
     return json.loads(result.stdout)
 
 
+def copy_repo(root: Path) -> Path:
+    """Copy the working tree without .git or caches; the copy is a standalone checkout."""
+    shutil.copytree(
+        ROOT,
+        root,
+        ignore=shutil.ignore_patterns(".git", "__pycache__"),
+        dirs_exist_ok=True,
+    )
+    return root
+
+
+def run_cli_in(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return run_cli(
+        "--root",
+        str(root),
+        "--model",
+        str(root / "model" / "OPERATING-MODEL.json"),
+        *args,
+    )
+
+
+def write_model_copy(root: Path, mutate) -> None:  # type: ignore[no-untyped-def]
+    path = root / "model" / "OPERATING-MODEL.json"
+    model = json.loads(path.read_text(encoding="utf-8"))
+    mutate(model)
+    path.write_text(
+        json.dumps(model, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 def decoded_normal_text(raw: str) -> dict[str, object]:
     lines = raw.splitlines()
     source_kind, source_digest = lines[0].split("\t", 1)
@@ -625,6 +656,18 @@ class OwnershipContractTests(route_contract_cases.RouteContractCases, unittest.T
             "test_all_declared_routes_have_parseable_common_rows_and_resolve_targets",
         )
 
+    def test_route_table_load_is_the_current_terminal(self) -> None:
+        run_case_method(
+            ownership_cases.OwnershipContractCases,
+            "test_route_table_load_is_always_the_current_terminal",
+        )
+
+    def test_startup_payload_stays_under_frozen_cap(self) -> None:
+        run_case_method(
+            ownership_cases.OwnershipContractCases,
+            "test_startup_payload_decreases_from_frozen_baseline_and_stays_under_cap",
+        )
+
     def test_missing_route_target_is_rejected(self) -> None:
         run_case_method(
             ownership_cases.OwnershipContractCases,
@@ -1131,19 +1174,50 @@ class ContextBaselineTests(unittest.TestCase):
     def fixture_baseline(self) -> dict[str, object]:
         return json.loads(BASELINE.read_text(encoding="utf-8"))
 
-    def test_derives_canonical_baseline(self) -> None:
+    def test_derives_operational_projection_of_frozen_baseline(self) -> None:
+        sys.path.insert(0, str(ROOT / "model" / "SCRIPTS"))
+        from model_check_context_validator import operational_projection
+
         derived = self.derived_baseline()
         fixture = self.fixture_baseline()
 
-        self.assertEqual(derived, fixture)
+        self.assertEqual(operational_projection(derived), operational_projection(fixture))
         self.assertEqual(
-            BASELINE.read_bytes(),
+            [row["id"] for row in derived["scenarios"]],
+            [row["id"] for row in fixture["scenarios"]],
+        )
+        for row in derived["scenarios"]:
+            self.assertEqual(
+                set(row),
+                {
+                    "bytes",
+                    "disk_reads",
+                    "id",
+                    "lines",
+                    "route_id",
+                    "segments",
+                    "sha256",
+                    "terminal",
+                    "terminal_load_count",
+                },
+            )
+
+    def test_frozen_fixture_is_canonical_and_matches_sidecar(self) -> None:
+        raw = BASELINE.read_bytes()
+        fixture = self.fixture_baseline()
+
+        self.assertEqual(
+            raw,
             json.dumps(fixture, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
                 "utf-8"
             )
             + b"\n",
         )
-        self.assertFalse(BASELINE.read_bytes().endswith(b"\n\n"))
+        self.assertFalse(raw.endswith(b"\n\n"))
+        self.assertEqual(
+            hashlib.sha256(raw).hexdigest() + "\n",
+            BASELINE_DIGEST.read_text("ascii"),
+        )
 
     def test_covers_every_predeclared_terminal_including_attachments(self) -> None:
         model = json.loads(MODEL.read_text(encoding="utf-8"))
@@ -1192,18 +1266,31 @@ class ContextBaselineTests(unittest.TestCase):
 
         self.assertEqual(findings, [])
 
-    def test_future_route_sets_are_equal(self) -> None:
+    def test_route_triples_are_covered_by_frozen_fixture(self) -> None:
+        model = json.loads(MODEL.read_text(encoding="utf-8"))
         baseline = self.fixture_baseline()
         report = parsed_json(run_cli("--context-report", "--format", "json"))
+        coverage = report["route_coverage"]
 
-        self.assertTrue(report["set_equality"]["valid"])
+        self.assertTrue(coverage["valid"], coverage["mismatches"])
+        self.assertEqual(coverage["mismatches"], {})
         self.assertEqual(
             baseline["frozen_route_sets"],
             {
-                "route_terminals": report["set_equality"]["route_terminals"],
-                "scenario_ids": report["set_equality"]["scenario_ids"],
+                "route_terminals": coverage["route_terminals"],
+                "scenario_ids": coverage["scenario_ids"],
             },
         )
+        triples = [
+            (row["scenario_id"], row["route_id"], row["terminal"])
+            for row in model["route_graph"]
+        ]
+        frozen = [
+            (row["id"], row["route_id"], row["terminal"]) for row in baseline["scenarios"]
+        ]
+        self.assertEqual(len(triples), 13)
+        self.assertEqual(sorted(triples), sorted(frozen))
+        self.assertEqual(len(set(triples)), len(triples))
 
 
 class SkillDependencyTests(unittest.TestCase):
@@ -1214,27 +1301,48 @@ class SkillDependencyTests(unittest.TestCase):
         "skills/brain/references/tool-catalog.md",
     )
 
+    def skill_findings(self, root: Path | None, *codes: str) -> tuple[int, list[dict[str, object]]]:
+        selector = ("--strict", "--only", ",".join(codes), "--format", "json")
+        result = run_cli(*selector) if root is None else run_cli_in(root, *selector)
+        return result.returncode, parsed_json(result)["findings"]
+
     def test_all_conditional_references_resolve(self) -> None:
         model = json.loads(MODEL.read_text(encoding="utf-8"))
-        result = run_cli(
-            "--strict",
-            "--only",
-            "missing-skill-reference,unreachable-conditional-artifact",
-            "--format",
-            "json",
+        code, findings = self.skill_findings(
+            None, "missing-skill-reference", "unreachable-conditional-artifact"
         )
 
-        self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertEqual(parsed_json(result)["findings"], [])
-        self.assertEqual(
-            tuple(model["context_contract"]["set_equality"]["future_final_payloads"]),
-            self.FINAL_REFERENCES,
+        self.assertEqual(code, 0)
+        self.assertEqual(findings, [])
+        skill_terminals = tuple(
+            sorted(
+                row["terminal"]
+                for row in model["route_graph"]
+                if row["route_id"].startswith("skill.")
+            )
         )
+        self.assertEqual(skill_terminals, self.FINAL_REFERENCES)
+        router = (ROOT / "skills" / "brain" / "SKILL.md").read_text(encoding="utf-8")
         for rel_path in self.FINAL_REFERENCES:
-            text = (ROOT / rel_path).read_text(encoding="utf-8")
-            self.assertIn("schema_version", text)
-            self.assertIn("trigger_rules", text)
-            self.assertIn("downstream_rules", text)
+            self.assertTrue((ROOT / rel_path).is_file())
+            self.assertIn(f"`{rel_path.removeprefix('skills/brain/')}`", router)
+
+    def test_reference_files_without_comment_header_are_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = copy_repo(Path(raw) / "repo")
+            for rel_path in self.FINAL_REFERENCES:
+                path = root / rel_path
+                text = path.read_text(encoding="utf-8")
+                start = text.index("<!-- agent-brain-reference")
+                end = text.index("-->", start) + len("-->")
+                path.write_text(text[:start] + text[end:], encoding="utf-8")
+
+            code, findings = self.skill_findings(
+                root, "missing-skill-reference", "unreachable-conditional-artifact"
+            )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(findings, [])
 
     def test_startup_excludes_conditional_references(self) -> None:
         baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
@@ -1255,17 +1363,11 @@ class SkillDependencyTests(unittest.TestCase):
 
     def test_missing_reference_is_rejected(self) -> None:
         model = json.loads(MODEL.read_text(encoding="utf-8"))
+        missing = "skills/brain/references/missing-reference.md"
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "model.json"
-            model["future_routes"][0]["final_payloads"] = [
-                "skills/brain/references/missing-task15-reference.md"
-            ]
-            model["future_routes"][0]["final_terminal"] = (
-                "skills/brain/references/missing-task15-reference.md"
-            )
-            model["route_graph"][-4]["terminal"] = (
-                "skills/brain/references/missing-task15-reference.md"
-            )
+            route = next(row for row in model["route_graph"] if row["route_id"] == "skill.constraints")
+            route["terminal"] = missing
             path.write_text(
                 json.dumps(model, sort_keys=True, separators=(",", ":")) + "\n",
                 encoding="utf-8",
@@ -1284,16 +1386,90 @@ class SkillDependencyTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertEqual(findings[0]["code"], "missing-skill-reference")
+        self.assertEqual(findings[0]["path"], missing)
+        self.assertEqual(findings[0]["target"], "skill.constraints")
+
+    def test_deleted_reference_file_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = copy_repo(Path(raw) / "repo")
+            (root / self.FINAL_REFERENCES[0]).unlink()
+
+            code, findings = self.skill_findings(root, "missing-skill-reference")
+
+        self.assertEqual(code, 1)
+        self.assertIn(
+            ("missing-skill-reference", self.FINAL_REFERENCES[0]),
+            {(row["code"], row["path"]) for row in findings},
+        )
+
+    def test_dangling_router_destination_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = copy_repo(Path(raw) / "repo")
+            skill = root / "skills" / "brain" / "SKILL.md"
+            skill.write_text(
+                skill.read_text(encoding="utf-8").replace(
+                    "`references/daily-report.md` |",
+                    "`references/does-not-exist.md` |",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+
+            code, findings = self.skill_findings(root, "missing-skill-reference")
+
+        self.assertEqual(code, 1)
         self.assertEqual(
-            findings[0]["path"],
-            "skills/brain/references/missing-task15-reference.md",
+            {(row["code"], row["path"]) for row in findings},
+            {("missing-skill-reference", "skills/brain/references/does-not-exist.md")},
+        )
+
+    def test_missing_router_section_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = copy_repo(Path(raw) / "repo")
+            skill = root / "skills" / "brain" / "SKILL.md"
+            skill.write_text(
+                skill.read_text(encoding="utf-8").replace(
+                    "## Conditional Reference Router", "## Reference Index"
+                ),
+                encoding="utf-8",
+            )
+
+            code, findings = self.skill_findings(root, "missing-skill-reference")
+
+        self.assertEqual(code, 1)
+        self.assertEqual(findings[0]["path"], "skills/brain/SKILL.md")
+        self.assertIn("Conditional Reference Router", findings[0]["message"])
+
+    def test_route_terminal_not_linked_from_router_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = copy_repo(Path(raw) / "repo")
+            skill = root / "skills" / "brain" / "SKILL.md"
+            kept = [
+                line
+                for line in skill.read_text(encoding="utf-8").splitlines(keepends=True)
+                if not (line.startswith("|") and "`references/tool-catalog.md`" in line and "Tool selection" in line)
+            ]
+            skill.write_text("".join(kept), encoding="utf-8")
+
+            code, findings = self.skill_findings(root, "unreachable-conditional-artifact")
+
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            {(row["code"], row["path"], row["target"]) for row in findings},
+            {
+                (
+                    "unreachable-conditional-artifact",
+                    "skills/brain/references/tool-catalog.md",
+                    "skill.tool-catalog",
+                )
+            },
         )
 
     def test_orphan_conditional_artifact_is_rejected(self) -> None:
         model = json.loads(MODEL.read_text(encoding="utf-8"))
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "model.json"
-            artifact = "skills/brain/references/orphan-task15-reference.md"
+            artifact = "skills/brain/references/orphan-reference.md"
             model["context_contract"]["conditional_artifacts"].append(artifact)
             path.write_text(
                 json.dumps(model, sort_keys=True, separators=(",", ":")) + "\n",
@@ -1315,6 +1491,61 @@ class SkillDependencyTests(unittest.TestCase):
         self.assertEqual(findings[0]["code"], "unreachable-conditional-artifact")
         self.assertEqual(findings[0]["path"], artifact)
 
+    def test_orphan_rule_artifact_without_route_is_rejected(self) -> None:
+        model = json.loads(MODEL.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "model.json"
+            model["context_contract"]["conditional_artifacts"].append(
+                "model/RULES-LINKS.common.md"
+            )
+            path.write_text(
+                json.dumps(model, sort_keys=True, separators=(",", ":")) + "\n",
+                encoding="utf-8",
+            )
+
+            result = run_cli(
+                "--model", str(path), "--strict", "--only",
+                "unreachable-conditional-artifact", "--format", "json",
+            )
+            findings = parsed_json(result)["findings"]
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(
+            {(row["code"], row["path"]) for row in findings},
+            {("unreachable-conditional-artifact", "model/RULES-LINKS.common.md")},
+        )
+
+    def test_route_and_artifact_removed_together_fail_against_frozen_fixture(self) -> None:
+        removed = "skills/brain/references/constraints.md"
+
+        def drop(model: dict[str, object]) -> None:
+            model["route_graph"] = [
+                row for row in model["route_graph"] if row["terminal"] != removed
+            ]
+            model["context_contract"]["conditional_artifacts"].remove(removed)
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = copy_repo(Path(raw) / "repo")
+            write_model_copy(root, drop)
+
+            skill_code, skill_findings = self.skill_findings(
+                root, "missing-skill-reference", "unreachable-conditional-artifact"
+            )
+            result = run_cli_in(root, "--strict", "--only", "missing-route-target", "--format", "json")
+            findings = parsed_json(result)["findings"]
+
+        self.assertEqual(skill_code, 0, skill_findings)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(
+            {(row["code"], row["target"]) for row in findings},
+            {
+                (
+                    "missing-route-target",
+                    "scenario.constraints | skill.constraints | " + removed,
+                )
+            },
+        )
+
 
 class ContextBaselineMutationTests(unittest.TestCase):
     def validate(
@@ -1322,11 +1553,14 @@ class ContextBaselineMutationTests(unittest.TestCase):
         baseline: dict[str, object],
         digest_raw: bytes | None = None,
         final_lf: str = "\n",
+        root: Path = ROOT,
+        model: dict[str, object] | None = None,
     ) -> list[object]:
         sys.path.insert(0, str(ROOT / "model" / "SCRIPTS"))
         from model_check_context_validator import validate_context_baseline
 
-        model = json.loads(MODEL.read_text(encoding="utf-8"))
+        if model is None:
+            model = json.loads(MODEL.read_text(encoding="utf-8"))
         raw = json.dumps(
             baseline,
             sort_keys=True,
@@ -1334,7 +1568,7 @@ class ContextBaselineMutationTests(unittest.TestCase):
             ensure_ascii=True,
         ).encode("utf-8") + final_lf.encode("ascii")
         digest = digest_raw or (hashlib.sha256(raw).hexdigest() + "\n").encode("ascii")
-        return validate_context_baseline(ROOT, model, raw, digest)
+        return validate_context_baseline(root, model, raw, digest)
 
     def baseline(self) -> dict[str, object]:
         return json.loads(BASELINE.read_text(encoding="utf-8"))
@@ -1517,6 +1751,135 @@ class ContextBaselineMutationTests(unittest.TestCase):
         )
 
 
+    def usage_error(self) -> type[Exception]:
+        sys.path.insert(0, str(ROOT / "model" / "SCRIPTS"))
+        from model_check_contract import UsageError
+
+        return UsageError
+
+    def test_ignores_historical_fields_outside_the_operational_projection(self) -> None:
+        baseline = self.baseline()
+        baseline["baseline_commit"] = "0" * 40
+        for scenario in baseline["scenarios"]:
+            scenario["payload_status"] = "anything"
+            scenario["resolution"] = "anything"
+
+        self.assertEqual(self.validate(baseline), [])
+
+    def test_rejects_operational_field_drift(self) -> None:
+        for field, value in (("bytes", 1), ("lines", 1), ("disk_reads", []), ("route_id", "x")):
+            with self.subTest(field=field):
+                baseline = self.baseline()
+                baseline["scenarios"][0][field] = value
+
+                codes = {finding.code for finding in self.validate(baseline)}
+
+                self.assertIn("baseline-derived-mismatch", codes)
+
+    def test_rejects_misaligned_terminal_and_scenario(self) -> None:
+        baseline = self.baseline()
+        first, second = baseline["scenarios"][0], baseline["scenarios"][1]
+        first["terminal"], second["terminal"] = second["terminal"], first["terminal"]
+
+        findings = self.validate(baseline)
+
+        self.assertFinding(findings, "route-triple-set", "$.scenarios")
+        self.assertFinding(findings, "baseline-derived-mismatch", "$")
+
+    def test_rejects_route_and_artifact_removed_together(self) -> None:
+        model = json.loads(MODEL.read_text(encoding="utf-8"))
+        removed = "skills/brain/references/constraints.md"
+        model["route_graph"] = [row for row in model["route_graph"] if row["terminal"] != removed]
+        model["context_contract"]["conditional_artifacts"].remove(removed)
+
+        findings = self.validate(self.baseline(), model=model)
+
+        self.assertFinding(findings, "scenario-set", "$.scenarios")
+        self.assertFinding(findings, "terminal-set", "$.scenarios")
+        self.assertFinding(findings, "route-triple-set", "$.scenarios")
+
+    def test_rejects_incomplete_budget_coverage(self) -> None:
+        baseline = self.baseline()
+        scenario_id = sorted(baseline["budgets"]["conditional_scenarios"])[0]
+        del baseline["budgets"]["conditional_scenarios"][scenario_id]
+
+        self.assertFinding(
+            self.validate(baseline),
+            "budget-coverage",
+            "$.budgets.conditional_scenarios",
+        )
+
+    def test_rejects_extra_budget_entry(self) -> None:
+        baseline = self.baseline()
+        baseline["budgets"]["conditional_scenarios"]["scenario.ghost"] = {
+            "baseline_bytes": 1, "cap_bytes": 2, "current_bytes": 1, "scenario_id": "scenario.ghost",
+        }
+
+        self.assertFinding(
+            self.validate(baseline),
+            "budget-coverage",
+            "$.budgets.conditional_scenarios",
+        )
+
+    def test_rejects_malformed_budget_without_traceback(self) -> None:
+        baseline = self.baseline()
+        scenario_id = sorted(baseline["budgets"]["conditional_scenarios"])[0]
+        del baseline["budgets"]["conditional_scenarios"][scenario_id]["cap_bytes"]
+        del baseline["budgets"]["startup"]["cap_bytes"]
+
+        findings = self.validate(baseline)
+
+        self.assertFinding(findings, "budget-shape", "$.budgets.startup")
+        self.assertFinding(
+            findings, "budget-shape", f"$.budgets.conditional_scenarios.{scenario_id}"
+        )
+
+    def test_missing_terminal_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = copy_repo(Path(raw) / "repo")
+            (root / "model" / "RULES-LINKS.common.md").unlink()
+
+            with self.assertRaisesRegex(self.usage_error(), "RULES-LINKS.common.md"):
+                self.validate(self.baseline(), root=root)
+
+    def test_unreadable_terminal_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = copy_repo(Path(raw) / "repo")
+            terminal = root / "model" / "RULES-LINKS.common.md"
+            terminal.unlink()
+            terminal.mkdir()
+
+            with self.assertRaisesRegex(self.usage_error(), "RULES-LINKS.common.md"):
+                self.validate(self.baseline(), root=root)
+
+    def test_duplicate_or_missing_route_fields_fail_closed(self) -> None:
+        def duplicate_route(model: dict[str, object]) -> None:
+            model["route_graph"].append(dict(model["route_graph"][0]))
+
+        def duplicate_scenario(model: dict[str, object]) -> None:
+            model["route_graph"][1]["scenario_id"] = model["route_graph"][0]["scenario_id"]
+
+        def duplicate_terminal(model: dict[str, object]) -> None:
+            model["route_graph"][1]["terminal"] = model["route_graph"][0]["terminal"]
+
+        def missing_field(model: dict[str, object]) -> None:
+            del model["route_graph"][0]["scenario_id"]
+
+        for name, mutate in (
+            ("route_id", duplicate_route),
+            ("scenario_id", duplicate_scenario),
+            ("terminal", duplicate_terminal),
+            ("missing", missing_field),
+        ):
+            with self.subTest(case=name):
+                model = json.loads(MODEL.read_text(encoding="utf-8"))
+                mutate(model)
+
+                with self.assertRaisesRegex(self.usage_error(), "route_graph"):
+                    self.validate(self.baseline(), model=model)
+
+
+
 class LoadingContractTests(unittest.TestCase):
     def context(self) -> dict[str, object]:
         result = run_cli("--context-report", "--format", "json")
@@ -1571,71 +1934,232 @@ class LoadingContractTests(unittest.TestCase):
 
         self.assertEqual(actual, expected)
         self.assertEqual(report["totals"]["scenario_count"], 13)
-        self.assertEqual(report["totals"]["future_route_count"], 4)
+        self.assertEqual(report["totals"]["route_count"], 13)
+        self.assertEqual(report["totals"]["terminal_count"], 13)
+        self.assertNotIn("future_route_count", report["totals"])
 
-    def test_context_report_enforces_declared_set_equality(self) -> None:
+    def test_context_report_computes_route_coverage(self) -> None:
         model = json.loads(MODEL.read_text(encoding="utf-8"))
         report = self.context()
-        equality = report["set_equality"]
+        coverage = report["route_coverage"]
 
-        self.assertTrue(equality["valid"])
+        self.assertTrue(coverage["valid"])
+        self.assertEqual(coverage["mismatches"], {})
         self.assertEqual(
-            equality["discovered_conditional_artifacts"],
-            model["context_contract"]["conditional_artifacts"],
+            coverage["conditional_artifacts"],
+            sorted(model["context_contract"]["conditional_artifacts"]),
         )
         self.assertEqual(
-            equality["route_terminals"],
-            model["context_contract"]["set_equality"]["route_terminals"],
+            coverage["route_terminals"],
+            sorted(row["terminal"] for row in model["route_graph"]),
         )
         self.assertEqual(
-            equality["scenario_ids"],
-            model["context_contract"]["set_equality"]["scenario_ids"],
-        )
-        self.assertEqual(
-            equality["future_temporary_payloads"],
-            model["context_contract"]["set_equality"]["future_temporary_payloads"],
-        )
-        self.assertEqual(
-            equality["future_final_payloads"],
-            model["context_contract"]["set_equality"]["future_final_payloads"],
-        )
-        self.assertEqual(
-            equality["frozen_baseline_ids"],
-            [f"baseline.{model['baseline']['commit']}"],
+            coverage["scenario_ids"],
+            sorted(row["scenario_id"] for row in model["route_graph"]),
         )
 
-    def test_corrupt_future_baseline_id_invalidates_set_equality(self) -> None:
+    def coverage_after(self, mutate) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:  # type: ignore[no-untyped-def]
         model = json.loads(MODEL.read_text(encoding="utf-8"))
+        mutate(model)
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "model.json"
-            model["future_routes"][0]["baseline_id"] = "baseline.deadbeef"
             path.write_text(json.dumps(model), encoding="utf-8")
-
             result = run_cli("--model", str(path), "--context-report", "--format", "json")
-            report = parsed_json(result)
+        return result, (parsed_json(result) if result.returncode == 0 else {})
 
-        mismatch = report["set_equality"]["mismatches"]["future_baseline_ids"]
+    def test_misaligned_route_invalidates_route_coverage(self) -> None:
+        def misalign(model: dict[str, object]) -> None:
+            model["route_graph"][0]["scenario_id"] = "scenario.misaligned"
+
+        result, report = self.coverage_after(misalign)
+        mismatch = report["route_coverage"]["mismatches"]["route_triples"]
+
         self.assertEqual(result.returncode, 0)
-        self.assertFalse(report["set_equality"]["valid"])
-        self.assertEqual(mismatch["actual"], ["baseline.993247b2850ac86993c7c6dd18e6c4fd9ec6df7c", "baseline.deadbeef"])
-        self.assertEqual(mismatch["expected"], ["baseline.993247b2850ac86993c7c6dd18e6c4fd9ec6df7c"])
+        self.assertFalse(report["route_coverage"]["valid"])
+        self.assertEqual(
+            mismatch["missing_from_route_graph"],
+            ["scenario.brain-structure | model.brain-structure | model/BRAIN.common.md"],
+        )
+        self.assertEqual(
+            mismatch["not_in_frozen_fixture"],
+            ["scenario.misaligned | model.brain-structure | model/BRAIN.common.md"],
+        )
 
-    def test_future_routes_resolve_to_final_files_after_relocation(self) -> None:
+    def test_route_and_artifact_removed_together_invalidate_route_coverage(self) -> None:
+        removed = "skills/brain/references/constraints.md"
+
+        def drop(model: dict[str, object]) -> None:
+            model["route_graph"] = [
+                row for row in model["route_graph"] if row["terminal"] != removed
+            ]
+            model["context_contract"]["conditional_artifacts"].remove(removed)
+
+        result, report = self.coverage_after(drop)
+        coverage = report["route_coverage"]
+
+        self.assertEqual(result.returncode, 0)
+        self.assertFalse(coverage["valid"])
+        self.assertNotIn("conditional_artifacts", coverage["mismatches"])
+        self.assertEqual(
+            coverage["mismatches"]["route_triples"]["missing_from_route_graph"],
+            ["scenario.constraints | skill.constraints | " + removed],
+        )
+
+    def test_artifact_without_route_invalidates_route_coverage(self) -> None:
+        def orphan(model: dict[str, object]) -> None:
+            model["context_contract"]["conditional_artifacts"].append("model/RULES-LINKS.common.md")
+
+        _result, report = self.coverage_after(orphan)
+        coverage = report["route_coverage"]
+
+        self.assertFalse(coverage["valid"])
+        self.assertEqual(
+            coverage["mismatches"]["duplicate_conditional_artifacts"],
+            ["model/RULES-LINKS.common.md"],
+        )
+        self.assertEqual(
+            coverage["mismatches"]["conditional_artifacts"],
+            {"route_without_artifact": [], "without_route": ["model/RULES-LINKS.common.md"]},
+        )
+
+    def test_duplicate_route_fields_fail_the_context_report(self) -> None:
+        for field in ("route_id", "scenario_id", "terminal"):
+            with self.subTest(field=field):
+                def duplicate(model: dict[str, object], field: str = field) -> None:
+                    model["route_graph"][1][field] = model["route_graph"][0][field]
+
+                result, _report = self.coverage_after(duplicate)
+
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stdout, "")
+                self.assertIn(f"route_graph {field} must be unique", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+
+    def test_skill_routes_resolve_to_current_files(self) -> None:
         report = self.context()
-        future = [
+        skill = [
             row for row in report["scenarios"]
             if row["route_id"].startswith("skill.")
         ]
 
-        self.assertEqual(len(future), 4)
-        for scenario in future:
+        self.assertEqual(len(skill), 4)
+        for scenario in skill:
             self.assertTrue(scenario["segment_ids"])
-            self.assertEqual(scenario["payload_status"], "current-terminal")
-            self.assertEqual(scenario["resolution"], "final-file")
             self.assertGreater(scenario["model_visible_bytes"], 0)
             self.assertEqual(scenario["segment_ids"], [scenario["terminal"]])
+            self.assertEqual(scenario["disk_reads"], [scenario["terminal"]])
             self.assertEqual(scenario["segments"][0]["kind"], "disk-file")
             self.assertRegex(scenario["segments"][0]["sha256"], r"^[0-9a-f]{64}$")
+
+    def test_payloads_come_only_from_current_files_without_git(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = copy_repo(Path(raw) / "repo")
+            self.assertFalse((root / ".git").exists())
+            args = ("--context-report", "--format", "json")
+
+            standalone = run_cli_in(root, *args)
+            terminal = root / "model" / "RULES-LINKS.common.md"
+            terminal.write_text("# Links\nchanged current file\n", encoding="utf-8")
+            changed = run_cli_in(root, *args)
+            terminal.unlink()
+            missing = run_cli_in(root, *args)
+
+        self.assertEqual(standalone.returncode, 0, standalone.stderr)
+        reference = {row["scenario_id"]: row for row in self.context()["scenarios"]}
+        for row in parsed_json(standalone)["scenarios"]:
+            self.assertEqual(row["model_visible_sha256"], reference[row["scenario_id"]]["model_visible_sha256"])
+        links = next(
+            row for row in parsed_json(changed)["scenarios"] if row["scenario_id"] == "scenario.links"
+        )
+        self.assertEqual(links["model_visible_bytes"], len("# Links\nchanged current file\n"))
+        self.assertEqual(missing.returncode, 2)
+        self.assertEqual(missing.stdout, "")
+        self.assertIn("route terminal cannot be read: model/RULES-LINKS.common.md", missing.stderr)
+        self.assertNotIn("Traceback", missing.stderr)
+
+    def test_unreadable_terminal_fails_with_usage_error(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = copy_repo(Path(raw) / "repo")
+            terminal = root / "model" / "RULES-LINKS.common.md"
+            terminal.unlink()
+            terminal.mkdir()
+
+            result = run_cli_in(root, "--context-report", "--format", "json")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("RULES-LINKS.common.md", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_missing_or_unreadable_fixture_fails_closed(self) -> None:
+        for name, damage in (
+            ("missing", lambda path: path.unlink()),
+            ("not-json", lambda path: path.write_text("{", encoding="utf-8")),
+            ("not-an-object", lambda path: path.write_text("[]\n", encoding="utf-8")),
+        ):
+            with self.subTest(case=name):
+                with tempfile.TemporaryDirectory() as raw:
+                    root = copy_repo(Path(raw) / "repo")
+                    damage(root / "tests" / "fixtures" / "model-context-baseline.json")
+
+                    budget = run_cli_in(
+                        root, "--strict", "--only", "context-budget-exceeded", "--format", "json"
+                    )
+                    eager = run_cli_in(
+                        root, "--strict", "--only", "eager-skill-reference", "--format", "json"
+                    )
+                    default = run_cli_in(root, "--strict", "--format", "json")
+
+                for result in (budget, eager, default):
+                    self.assertEqual(result.returncode, 2, result.stdout)
+                    self.assertEqual(result.stdout, "")
+                    self.assertIn("context baseline fixture is unavailable", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_incomplete_frozen_budgets_are_rejected(self) -> None:
+        def run_with(mutate) -> tuple[int, list[dict[str, object]]]:  # type: ignore[no-untyped-def]
+            with tempfile.TemporaryDirectory() as raw:
+                root = copy_repo(Path(raw) / "repo")
+                fixture = root / "tests" / "fixtures" / "model-context-baseline.json"
+                body = json.loads(fixture.read_text(encoding="utf-8"))
+                mutate(body)
+                fixture.write_text(
+                    json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n",
+                    encoding="utf-8",
+                )
+                result = run_cli_in(
+                    root, "--strict", "--only", "context-budget-exceeded", "--format", "json"
+                )
+            return result.returncode, parsed_json(result)["findings"] if result.stdout else []
+
+        def omit(body: dict[str, object]) -> None:
+            del body["budgets"]["conditional_scenarios"]["scenario.links"]
+
+        def ghost(body: dict[str, object]) -> None:
+            body["budgets"]["conditional_scenarios"]["scenario.ghost"] = {"cap_bytes": 9}
+
+        def payload_over(body: dict[str, object]) -> None:
+            budget = body["budgets"]["conditional_scenarios"]["scenario.links"]
+            budget["cap_bytes"] = budget["current_bytes"] - 1
+
+        def startup_over(body: dict[str, object]) -> None:
+            body["budgets"]["startup"]["cap_bytes"] = 1
+
+        expectations = (
+            (omit, "scenario.links", "missing for a current scenario"),
+            (ghost, "scenario.ghost", "has no current scenario"),
+            (payload_over, "scenario.links", "exceeds frozen route-payload budget"),
+            (startup_over, "tests/fixtures/model-context-baseline.json", "startup context exceeds"),
+        )
+        for mutate, path, text in expectations:
+            with self.subTest(text=text):
+                code, findings = run_with(mutate)
+
+                self.assertEqual(code, 1)
+                self.assertEqual(
+                    {(row["code"], row["path"]) for row in findings},
+                    {("context-budget-exceeded", path)},
+                )
+                self.assertIn(text, findings[0]["message"])
 
     def test_deterministic_totals_injected_once_and_raw_hashes(self) -> None:
         first = run_cli("--context-report", "--format", "json")
@@ -1713,10 +2237,7 @@ class LoadingContractTests(unittest.TestCase):
                 for segment in scenario["segments"]
                 if segment["path"] == scenario["terminal"]
             ]
-            if scenario["payload_status"] == "current-terminal":
-                self.assertEqual(len(terminal_segments), 1)
-            else:
-                self.assertEqual(terminal_segments, [])
+            self.assertEqual(len(terminal_segments), 1)
 
     def test_session_open_is_unique_authority_in_metadata(self) -> None:
         sys.path.insert(0, str(ROOT / "model" / "SCRIPTS"))

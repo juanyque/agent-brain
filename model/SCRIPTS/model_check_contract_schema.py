@@ -72,6 +72,7 @@ REQUIRED_ROUTE_CODE_FAMILIES: Final[tuple[tuple[str, str], ...]] = (
     ("missing-route-target", "route-target"),
     ("orphan-model-artifact", "route-target"),
     ("unmapped-cluster", "route-target"),
+    ("unreachable-conditional-artifact", "route-target"),
 )
 
 

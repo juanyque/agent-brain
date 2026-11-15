@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import sys
+from collections import Counter
 from pathlib import Path
 
 from model_check_context_payloads import (
-    PayloadRange,
-    baseline_commit,
     context_contract,
-    payload_ranges,
+    counter_gaps,
+    frozen_route_triples,
     resolve_segments,
     route_rows,
-    scenario_metadata,
+    route_triples,
     string_list,
 )
-from model_check_contract import JsonValue, UsageError
+from model_check_contract import JsonValue
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -58,85 +58,78 @@ def fixture_session_digest() -> dict[str, JsonValue]:
     }
 
 
-def _future_route_sets(model: dict[str, JsonValue]) -> dict[str, list[str]]:
-    raw_future_routes = model.get("future_routes", [])
-    if not isinstance(raw_future_routes, list):
-        raise UsageError("context future_routes must be a list")
-    final_payloads: list[str] = []
-    temporary_payloads: list[str] = []
-    baseline_ids: list[str] = []
-    for row in raw_future_routes:
-        match row:
-            case {
-                "baseline_id": str(baseline_id),
-                "final_payloads": list(raw_final_payloads),
-                "temporary_payloads": list(raw_temporary_payloads),
-            }:
-                baseline_ids.append(baseline_id)
-                final_payloads.extend(item for item in raw_final_payloads if isinstance(item, str))
-                temporary_payloads.extend(
-                    item for item in raw_temporary_payloads if isinstance(item, str)
-                )
-            case _:
-                raise UsageError("context future route is malformed")
-    return {
-        "future_baseline_ids": sorted(set(baseline_ids)),
-        "future_final_payloads": sorted(set(final_payloads)),
-        "future_temporary_payloads": sorted(set(temporary_payloads)),
-    }
+def _duplicates(values: list[str]) -> list[str]:
+    return sorted(value for value, count in Counter(values).items() if count > 1)
 
 
-def _set_equality(
-    model: dict[str, JsonValue],
-    terminals: list[str],
-    scenario_ids: list[str],
-) -> dict[str, JsonValue]:
+def _triple_labels(triples: list[tuple[str, str, str]]) -> list[str]:
+    return [" | ".join(triple) for triple in triples]
+
+
+def route_coverage(root: Path, model: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """Computed coverage of routes, conditional artifacts and the frozen fixture.
+
+    Lists and counters are compared before any set conversion so that duplicates stay visible.
+    """
     contract = context_contract(model)
-    declared = contract.get("set_equality", {})
-    if not isinstance(declared, dict):
-        raise UsageError("context metadata set_equality must be an object")
-    future_sets = _future_route_sets(model)
-    authoritative_baseline_ids = sorted({f"baseline.{baseline_commit(model)}"})
-    actual = {
-        "discovered_conditional_artifacts": sorted(
-            string_list(contract.get("conditional_artifacts", []), "conditional_artifacts")
-        ),
-        "frozen_baseline_ids": authoritative_baseline_ids,
-        "route_terminals": terminals,
-        "scenario_ids": scenario_ids,
-        **future_sets,
+    artifacts = string_list(contract.get("conditional_artifacts", []), "conditional_artifacts")
+    routes = route_rows(model)
+    route_ids = [route["route_id"] for route in routes]
+    scenario_ids = [route["scenario_id"] for route in routes]
+    terminals = [route["terminal"] for route in routes]
+    triples = _triple_labels(route_triples(model))
+    frozen = _triple_labels(frozen_route_triples(root, model))
+    inventory = string_list(model.get("governed_inventory", []), "governed_inventory")
+    audience_rows = model.get("audience_contract", [])
+    audience = [
+        row["path"]
+        for row in (audience_rows if isinstance(audience_rows, list) else [])
+        if isinstance(row, dict) and isinstance(row.get("path"), str)
+    ]
+    mismatches: dict[str, JsonValue] = {}
+    for name, values in (
+        ("route_ids", route_ids),
+        ("scenario_ids", scenario_ids),
+        ("route_terminals", terminals),
+        ("conditional_artifacts", artifacts),
+        ("frozen_route_triples", frozen),
+    ):
+        duplicated = _duplicates(values)
+        if duplicated:
+            mismatches[f"duplicate_{name}"] = duplicated
+    without_route, without_artifact = counter_gaps(terminals, artifacts)
+    if without_route or without_artifact:
+        mismatches["conditional_artifacts"] = {
+            "route_without_artifact": without_artifact,
+            "without_route": without_route,
+        }
+    missing_triples, unexpected_triples = counter_gaps(triples, frozen)
+    if missing_triples or unexpected_triples:
+        mismatches["route_triples"] = {
+            "missing_from_route_graph": missing_triples,
+            "not_in_frozen_fixture": unexpected_triples,
+        }
+    ungoverned = sorted(set(terminals) - set(inventory))
+    if ungoverned:
+        mismatches["ungoverned_terminals"] = ungoverned
+    without_audience = sorted(set(terminals) - set(audience))
+    if without_audience:
+        mismatches["terminals_without_audience"] = without_audience
+    return {
+        "conditional_artifacts": sorted(artifacts),
+        "mismatches": mismatches,
+        "route_terminals": sorted(terminals),
+        "scenario_ids": sorted(scenario_ids),
+        "valid": not mismatches,
     }
-    expected = {
-        "discovered_conditional_artifacts": terminals,
-        "future_baseline_ids": authoritative_baseline_ids,
-        "future_final_payloads": string_list(
-            declared.get("future_final_payloads", []),
-            "future_final_payloads",
-        ),
-        "future_temporary_payloads": string_list(
-            declared.get("future_temporary_payloads", []),
-            "future_temporary_payloads",
-        ),
-        "route_terminals": string_list(declared.get("route_terminals", []), "route_terminals"),
-        "scenario_ids": string_list(declared.get("scenario_ids", []), "scenario_ids"),
-    }
-    mismatches = {
-        key: {"actual": actual[key], "expected": expected[key]}
-        for key in expected
-        if actual[key] != expected[key]
-    }
-    return {**actual, "mismatches": mismatches, "valid": not mismatches}
 
 
 def _scenario_report(
     root: Path,
-    commit: str,
     route: dict[str, str],
-    metadata: dict[str, JsonValue] | None,
-    ranges: dict[str, PayloadRange],
     conditional_artifacts: list[str],
 ) -> dict[str, JsonValue]:
-    resolved = resolve_segments(root, commit, route, metadata, ranges)
+    resolved = resolve_segments(root, route)
     included = [str(segment["id"]) for segment in resolved.segments]
     payload = b"".join(resolved.raw_segments)
     return {
@@ -146,8 +139,6 @@ def _scenario_report(
         ),
         "model_visible_bytes": len(payload),
         "model_visible_sha256": hashlib.sha256(payload).hexdigest(),
-        "payload_status": resolved.status,
-        "resolution": resolved.resolution,
         "route_id": route["route_id"],
         "scenario_id": route["scenario_id"],
         "segment_ids": included,
@@ -160,8 +151,8 @@ def _scenario_report(
         "terminal": route["terminal"],
     }
 
+
 def build_context_report(root: Path, model: dict[str, JsonValue], source_digest: str) -> dict[str, JsonValue]:
-    commit = baseline_commit(model)
     contract = context_contract(model)
     conditional_artifacts = string_list(
         contract.get("conditional_artifacts", []),
@@ -169,23 +160,9 @@ def build_context_report(root: Path, model: dict[str, JsonValue], source_digest:
     )
     routes = route_rows(model)
     terminals = sorted({route["terminal"] for route in routes})
-    scenario_ids = sorted({route["scenario_id"] for route in routes})
-    metadata_by_id = scenario_metadata(model)
-    ranges = payload_ranges(model)
-    scenarios = [
-        _scenario_report(
-            root,
-            commit,
-            route,
-            metadata_by_id.get(route["scenario_id"]),
-            ranges,
-            conditional_artifacts,
-        )
-        for route in routes
-    ]
+    scenarios = [_scenario_report(root, route, conditional_artifacts) for route in routes]
     digest = fixture_session_digest()
     runtime = runtime_segments()
-    future_route_count = len(model.get("future_routes", []))
     total_model_visible_bytes = (
         sum(int(scenario["model_visible_bytes"]) for scenario in scenarios)
         + int(digest["bytes"])
@@ -198,13 +175,13 @@ def build_context_report(root: Path, model: dict[str, JsonValue], source_digest:
             "runtime_project_agents_sha256": runtime[0]["sha256"],
         },
         "fixture_session_digest": digest,
+        "route_coverage": route_coverage(root, model),
         "runtime_segments": runtime,
         "scenarios": sorted(scenarios, key=lambda row: str(row["scenario_id"])),
-        "set_equality": _set_equality(model, terminals, scenario_ids),
         "source_digest": source_digest,
         "totals": {
             "conditional_artifact_count": len(conditional_artifacts),
-            "future_route_count": future_route_count,
+            "route_count": len(routes),
             "scenario_count": len(scenarios),
             "terminal_count": len(terminals),
         },

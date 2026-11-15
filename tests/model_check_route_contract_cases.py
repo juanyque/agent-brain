@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal, assert_never
 
@@ -89,6 +90,30 @@ def _induce_route_defect(root: Path, model: dict[str, object], code: RouteCode) 
             assert_never(unreachable)
 
 
+def _run_graph_defect(
+    mutate: Callable[[dict[str, object]], None],
+) -> subprocess.CompletedProcess[str]:
+    with tempfile.TemporaryDirectory() as raw:
+        root = Path(raw)
+        for name in ("model", "skills", "docs"):
+            shutil.copytree(ROOT / name, root / name)
+        shutil.copytree(ROOT / "tests" / "fixtures", root / "tests" / "fixtures")
+        shutil.copy2(ROOT / "AGENTS.md", root / "AGENTS.md")
+        model_path = root / "model" / "OPERATING-MODEL.json"
+        model = json.loads(model_path.read_text(encoding="utf-8"))
+        mutate(model)
+        _write_model(model_path, model)
+        return _run_cli(
+            "--root",
+            str(root),
+            "--model",
+            str(model_path),
+            "--strict",
+            "--format",
+            "json",
+        )
+
+
 def _run_route_defect(
     code: RouteCode,
     *,
@@ -100,6 +125,7 @@ def _run_route_defect(
         shutil.copytree(ROOT / "model", root / "model")
         shutil.copytree(ROOT / "skills", root / "skills")
         shutil.copytree(ROOT / "docs", root / "docs")
+        shutil.copytree(ROOT / "tests" / "fixtures", root / "tests" / "fixtures")
         shutil.copy2(ROOT / "AGENTS.md", root / "AGENTS.md")
         model_path = root / "model" / "OPERATING-MODEL.json"
         model = json.loads(model_path.read_text(encoding="utf-8"))
@@ -155,6 +181,26 @@ class RouteContractCases:
                 self.assertEqual(result.stdout, "")
                 self.assertIn(code, result.stderr)
 
+    def test_unreachable_artifact_code_is_required_and_default_enabled(self) -> None:
+        code = "unreachable-conditional-artifact"
+        for mutate in (
+            lambda row: row.update({"default": False}),
+            lambda row: row.update({"family": "audience"}),
+        ):
+            model = json.loads(MODEL.read_text(encoding="utf-8"))
+            row = next(
+                row for row in model["finding_contract"]["code_metadata"] if row["code"] == code
+            )
+            mutate(row)
+            with tempfile.TemporaryDirectory() as raw:
+                path = Path(raw) / "OPERATING-MODEL.json"
+                _write_model(path, model)
+                result = _run_cli("--model", str(path), "--strict", "--format", "json")
+
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(result.stdout, "")
+            self.assertIn(code, result.stderr)
+
     def test_required_route_severity_declarations_must_match(self) -> None:
         for code in ROUTE_CODES:
             for mutated_side in ("code_metadata", "severity_defaults"):
@@ -197,6 +243,47 @@ class RouteContractCases:
                     self.assertEqual(result.stderr, "")
                     self.assertTrue(route_findings)
                     self.assertEqual(set(route_findings), {(code, "error")})
+
+    def test_duplicate_route_fields_are_rejected_in_default_strict_mode(self) -> None:
+        for field in ("route_id", "scenario_id", "terminal"):
+            with self.subTest(field=field):
+                def duplicate(model: dict[str, object], field: str = field) -> None:
+                    routes = model["route_graph"]
+                    if not isinstance(routes, list):
+                        raise AssertionError("route_graph fixture must be a list")
+                    routes[1][field] = routes[0][field]
+
+                result = _run_graph_defect(duplicate)
+                findings = json.loads(result.stdout)["findings"]
+                duplicates = [
+                    finding for finding in findings if finding["code"] == "duplicate-route-id"
+                ]
+
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stderr, "")
+                self.assertTrue(duplicates)
+                self.assertIn(f"route_graph {field} must be unique", {d["message"] for d in duplicates})
+
+    def test_route_and_conditional_artifact_removed_together_are_rejected(self) -> None:
+        removed = "model/RULES-LINKS.common.md"
+
+        def drop(model: dict[str, object]) -> None:
+            routes = model["route_graph"]
+            contract = model["context_contract"]
+            if not isinstance(routes, list) or not isinstance(contract, dict):
+                raise AssertionError("route fixtures must be well formed")
+            model["route_graph"] = [row for row in routes if row["terminal"] != removed]
+            contract["conditional_artifacts"].remove(removed)
+
+        result = _run_graph_defect(drop)
+        findings = json.loads(result.stdout)["findings"]
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr, "")
+        self.assertIn(
+            ("missing-route-target", "scenario.links | rule.links | " + removed),
+            {(finding["code"], finding["target"]) for finding in findings},
+        )
 
     def test_coupled_route_warning_metadata_controls_strict_cli(self) -> None:
         for code in ROUTE_CODES:

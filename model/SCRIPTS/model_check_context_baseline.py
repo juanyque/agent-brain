@@ -7,16 +7,8 @@ import sys
 from pathlib import Path
 
 from model_check_context import RUNTIME_PROJECT_AGENTS_BYTES, fixture_session_digest
-from model_check_context_payloads import (
-    PayloadRange,
-    baseline_commit,
-    context_contract,
-    payload_ranges,
-    resolve_segments,
-    route_rows,
-    scenario_metadata,
-)
-from model_check_contract import JsonValue
+from model_check_context_payloads import context_contract, resolve_segments, route_rows
+from model_check_contract import JsonValue, UsageError
 
 
 SCHEMA_VERSION = "agent-brain-model-context-baseline/v1"
@@ -55,8 +47,6 @@ def _segment_row(
         "path": str(segment.get("path", "")),
         "sha256": digest_bytes(encoded),
     }
-    if "range" in segment:
-        row["range"] = str(segment["range"])
     return row
 
 
@@ -91,14 +81,8 @@ def _digest_segment() -> dict[str, JsonValue]:
     }
 
 
-def _scenario_row(
-    root: Path,
-    commit: str,
-    route: dict[str, str],
-    metadata: dict[str, JsonValue] | None,
-    ranges: dict[str, PayloadRange],
-) -> dict[str, JsonValue]:
-    resolved = resolve_segments(root, commit, route, metadata, ranges)
+def _scenario_row(root: Path, route: dict[str, str]) -> dict[str, JsonValue]:
+    resolved = resolve_segments(root, route)
     segments = [
         _segment_row(segment, raw, ordinal)
         for ordinal, (segment, raw) in enumerate(zip(resolved.segments, resolved.raw_segments))
@@ -110,8 +94,6 @@ def _scenario_row(
         "disk_reads": list(resolved.disk_reads),
         "id": route["scenario_id"],
         "lines": len(content.splitlines()),
-        "payload_status": resolved.status,
-        "resolution": resolved.resolution,
         "route_id": route["route_id"],
         "segments": segments,
         "sha256": digest_bytes(encoded),
@@ -120,10 +102,14 @@ def _scenario_row(
     }
 
 
+def startup_segments() -> list[dict[str, JsonValue]]:
+    return [_runtime_segment(), _digest_segment()]
+
+
 def _budgets(scenarios: list[dict[str, JsonValue]]) -> dict[str, JsonValue]:
     baseline_bytes = sum(int(scenario["bytes"]) for scenario in scenarios)
-    startup_segments = [_runtime_segment(), _digest_segment()]
-    startup_bytes = sum(int(segment["bytes"]) for segment in startup_segments)
+    startup_rows = startup_segments()
+    startup_bytes = sum(int(segment["bytes"]) for segment in startup_rows)
     conditional: dict[str, JsonValue] = {}
     for scenario in scenarios:
         scenario_bytes = int(scenario["bytes"])
@@ -142,34 +128,25 @@ def _budgets(scenarios: list[dict[str, JsonValue]]) -> dict[str, JsonValue]:
             "cap_bytes": (baseline_bytes * 75) // 100,
             "cap_formula": STARTUP_CAP_FORMULA,
             "current_bytes": startup_bytes,
-            "segments": startup_segments,
+            "segments": startup_rows,
         },
     }
 
 
 def canonical_context_baseline(root: Path, model: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    commit = baseline_commit(model)
-    metadata_by_id = scenario_metadata(model)
-    ranges = payload_ranges(model)
+    routes = route_rows(model)
+    fixture_state = context_contract(model).get("fixed_fixture_state")
+    if not isinstance(fixture_state, dict):
+        raise UsageError("context metadata missing fixed_fixture_state")
     scenarios = sorted(
-        (
-            _scenario_row(
-                root,
-                commit,
-                route,
-                metadata_by_id.get(route["scenario_id"]),
-                ranges,
-            )
-            for route in route_rows(model)
-        ),
+        (_scenario_row(root, route) for route in routes),
         key=lambda row: str(row["id"]),
     )
     return {
-        "baseline_commit": commit,
         "budgets": _budgets(scenarios),
-        "fixed_fixture_state": context_contract(model)["fixed_fixture_state"],
+        "fixed_fixture_state": fixture_state,
         "frozen_route_sets": {
-            "route_terminals": sorted(str(route["terminal"]) for route in route_rows(model)),
+            "route_terminals": sorted(str(route["terminal"]) for route in routes),
             "scenario_ids": [str(scenario["id"]) for scenario in scenarios],
         },
         "scenarios": scenarios,

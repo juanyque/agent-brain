@@ -87,7 +87,7 @@ references remain visible without failing the command.
 ## `model_check.py`
 
 Read-only contract checker for the public operating model, local worktree gates, committed-range
-gates, context budgets, route/set equality, ownership metadata, and brain compatibility. It is the
+gates, context budgets, route coverage, ownership metadata, and brain compatibility. It is the
 canonical script behind the CI strict gates and the local gate recipe in the repository `README.md`.
 
 ```bash
@@ -99,3 +99,8 @@ python3 SCRIPTS/model_check.py --strict --git-base "$MODEL_BASE" --only committe
 The checker never fetches, pushes, stages, commits, or rewrites Git state. Callers must provide a
 locally available committed base; CI proves that object with `git cat-file -e` before invoking the
 committed-range gate.
+
+The route and budget gates compare the model with the frozen context fixture
+`tests/fixtures/model-context-baseline.json` under `--root`, so a copy of the model exported for a
+general check must include that file (the checker exits 2 when it is missing). The
+`--only brain-compatibility` check does not need it.

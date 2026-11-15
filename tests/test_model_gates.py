@@ -323,10 +323,17 @@ class OperatingModelContractTests(unittest.TestCase):
         }
         self.assertEqual(governed, discovered)
 
-    def test_future_routes_are_exact_disjoint_and_fully_named(self) -> None:
-        routes = canonical_model()["future_routes"]
+    def test_route_graph_has_13_unique_triples_and_linked_skill_routes(self) -> None:
+        model = canonical_model()
+        routes = model["route_graph"]
+        triples = [(r["route_id"], r["scenario_id"], r["terminal"]) for r in routes]
+
+        self.assertEqual(len(triples), 13)
+        for index in range(3):
+            self.assertEqual(len({triple[index] for triple in triples}), 13)
+        skill_routes = {r["route_id"]: r["terminal"] for r in routes if r["route_id"].startswith("skill.")}
         self.assertEqual(
-            {route["route_id"] for route in routes},
+            set(skill_routes),
             {
                 "skill.session-routing",
                 "skill.documentation",
@@ -334,10 +341,14 @@ class OperatingModelContractTests(unittest.TestCase):
                 "skill.constraints",
             },
         )
-        self.assertEqual(len({route["scenario_id"] for route in routes}), 4)
-        temporary = {item for route in routes for item in route["temporary_payloads"]}
-        final = {item for route in routes for item in route["final_payloads"]}
-        self.assertTrue(temporary.isdisjoint(final))
+        router = (ROOT / "skills" / "brain" / "SKILL.md").read_text(encoding="utf-8")
+        section = router.split("## Conditional Reference Router", 1)[1].split("\n## ", 1)[0]
+        for terminal in skill_routes.values():
+            self.assertIn(f"`{terminal.removeprefix('skills/brain/')}`", section)
+        self.assertEqual(
+            sorted(terminal for _route, _scenario, terminal in triples),
+            sorted(model["context_contract"]["conditional_artifacts"]),
+        )
 
 
 class TrackedTextWhitespaceTests(unittest.TestCase):

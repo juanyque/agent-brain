@@ -44,45 +44,16 @@ class OwnershipContractCases(unittest.TestCase):
         self.assertEqual(actual, expected)
         self.assertEqual({route.load for route in routes if route.route_id == "rule.attachments"}, {"model/RULES-ATTACHMENTS.common.md"})
 
-    def test_temporary_attachment_payload_fixture_resolves_brain_ranges(self) -> None:
-        from model_check_routes import resolved_route_table
+    def test_route_table_load_is_always_the_current_terminal(self) -> None:
+        from model_check_routes import _expected_common_routes
 
         model = self.model()
-        model["route_graph"] = [
-            {
-                "route_id": "rule.attachments",
-                "scenario_id": "scenario.attachments",
-                "terminal": "model/RULES-ATTACHMENTS.common.md",
-            }
-        ]
-        model["context_contract"]["scenario_metadata"] = [
-            {
-                "id": "scenario.attachments",
-                "payload_status": "temporary-ranges-until-materialized",
-                "temporary_payloads": [
-                    "model/BRAIN.common.md:198-207",
-                    "model/BRAIN.common.md:245",
-                    "model/BRAIN.common.md:262",
-                ],
-            }
-        ]
+        terminals = {row["route_id"]: row["terminal"] for row in model["route_graph"]}
 
-        with tempfile.TemporaryDirectory() as raw:
-            root = Path(raw)
-            (root / "model").mkdir()
-            common = root / "model" / "AGENTS.common.md"
-            common.write_text(
-                "# AGENTS.common.md\n\n"
-                "## Rule triggers\n\n"
-                "| Route | Scenario | Trigger | Load |\n"
-                "|---|---|---|---|\n"
-                "| rule.attachments | scenario.attachments | Creating, moving, auditing, or repairing attachments | model/BRAIN.common.md:198-207; model/BRAIN.common.md:245; model/BRAIN.common.md:262 |\n",
-                encoding="utf-8",
-            )
-
-            routes = resolved_route_table(root, model, common)
-
-        self.assertEqual([(route.route_id, route.scenario_id, route.load) for route in routes], [("rule.attachments", "scenario.attachments", "model/BRAIN.common.md:198-207; model/BRAIN.common.md:245; model/BRAIN.common.md:262")])
+        for route in _expected_common_routes(model):
+            if route.route_id.startswith("rule."):
+                self.assertEqual(route.load, terminals[route.route_id])
+                self.assertNotIn(";", route.load)
 
     def test_attachment_rule_is_canonical_destination(self) -> None:
         from model_check_routes import resolved_route_table
@@ -176,7 +147,7 @@ class OwnershipContractCases(unittest.TestCase):
         self.assertEqual(audience.audience, "brain-local wrappers")
         self.assertEqual(audience.purpose, "shared operating guardrail")
 
-    def test_startup_payload_decreases_from_frozen_task5_baseline_and_stays_under_cap(self) -> None:
+    def test_startup_payload_decreases_from_frozen_baseline_and_stays_under_cap(self) -> None:
         from model_check_context_baseline import canonical_context_baseline
 
         current = canonical_context_baseline(ROOT, self.model())

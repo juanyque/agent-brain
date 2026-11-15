@@ -11,7 +11,7 @@ from model_check_basic_findings import (
 )
 from model_check_contract import CodeDef, Finding, JsonValue
 from model_check_policy_findings import policy_owner_findings
-from model_check_routes import orphan_rule_findings, route_target_findings
+from model_check_routes import frozen_route_findings, orphan_rule_findings, route_target_findings
 
 
 def _matching(findings: list[Finding], code: CodeDef) -> list[Finding]:
@@ -45,7 +45,13 @@ def _default_findings(
         "missing-route-target",
         "unmapped-cluster",
     }:
-        return _matching(route_target_findings(root, model, root / "model" / "AGENTS.common.md"), code)
+        findings = _matching(
+            route_target_findings(root, model, root / "model" / "AGENTS.common.md"),
+            code,
+        )
+        if code.code == "missing-route-target":
+            findings.extend(frozen_route_findings(root, model, code))
+        return findings
     if code.code == "orphan-model-artifact":
         return orphan_rule_findings(root, model, root / "model" / "AGENTS.common.md")
     if code.code == "missing-task-target":

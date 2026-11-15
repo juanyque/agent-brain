@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from model_check_contract import Finding, JsonValue, parse_metadata
-from model_check_context_payloads import string_list
+from model_check_contract import CodeDef, Finding, JsonValue, parse_metadata
+from model_check_context_payloads import counter_gaps, frozen_route_triples
 from model_check_git_authority import GitAuthority, git_authority
 from model_check_route_table import (
     CommonRoute,
@@ -29,44 +29,21 @@ TASK_TYPE_ROUTE = CommonRoute(
 )
 
 
-def _scenario_payloads(model: dict[str, JsonValue]) -> dict[str, tuple[str, ...]]:
-    raw_contract = model.get("context_contract", {})
-    if not isinstance(raw_contract, dict):
-        return {}
-    raw_scenarios = raw_contract.get("scenario_metadata", [])
-    if not isinstance(raw_scenarios, list):
-        return {}
-    payloads: dict[str, tuple[str, ...]] = {}
-    for row in raw_scenarios:
-        match row:
-            case {
-                "id": str(scenario_id),
-                "payload_status": "temporary-ranges-until-materialized",
-            }:
-                payloads[scenario_id] = tuple(string_list(row.get("temporary_payloads", []), "temporary_payloads"))
-            case _:
-                continue
-    return payloads
-
-
 def _expected_common_routes(
     model: dict[str, JsonValue],
     route_graph: ParsedRouteGraph | None = None,
 ) -> tuple[CommonRoute, ...]:
-    payloads = _scenario_payloads(model)
     routes: list[CommonRoute] = []
     parsed = route_graph if route_graph is not None else route_graph_from_model(model)
     for row in parsed.routes:
         if not row.route_id.startswith("rule."):
             continue
-        temporary = payloads.get(row.scenario_id, ())
-        load = "; ".join(temporary) if temporary else row.terminal
         routes.append(
             CommonRoute(
                 route_id=row.route_id,
                 scenario_id=row.scenario_id,
                 trigger="",
-                load=load,
+                load=row.terminal,
             )
         )
     routes.append(TASK_TYPE_ROUTE)
@@ -86,8 +63,7 @@ def resolved_route_table(
             continue
         if route.scenario_id != expected.scenario_id or route.load != expected.load:
             continue
-        target = root / route.load if ";" not in route.load else None
-        if target is not None and not target.exists():
+        if not (root / route.load).exists():
             continue
         resolved.append(route)
     return tuple(sorted(resolved, key=lambda item: item.route_id))
@@ -99,7 +75,6 @@ def route_target_findings(
     common_path: Path,
 ) -> list[Finding]:
     rows = route_rows_from_common(common_path)
-    payloads = _scenario_payloads(model)
     code_metadata = {code.code: code for code in parse_metadata(model).codes}
     route_graph = route_graph_from_model(model, code_metadata)
     findings = list(route_graph.findings)
@@ -109,15 +84,13 @@ def route_target_findings(
             continue
         if route.route_id.startswith("skill."):
             continue
-        if payloads.get(route.scenario_id):
-            continue
         if route.route_id == "rule.attachments":
             finding = route_finding(
                 code_metadata,
                 "unmapped-cluster",
                 terminal,
                 route.route_id,
-                "attachment route terminal is missing after materialization",
+                "attachment route terminal is missing",
             )
             if finding is not None:
                 findings.append(finding)
@@ -127,7 +100,7 @@ def route_target_findings(
             "missing-route-target",
             terminal,
             route.route_id,
-            "route terminal is missing and has no temporary payload",
+            "route terminal is missing",
         )
         if finding is not None:
             findings.append(finding)
@@ -196,3 +169,32 @@ def audience_header(common_path: Path) -> AudienceHeader:
             case _:
                 continue
     return AudienceHeader(audience=values.get("audience", ""), purpose=values.get("purpose", ""))
+
+
+def frozen_route_findings(
+    root: Path,
+    model: dict[str, JsonValue],
+    code: CodeDef,
+) -> list[Finding]:
+    """Compare the route graph with the scenario triples frozen in the context fixture."""
+    graph = route_graph_from_model(model)
+    if graph.problems:
+        return []  # reported by the route-target findings of the graph itself
+    actual = [" | ".join((row.scenario_id, row.route_id, row.terminal)) for row in graph.routes]
+    frozen = [" | ".join(triple) for triple in frozen_route_triples(root, model)]
+    missing, unexpected = counter_gaps(actual, frozen)
+    return [
+        Finding(
+            code=code.code,
+            family=code.family,
+            severity=code.severity,
+            path="model/OPERATING-MODEL.json",
+            target=triple,
+            message=message,
+        )
+        for triples, message in (
+            (missing, "frozen context-fixture route is missing from route_graph"),
+            (unexpected, "route_graph route is not in the frozen context fixture"),
+        )
+        for triple in triples
+    ]
