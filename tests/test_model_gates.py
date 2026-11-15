@@ -391,6 +391,77 @@ def manifest_key_paths(value: object, prefix: str = "") -> list[tuple[str, str]]
     return found
 
 
+HISTORY_SCAFFOLDING_MARKERS = ("agent-brain-reference", "Copied Source Ranges")
+
+
+def history_scaffolding_findings(payloads: dict[str, str]) -> list[str]:
+    """Return "path: marker" for each scaffolding marker found in a payload text."""
+    return [
+        f"{path}: {marker}"
+        for path, text in sorted(payloads.items())
+        for marker in HISTORY_SCAFFOLDING_MARKERS
+        if marker in text
+    ]
+
+
+def route_terminal_payloads() -> dict[str, str]:
+    terminals = {row["terminal"] for row in canonical_model()["route_graph"]}
+    return {
+        terminal: (ROOT / terminal).read_text(encoding="utf-8")
+        for terminal in sorted(terminals)
+    }
+
+
+class HistoryScaffoldingGuardTests(unittest.TestCase):
+    REFERENCES = (
+        "skills/brain/references/constraints.md",
+        "skills/brain/references/documentation-and-classification.md",
+        "skills/brain/references/session-lifecycle-routing.md",
+        "skills/brain/references/tool-catalog.md",
+    )
+
+    def test_route_terminals_carry_no_history_scaffolding(self) -> None:
+        payloads = route_terminal_payloads()
+        self.assertEqual(len(payloads), 13)
+        self.assertEqual(history_scaffolding_findings(payloads), [])
+
+    def test_each_marker_injected_into_a_terminal_is_detected_separately(self) -> None:
+        payloads = route_terminal_payloads()
+        target = sorted(payloads)[0]
+        for marker in HISTORY_SCAFFOLDING_MARKERS:
+            with self.subTest(marker=marker):
+                injected = {**payloads, target: payloads[target] + f"\n{marker}\n"}
+                self.assertEqual(
+                    history_scaffolding_findings(injected), [f"{target}: {marker}"]
+                )
+
+    def test_marker_outside_a_payload_is_not_flagged(self) -> None:
+        payloads = route_terminal_payloads()
+        outside = {"README.md": "mentions agent-brain-reference and Copied Source Ranges"}
+        self.assertEqual(history_scaffolding_findings(payloads), [])
+        self.assertEqual(
+            history_scaffolding_findings({**payloads, **outside}),
+            [
+                "README.md: agent-brain-reference",
+                "README.md: Copied Source Ranges",
+            ],
+        )
+
+    def test_reintroduced_header_in_each_reference_file_is_detected(self) -> None:
+        payloads = route_terminal_payloads()
+        for rel_path in self.REFERENCES:
+            with self.subTest(path=rel_path):
+                self.assertIn(rel_path, payloads)
+                header = '<!-- agent-brain-reference\n{"downstream_rules":[]}\n-->\n\n'
+                text = payloads[rel_path]
+                title, _, rest = text.partition("\n\n")
+                injected = {**payloads, rel_path: f"{title}\n\n{header}{rest}"}
+                self.assertEqual(
+                    history_scaffolding_findings(injected),
+                    [f"{rel_path}: agent-brain-reference"],
+                )
+
+
 class RetiredManifestKeyGuardTests(unittest.TestCase):
     def test_manifest_has_no_retired_keys_at_any_depth(self) -> None:
         offenders = [

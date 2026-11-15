@@ -1333,9 +1333,12 @@ class SkillDependencyTests(unittest.TestCase):
             for rel_path in self.FINAL_REFERENCES:
                 path = root / rel_path
                 text = path.read_text(encoding="utf-8")
-                start = text.index("<!-- agent-brain-reference")
-                end = text.index("-->", start) + len("-->")
-                path.write_text(text[:start] + text[end:], encoding="utf-8")
+                start = text.find("<!-- agent-brain-reference")
+                if start != -1:
+                    end = text.index("-->", start) + len("-->")
+                    text = text[:start] + text[end:]
+                self.assertNotIn("agent-brain-reference", text)
+                path.write_text(text, encoding="utf-8")
 
             code, findings = self.skill_findings(
                 root, "missing-skill-reference", "unreachable-conditional-artifact"

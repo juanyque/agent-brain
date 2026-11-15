@@ -1,9 +1,5 @@
 # Tool Catalog
 
-<!-- agent-brain-reference
-{"downstream_rules":["Read the specific TOOL.*.md file before using a non-obvious tool.","Prefer runtime-installed skill script paths over brain-local copies.","Review every dry-run plan before apply-mode tools that move or rewrite files."],"route_id":"skill.tool-catalog","scenario_id":"scenario.tool-catalog","schema_version":"agent-brain-skill-reference/v1","source_ranges":["range.skill.tool-catalog.catalog","range.skill.tool-catalog.log-contract"],"trigger_rules":["Load when selecting a deterministic brain skill script, checking tool documentation, or reasoning about script/log conventions."]}
--->
-
 ## Trigger Rules
 
 - Load when selecting a deterministic brain skill script, checking tool documentation, or reasoning about script/log conventions.
@@ -13,8 +9,6 @@
 - Read the specific TOOL.*.md file before using a non-obvious tool.
 - Prefer runtime-installed skill script paths over brain-local copies.
 - Review every dry-run plan before apply-mode tools that move or rewrite files.
-
-## Copied Source Ranges
 
 ## Available skill tools
 

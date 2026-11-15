@@ -1,9 +1,5 @@
 # Constraints
 
-<!-- agent-brain-reference
-{"downstream_rules":["Ask before uncertain brain writes and before skip-full-reorder decisions.","Never drain _STAGING autonomously.","Diagnose failures read-only; never repeat an unchanged failed strategy; retry corrected or materially different strategies only within existing authorization; stop on ambiguity or after three failed strategies."],"route_id":"skill.constraints","scenario_id":"scenario.constraints","schema_version":"agent-brain-skill-reference/v1","source_ranges":["range.skill.constraints"],"trigger_rules":["Load when checking brain write permissions, setup safety gates, apply-mode constraints, or failure-handling rules."]}
--->
-
 ## Trigger Rules
 
 - Load when checking brain write permissions, setup safety gates, apply-mode constraints, or failure-handling rules.
@@ -13,8 +9,6 @@
 - Ask before uncertain brain writes and before skip-full-reorder decisions.
 - Never drain _STAGING autonomously.
 - Diagnose failures read-only; never repeat an unchanged failed strategy; retry corrected or materially different strategies only within existing authorization; stop on ambiguity or after three failed strategies.
-
-## Copied Source Ranges
 
 ## Dependencies
 

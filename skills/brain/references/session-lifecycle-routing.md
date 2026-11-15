@@ -1,9 +1,5 @@
 # Session Lifecycle Routing
 
-<!-- agent-brain-reference
-{"downstream_rules":["Load RULES-SESSION-LIFECYCLE.md for day rollover, close-session consolidation, and multi-session coordination details.","Use session_open.py as the canonical open-session authority and session_bootstrap.py only as compatibility fallback.","Do not load maintenance, setup, tool-catalog, or constraints references during ordinary session start."],"route_id":"skill.session-routing","scenario_id":"scenario.session-routing","schema_version":"agent-brain-skill-reference/v1","source_ranges":["range.skill.session-routing.protocol","range.skill.session-routing.postcondition"],"trigger_rules":["Load when resolving session start, day rollover, close session, peer-session coordination, or session_open/session_close fallback behavior."]}
--->
-
 ## Trigger Rules
 
 - Load when resolving session start, day rollover, close session, peer-session coordination, or session_open/session_close fallback behavior.
@@ -13,8 +9,6 @@
 - Load RULES-SESSION-LIFECYCLE.md for day rollover, close-session consolidation, and multi-session coordination details.
 - Use session_open.py as the canonical open-session authority and session_bootstrap.py only as compatibility fallback.
 - Do not load maintenance, setup, tool-catalog, or constraints references during ordinary session start.
-
-## Copied Source Ranges
 
 ## After brain resolution
 

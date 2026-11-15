@@ -142,7 +142,7 @@ The current session trace is mandatory even when daily-note state is incomplete.
 
 Shared by Flow 1 and Flow 2. The goal is to **not lose durable work** held in previous session notes, while **never touching a session that may still be active**. It is **State-driven**: decide per note from its `## State` and `## Immediate next step`. Never consolidate or close the session currently being resumed or continued.
 
-**Delegate the read-classify-draft pass; keep every write serial in the calling agent.** Reading a peer session note, deciding whether it's finished, and drafting where its durable content belongs is informative work about the past, not a decision that shapes what the current session does next — a good fit for parallel subagents. Actually writing to `WIP/WIP.md` or a daily note is different: those are shared files another session may also touch, and a concurrent, uncoordinated write to the same file is a real, previously observed failure mode in this vault (a whole `[[TODO]]` section was overwritten once by two sessions writing to it at the same time) — so writes never run in parallel here, regardless of how the reads were parallelized.
+Peer-session reads, classification, and drafts may run in parallel when delegation is permitted. Serialize all writes to shared brain files, including `WIP/WIP.md` and daily notes, in the calling agent; never run those writes in parallel.
 
 For each open session note in `WIP/SESSIONS/` that is **not** the current session (the `open_sessions` list from `session_open.py` is the canonical source; `session_bootstrap.py` is only a compatibility fallback):
 

@@ -1,9 +1,5 @@
 # Documentation And Classification
 
-<!-- agent-brain-reference
-{"downstream_rules":["Load the brain-local daily-note rule before writing daily notes.","Load project AGENTS.md/CLAUDE.md only to discover a declared Documentation home.","Split mixed project-knowledge and session-trace material into separate destinations."],"route_id":"skill.documentation","scenario_id":"scenario.documentation","schema_version":"agent-brain-skill-reference/v1","source_ranges":["range.skill.documentation"],"trigger_rules":["Load when deciding whether durable content belongs in the brain, project documentation, WIP, MEMORY, or online asset storage."]}
--->
-
 ## Trigger Rules
 
 - Load when deciding whether durable content belongs in the brain, project documentation, WIP, MEMORY, or online asset storage.
@@ -13,8 +9,6 @@
 - Load the brain-local daily-note rule before writing daily notes.
 - Load project AGENTS.md/CLAUDE.md only to discover a declared Documentation home.
 - Split mixed project-knowledge and session-trace material into separate destinations.
-
-## Copied Source Ranges
 
 ## Documenting activity
 
