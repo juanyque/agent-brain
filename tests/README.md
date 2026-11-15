@@ -56,10 +56,6 @@ Some negative-path tests intentionally print `FAIL` or `SKIP` diagnostics produc
 the code under test. The authoritative result is unittest's final `OK` / `FAILED`
 summary and process exit code.
 
-The immutable replay keeps a fixed inventory of 113 test IDs. Its pinned Git snapshot may advance
-when a retained ID deliberately changes contract; the old behavior is never skipped or removed
-silently, and the replacement snapshot must pass all 113 IDs before the pin is updated.
-
 ## Coverage by module
 
 | Module | Contract protected |
@@ -70,7 +66,8 @@ silently, and the replacement snapshot must pass all 113 IDs before the pin is u
 | `test_home_setup.py` | Brain-state detection, preservation of existing wrappers/templates, unambiguous current-vs-desired `_COMMON` conflict reporting, conflict backup/switch, virgin staging, and repeated apply without drift. |
 | `test_home_setup_symlinks.py` | Repair of every bootstrap-managed template symlink when it still points to a previous model. |
 | `test_bootstrap.py` | Bootstrap-candidate discovery, non-interactive explicit-brain execution, deterministic initial snapshot commits, unsigned annotated tags even with signing enabled, and dirty-repository refusal without Git mutation. |
-| `test_find_home.py` | Strict current-model brain identity, separation from bootstrap candidates, wrong/broken `_COMMON` rejection, ancestor resolution, nested-brain metadata, and symlink traversal safety. |
+| `test_find_home.py` | Strict current-model brain identity, separation from bootstrap candidates, wrong/broken `_COMMON` rejection, ancestor resolution, nested-brain metadata, symlink traversal safety, and the outside-a-brain fallback (machine default, single-brain HOME scan, ambiguity, conflict never bypassed, `--no-scan`, `--all`). |
+| `test_brain_default.py` | The per-machine default brain: dry-run unless `--apply`, validation, atomic private write, unusable defaults reported but never deleted, and `XDG_CONFIG_HOME`. |
 | `test_session_open.py` | Current-model identity guard, runtime-specific recovery commands, original cwd persistence, project-filtered WIP discovery including optional-capability links, chronological daily discovery across archive folders, reciprocal nearest-neighbor navigation across date gaps and backfills, dry-run and rollback safety, local/common template conflict refusal, idempotent session-note and daily registration with canonical link refresh, duplicate removal, and postcondition failures. |
 | `test_session_close.py` | Current-model brain identity enforcement, dry-run safety, idempotent handoff/consolidation, `--apply` placement before or after subcommands, safe refusal to archive untracked notes, final staged-content integrity, rollback on move/staging failures, and repeatable tracked archival. |
 | `test_brain_check.py` | Read-only session verification across active and archived notes with active-note precedence, plus active-WIP registration through Obsidian wikilinks and standard Markdown links. |
