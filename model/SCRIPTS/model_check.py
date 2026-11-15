@@ -163,17 +163,29 @@ def normal_report(
                 for finding in scan_evidence_ownership(options.root)
                 if finding.code == "review-archive-destination"
             )
+    loading_codes = []
     for code in contract.codes:
         if code.code not in code_names:
             continue
         if code.code in STALE_REFERENCE_CODES:
             continue
         if code.family == "loading":
-            findings.extend(loading_findings(options.root, model, code))
+            loading_codes.append(code)
             continue
         findings.extend(
             code_findings(options.root, model, options.model, code, options.brain, options.git_base)
         )
+    for code in loading_codes:
+        try:
+            findings.extend(loading_findings(options.root, model, code))
+        except UsageError:
+            # Default mode: an unusable route graph or terminal makes the loading
+            # data uncomputable. When any error finding already exists the usage
+            # error is swallowed (exit stays 1): the structural findings explain
+            # it, and an unrelated corrupt fixture surfaces only once the other
+            # errors are fixed.
+            if options.only or not any(item.severity == "error" for item in findings):
+                raise
     deduped = {}
     for finding in findings:
         deduped[(finding.code, finding.path, finding.target)] = finding

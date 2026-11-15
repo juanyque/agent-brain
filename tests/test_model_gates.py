@@ -351,6 +351,323 @@ class OperatingModelContractTests(unittest.TestCase):
         )
 
 
+RETIRED_MANIFEST_KEYS = frozenset(
+    {
+        "baseline_source_commit",
+        "payload_source_ranges",
+        "scenario_metadata",
+        "set_equality",
+        "future_routes",
+        "terminal_status",
+        "frozen_after_task",
+        "planned_materialization_task",
+        "startup_baseline_bytes",
+        "startup_cap_bytes",
+        "startup_current_bytes",
+        "digest_sha256",
+        "scenario_count",
+        "terminal_count",
+        "stale_allowlist",
+    }
+)
+RETIRED_TEXT_MARKERS = (
+    "materialized-final-payload-task",
+    "planned_materialization_task",
+    "payload_source_ranges",
+    "declared-before-task",
+    "frozen_after_task",
+)
+
+
+def manifest_key_paths(value: object, prefix: str = "") -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            found.append((str(key), f"{prefix}/{key}"))
+            found.extend(manifest_key_paths(child, f"{prefix}/{key}"))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            found.extend(manifest_key_paths(child, f"{prefix}[{index}]"))
+    return found
+
+
+class RetiredManifestKeyGuardTests(unittest.TestCase):
+    def test_manifest_has_no_retired_keys_at_any_depth(self) -> None:
+        offenders = [
+            path
+            for key, path in manifest_key_paths(canonical_model())
+            if key in RETIRED_MANIFEST_KEYS
+        ]
+        self.assertEqual(offenders, [])
+
+    def test_manifest_has_no_retired_top_level_baseline_or_status_fields(self) -> None:
+        model = canonical_model()
+        self.assertNotIn("baseline", model)
+        self.assertEqual(
+            set(model["context_baseline"]),
+            {"path", "digest_path", "schema_version"},
+        )
+        self.assertNotIn("status", model["stale_reference_contract"])
+        self.assertEqual(set(model["scope"]), {"allow", "deny"})
+
+    def test_manifest_scenarios_are_not_carried_by_payload_metadata(self) -> None:
+        model = canonical_model()
+        for route in model["route_graph"]:
+            self.assertEqual(set(route), {"route_id", "scenario_id", "terminal"})
+
+    def test_routed_text_and_manifest_carry_no_retired_markers(self) -> None:
+        paths = [
+            *sorted((ROOT / "model").rglob("*.md")),
+            *sorted((ROOT / "skills" / "brain").rglob("*.md")),
+            MODEL,
+        ]
+        offenders = [
+            f"{path.relative_to(ROOT)}: {marker}"
+            for path in paths
+            for marker in RETIRED_TEXT_MARKERS
+            if marker in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(offenders, [])
+
+    def test_guard_detects_a_reintroduced_key(self) -> None:
+        model = canonical_model()
+        model["context_contract"]["set_equality"] = {}
+        paths = [
+            path
+            for key, path in manifest_key_paths(model)
+            if key in RETIRED_MANIFEST_KEYS
+        ]
+        self.assertEqual(paths, ["/context_contract/set_equality"])
+
+
+class BudgetContractTests(unittest.TestCase):
+    def run_with_manifest(self, mutate) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "model").mkdir()
+            model = json.loads(MODEL.read_text(encoding="utf-8"))
+            mutate(model["finding_contract"])
+            manifest = root / "model" / "OPERATING-MODEL.json"
+            manifest.write_text(
+                json.dumps(model, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+                + "\n",
+                encoding="utf-8",
+            )
+            return run_cli("--root", str(root), "--model", str(manifest), "--strict")
+
+    def test_budget_selector_is_default_enabled(self) -> None:
+        contract = canonical_model()["finding_contract"]
+        self.assertIn("context-budget-exceeded", contract["defaults"])
+        row = next(r for r in contract["code_metadata"] if r["code"] == "context-budget-exceeded")
+        self.assertIs(row["default"], True)
+        for code in ("eager-skill-reference", "session-authority-conflict"):
+            other = next(r for r in contract["code_metadata"] if r["code"] == code)
+            self.assertIs(other["default"], False)
+        self.assertNotIn("loading", contract["defaults"])
+
+    def test_manifest_without_budget_selector_is_rejected(self) -> None:
+        def drop(contract: dict[str, object]) -> None:
+            contract["defaults"].remove("context-budget-exceeded")
+
+        result = self.run_with_manifest(drop)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("context-budget-exceeded must be selected by default", result.stderr)
+
+    def test_manifest_with_budget_default_false_is_rejected(self) -> None:
+        def disable(contract: dict[str, object]) -> None:
+            for row in contract["code_metadata"]:
+                if row["code"] == "context-budget-exceeded":
+                    row["default"] = False
+
+        result = self.run_with_manifest(disable)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("context-budget-exceeded must default true", result.stderr)
+
+    def test_manifest_without_budget_code_entry_is_rejected(self) -> None:
+        def remove(contract: dict[str, object]) -> None:
+            contract["defaults"].remove("context-budget-exceeded")
+            contract["code_metadata"] = [
+                r for r in contract["code_metadata"] if r["code"] != "context-budget-exceeded"
+            ]
+            for family in contract["families"]:
+                family["codes"] = [c for c in family["codes"] if c != "context-budget-exceeded"]
+            del contract["severity_defaults"]["context-budget-exceeded"]
+
+        result = self.run_with_manifest(remove)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("missing required code contract entry: context-budget-exceeded", result.stderr)
+
+    def run_full_copy(self, mutate, startup_cap: int | None = 1) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            copy_repo_fixture(root)
+            manifest = root / "model" / "OPERATING-MODEL.json"
+            model = json.loads(manifest.read_text(encoding="utf-8"))
+            mutate(model["finding_contract"])
+            manifest.write_text(
+                json.dumps(model, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+                + "\n",
+                encoding="utf-8",
+            )
+            if startup_cap is not None:
+                baseline = root / "tests" / "fixtures" / "model-context-baseline.json"
+                body = json.loads(baseline.read_text(encoding="utf-8"))
+                body["budgets"]["startup"]["cap_bytes"] = startup_cap
+                baseline.write_text(
+                    json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n",
+                    encoding="utf-8",
+                )
+            return run_cli("--root", str(root), "--strict", "--format", "json")
+
+    def assert_rejected(self, result: subprocess.CompletedProcess[str], message: str) -> None:
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(message, result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_empty_alias_for_budget_selector_is_rejected(self) -> None:
+        def alias(contract: dict[str, object]) -> None:
+            contract["aliases"]["context-budget-exceeded"] = []
+
+        self.assert_rejected(
+            self.run_full_copy(alias), "context-budget-exceeded must be selected by default"
+        )
+
+    def test_redirected_alias_for_budget_selector_is_rejected(self) -> None:
+        def alias(contract: dict[str, object]) -> None:
+            contract["aliases"]["context-budget-exceeded"] = ["duplicate-route-id"]
+
+        self.assert_rejected(
+            self.run_full_copy(alias), "context-budget-exceeded must be selected by default"
+        )
+
+    def test_budget_severity_below_error_is_rejected(self) -> None:
+        for severity in ("warning", "info"):
+            with self.subTest(severity=severity):
+
+                def lower(contract: dict[str, object]) -> None:
+                    for row in contract["code_metadata"]:
+                        if row["code"] == "context-budget-exceeded":
+                            row["severity"] = severity
+
+                self.assert_rejected(
+                    self.run_full_copy(lower),
+                    "context-budget-exceeded must have effective severity error",
+                )
+
+    def test_selecting_the_loading_family_keeps_the_budget_enforced(self) -> None:
+        def family(contract: dict[str, object]) -> None:
+            contract["defaults"].remove("context-budget-exceeded")
+            contract["defaults"].append("loading")
+
+        ok = self.run_full_copy(family, startup_cap=None)
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        failing = self.run_full_copy(family)
+        self.assertEqual(failing.returncode, 1)
+        codes = {f["code"] for f in parsed_json(failing)["findings"]}
+        self.assertIn("context-budget-exceeded", codes)
+
+    def assert_plain_strict_fails(self, mutate) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            copy_repo_fixture(root)
+            baseline = root / "tests" / "fixtures" / "model-context-baseline.json"
+            body = json.loads(baseline.read_text(encoding="utf-8"))
+            mutate(body["budgets"])
+            baseline.write_text(
+                json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n",
+                encoding="utf-8",
+            )
+            result = run_cli("--root", str(root), "--strict", "--format", "json")
+            findings = parsed_json(result)["findings"]
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual({f["code"] for f in findings}, {"context-budget-exceeded"})
+
+    def test_plain_strict_fails_when_startup_exceeds_its_cap(self) -> None:
+        def shrink(budgets: dict[str, object]) -> None:
+            budgets["startup"]["cap_bytes"] = 1
+
+        self.assert_plain_strict_fails(shrink)
+
+    def test_plain_strict_fails_when_a_scenario_exceeds_its_cap(self) -> None:
+        def shrink(budgets: dict[str, object]) -> None:
+            scenario = budgets["conditional_scenarios"]["scenario.links"]
+            scenario["cap_bytes"] = scenario["current_bytes"] - 1
+
+        self.assert_plain_strict_fails(shrink)
+
+
+class LoadingUsageErrorOrderingTests(unittest.TestCase):
+    """Default strict reports structural findings when loading data is uncomputable."""
+
+    def run_mutated(self, mutate, *args: str) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            copy_repo_fixture(root)
+            mutate(root)
+            return run_cli("--root", str(root), "--strict", *args)
+
+    @staticmethod
+    def duplicate_scenario(root: Path) -> None:
+        manifest = root / "model" / "OPERATING-MODEL.json"
+        model = json.loads(manifest.read_text(encoding="utf-8"))
+        graph = model["route_graph"]
+        graph[1]["scenario_id"] = graph[0]["scenario_id"]
+        manifest.write_text(
+            json.dumps(model, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def delete_terminal(root: Path) -> None:
+        (root / "model" / "RULES-LINKS.common.md").unlink()
+
+    @staticmethod
+    def delete_fixture(root: Path) -> None:
+        (root / "tests" / "fixtures" / "model-context-baseline.json").unlink()
+
+    @staticmethod
+    def duplicate_and_shrink_cap(root: Path) -> None:
+        LoadingUsageErrorOrderingTests.duplicate_scenario(root)
+        path = root / "tests" / "fixtures" / "model-context-baseline.json"
+        body = json.loads(path.read_text(encoding="utf-8"))
+        scenario = body["budgets"]["conditional_scenarios"]["scenario.links"]
+        scenario["cap_bytes"] = scenario["current_bytes"] - 1
+        path.write_text(
+            json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+
+    def test_default_strict_reports_duplicate_scenario_id(self) -> None:
+        result = self.run_mutated(self.duplicate_scenario, "--format", "json")
+        self.assertEqual(result.returncode, 1)
+        codes = {f["code"] for f in parsed_json(result)["findings"]}
+        self.assertIn("duplicate-route-id", codes)
+
+    def test_default_strict_reports_deleted_terminal(self) -> None:
+        result = self.run_mutated(self.delete_terminal, "--format", "json")
+        self.assertEqual(result.returncode, 1)
+        codes = {f["code"] for f in parsed_json(result)["findings"]}
+        self.assertIn("missing-route-target", codes)
+
+    def test_default_strict_without_fixture_and_other_errors_is_a_usage_error(self) -> None:
+        result = self.run_mutated(self.delete_fixture)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("context baseline fixture is unavailable", result.stderr)
+
+    def test_only_budget_selector_never_swallows_the_usage_error(self) -> None:
+        result = self.run_mutated(
+            self.duplicate_scenario, "--only", "context-budget-exceeded"
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("route_graph scenario_id must be unique", result.stderr)
+
+    def test_default_strict_with_duplicate_and_exceeded_cap_fails(self) -> None:
+        result = self.run_mutated(self.duplicate_and_shrink_cap, "--format", "json")
+        self.assertEqual(result.returncode, 1)
+        codes = {f["code"] for f in parsed_json(result)["findings"]}
+        self.assertIn("duplicate-route-id", codes)
+
+
 class TrackedTextWhitespaceTests(unittest.TestCase):
     def test_tracked_markdown_and_jinja_files_carry_no_trailing_whitespace(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
