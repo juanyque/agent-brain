@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from model_check_contract import Finding, JsonValue
+from model_check_contract import Finding, JsonValue, read_required_text
 
 
 FAMILY: Final = "session-ownership"
@@ -173,7 +173,7 @@ def _check_expected_rows(root: Path) -> list[Finding]:
     findings: list[Finding] = []
     for path, expected_rows in grouped.items():
         document = root / path
-        parsed = _parse_ownership(path, document.read_text(encoding="utf-8"))
+        parsed = _parse_ownership(path, read_required_text(document, root))
         findings.extend(parsed.findings)
         if parsed.findings:
             continue
@@ -211,7 +211,7 @@ def _check_expected_rows(root: Path) -> list[Finding]:
 
 def _check_jobs_shape(root: Path) -> list[Finding]:
     path = "model/JOBS.common.md"
-    text = (root / path).read_text(encoding="utf-8")
+    text = read_required_text(root / path, root)
     findings: list[Finding] = []
     for line_number, line in enumerate(text.splitlines(), start=1):
         if line == "### Tasks":

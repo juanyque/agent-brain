@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from model_check_contract import CodeDef, Finding, JsonValue
+from model_check_contract import CodeDef, Finding, JsonValue, read_required_text
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,7 +161,7 @@ def _section_lines(text: str, heading: str) -> tuple[str, ...]:
 def route_rows_from_common(common_path: Path) -> dict[str, CommonRoute]:
     table_lines = [
         line
-        for line in _section_lines(common_path.read_text(encoding="utf-8"), "Rule triggers")
+        for line in _section_lines(read_required_text(common_path), "Rule triggers")
         if line.startswith("|")
     ]
     if len(table_lines) < 3:

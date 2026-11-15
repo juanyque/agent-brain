@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from model_check_contract import Finding, JsonValue
+from model_check_contract import Finding, JsonValue, read_required_text
 
 
 BOUNDARY_PATTERN = re.compile(r"<!--\s*content-boundary:\s*(\{.*?\})\s*-->")
@@ -45,7 +45,7 @@ def task_type_index_targets(root: Path) -> tuple[TaskTypeTarget, ...]:
     if not index.exists():
         return ()
     targets: list[TaskTypeTarget] = []
-    for line in index.read_text(encoding="utf-8").splitlines():
+    for line in read_required_text(index, root).splitlines():
         match = TASK_LINK_PATTERN.match(line)
         if match is None:
             continue
@@ -72,7 +72,7 @@ def _boundary_claims(root: Path) -> tuple[BoundaryClaim, ...]:
     claims: list[BoundaryClaim] = []
     for path in sorted((root / "model").rglob("*.common.md")):
         rel = _relative(root, path)
-        for match in BOUNDARY_PATTERN.finditer(path.read_text(encoding="utf-8")):
+        for match in BOUNDARY_PATTERN.finditer(read_required_text(path, root)):
             try:
                 raw = json.loads(match.group(1))
             except json.JSONDecodeError:

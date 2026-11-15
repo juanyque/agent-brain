@@ -107,5 +107,24 @@ def sorted_findings(findings: list[Finding]) -> list[Finding]:
     )
 
 
+def read_required_bytes(path: Path, root: Path | None = None) -> bytes:
+    """Read a mandatory file, turning an unreadable one into a usage error with its path."""
+    try:
+        return path.read_bytes()
+    except OSError as error:
+        shown = path.relative_to(root).as_posix() if root is not None else str(path)
+        raise UsageError(f"cannot read {shown}: {error.strerror or error}") from error
+
+
+def read_required_text(path: Path, root: Path | None = None) -> str:
+    """Read a mandatory UTF-8 file, turning an unreadable one into a usage error with its path."""
+    raw = read_required_bytes(path, root)
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        shown = path.relative_to(root).as_posix() if root is not None else str(path)
+        raise UsageError(f"cannot read {shown}: {error}") from error
+
+
 def default_model_path(root: Path) -> Path:
     return root / "model" / "OPERATING-MODEL.json"

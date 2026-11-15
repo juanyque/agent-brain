@@ -8,7 +8,15 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from model_check_contract import Finding, JsonValue, UsageError, sorted_findings, text_lines_from_json
+from model_check_contract import (
+    Finding,
+    JsonValue,
+    UsageError,
+    read_required_bytes,
+    read_required_text,
+    sorted_findings,
+    text_lines_from_json,
+)
 
 
 def stable_json(value: JsonValue) -> str:
@@ -183,7 +191,7 @@ def scan_stale_references(root: Path, model_path: Path) -> list[Finding]:
     findings: list[Finding] = []
     for path in markdown_files(root):
         rel_path = path.relative_to(root).as_posix()
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = read_required_text(path, root).splitlines()
         for line_number, line in enumerate(lines, start=1):
             if is_allowlisted_inventory_line(rel_path, line, allowlist):
                 continue
@@ -245,7 +253,7 @@ def source_digest(root: Path) -> str:
         entries.append(
             {
                 "path": rel_path,
-                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "sha256": hashlib.sha256(read_required_bytes(path, root)).hexdigest(),
             }
         )
     return hashlib.sha256(stable_json({"files": entries}).encode()).hexdigest()

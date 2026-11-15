@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from model_check_contract import CodeDef, Finding, JsonValue, parse_metadata
+from model_check_contract import CodeDef, Finding, JsonValue, parse_metadata, read_required_text
 from model_check_context_payloads import counter_gaps, frozen_route_triples
 from model_check_git_authority import GitAuthority, git_authority
 from model_check_route_table import (
@@ -50,6 +50,15 @@ def _expected_common_routes(
     return tuple(routes)
 
 
+def _is_readable_file(path: Path) -> bool:
+    """True only for a regular file that reads as UTF-8; a directory never counts."""
+    try:
+        path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    return True
+
+
 def resolved_route_table(
     root: Path,
     model: dict[str, JsonValue],
@@ -63,7 +72,7 @@ def resolved_route_table(
             continue
         if route.scenario_id != expected.scenario_id or route.load != expected.load:
             continue
-        if not (root / route.load).exists():
+        if not _is_readable_file(root / route.load):
             continue
         resolved.append(route)
     return tuple(sorted(resolved, key=lambda item: item.route_id))
@@ -80,7 +89,7 @@ def route_target_findings(
     findings = list(route_graph.findings)
     for route in route_graph.routes:
         terminal = route.terminal
-        if (root / terminal).exists():
+        if _is_readable_file(root / terminal):
             continue
         if route.route_id.startswith("skill."):
             continue
@@ -90,7 +99,7 @@ def route_target_findings(
                 "unmapped-cluster",
                 terminal,
                 route.route_id,
-                "attachment route terminal is missing",
+                "attachment route terminal is missing or unreadable",
             )
             if finding is not None:
                 findings.append(finding)
@@ -100,7 +109,7 @@ def route_target_findings(
             "missing-route-target",
             terminal,
             route.route_id,
-            "route terminal is missing",
+            "route terminal is missing or unreadable",
         )
         if finding is not None:
             findings.append(finding)
@@ -160,7 +169,7 @@ def orphan_rule_findings(
 
 def audience_header(common_path: Path) -> AudienceHeader:
     values: dict[str, str] = {}
-    for line in common_path.read_text(encoding="utf-8").splitlines()[:8]:
+    for line in read_required_text(common_path).splitlines()[:8]:
         match line.split(":", 1):
             case ["Audience", value]:
                 values["audience"] = value.strip()

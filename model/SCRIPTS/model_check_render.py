@@ -6,7 +6,7 @@ from pathlib import Path
 
 from brain_state import current_model_root, detect_state, link_status
 from model_check_context import build_context_report
-from model_check_contract import JsonValue
+from model_check_contract import JsonValue, read_required_bytes
 
 
 def stable_json(value: JsonValue) -> str:
@@ -17,7 +17,7 @@ def source_files(root: Path) -> list[dict[str, JsonValue]]:
     files: list[dict[str, JsonValue]] = []
     root_agents = root / "AGENTS.md"
     if root_agents.exists() and root_agents.is_file() and not root_agents.is_symlink():
-        raw = root_agents.read_bytes()
+        raw = read_required_bytes(root_agents, root)
         files.append(
             {"path": "AGENTS.md", "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
         )
@@ -28,7 +28,7 @@ def source_files(root: Path) -> list[dict[str, JsonValue]]:
             if not path.is_file() or path.is_symlink():
                 continue
             rel = path.relative_to(root).as_posix()
-            raw = path.read_bytes()
+            raw = read_required_bytes(path, root)
             files.append(
                 {"path": rel, "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
             )

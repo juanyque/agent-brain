@@ -668,6 +668,149 @@ class LoadingUsageErrorOrderingTests(unittest.TestCase):
         self.assertIn("duplicate-route-id", codes)
 
 
+class UnreadableTerminalTests(unittest.TestCase):
+    """An invalid or unreadable terminal or rule file is a finding or a usage error, never exit 3."""
+
+    DAILY = "model/RULES-DAILY-NOTES.common.md"
+    LIFECYCLE = "model/RULES-SESSION-LIFECYCLE.common.md"
+    LINKS = "model/RULES-LINKS.common.md"
+
+    def run_mutated(self, mutate, *args: str) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            copy_repo_fixture(root)
+            mutate(root)
+            return run_cli("--root", str(root), *args)
+
+    @staticmethod
+    def delete(rel: str):
+        return lambda root: (root / rel).unlink()
+
+    @staticmethod
+    def make_directory(rel: str):
+        def mutate(root: Path) -> None:
+            (root / rel).unlink()
+            (root / rel).mkdir()
+
+        return mutate
+
+    @staticmethod
+    def invalid_utf8(rel: str):
+        def mutate(root: Path) -> None:
+            path = root / rel
+            path.write_bytes(path.read_bytes() + b"\n\xff\xfe\x80\n")
+
+        return mutate
+
+    def assert_no_crash(self, result: subprocess.CompletedProcess[str]) -> None:
+        output = result.stdout + result.stderr
+        self.assertNotIn("internal error", output)
+        self.assertNotIn("Traceback", output)
+
+    def assert_usage_error(self, result: subprocess.CompletedProcess[str], rel: str) -> None:
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("usage/metadata error", result.stderr)
+        self.assertIn(rel, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assert_no_crash(result)
+
+    def test_deleted_daily_notes_rule_is_a_usage_error(self) -> None:
+        for extra in ((), ("--format", "json")):
+            with self.subTest(extra=extra):
+                result = self.run_mutated(self.delete(self.DAILY), "--strict", *extra)
+                self.assert_usage_error(result, self.DAILY)
+
+    def test_daily_notes_rule_as_directory_is_a_usage_error(self) -> None:
+        result = self.run_mutated(self.make_directory(self.DAILY), "--strict")
+        self.assert_usage_error(result, self.DAILY)
+
+    def test_deleted_lifecycle_rule_is_a_usage_error(self) -> None:
+        for extra in ((), ("--format", "json")):
+            with self.subTest(extra=extra):
+                result = self.run_mutated(self.delete(self.LIFECYCLE), "--strict", *extra)
+                self.assert_usage_error(result, self.LIFECYCLE)
+
+    def test_links_rule_as_directory_is_a_usage_error_under_plain_strict(self) -> None:
+        for extra in ((), ("--format", "json")):
+            with self.subTest(extra=extra):
+                result = self.run_mutated(self.make_directory(self.LINKS), "--strict", *extra)
+                self.assert_usage_error(result, self.LINKS)
+
+    def test_links_rule_as_directory_is_a_missing_route_target_finding(self) -> None:
+        for extra in (("--format", "json"), ()):
+            with self.subTest(extra=extra):
+                result = self.run_mutated(
+                    self.make_directory(self.LINKS),
+                    "--strict",
+                    "--only",
+                    "missing-route-target",
+                    *extra,
+                )
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assert_no_crash(result)
+                self.assertIn("missing-route-target", result.stdout)
+                self.assertIn(self.LINKS, result.stdout)
+                self.assertIn("route terminal is missing or unreadable", result.stdout)
+
+    def test_links_rule_as_directory_never_passes_the_budget_check(self) -> None:
+        result = self.run_mutated(
+            self.make_directory(self.LINKS), "--strict", "--only", "context-budget-exceeded"
+        )
+        self.assert_usage_error(result, self.LINKS)
+
+    def test_terminal_with_invalid_utf8_is_a_missing_route_target_finding(self) -> None:
+        result = self.run_mutated(
+            self.invalid_utf8(self.LINKS),
+            "--strict",
+            "--only",
+            "missing-route-target",
+            "--format",
+            "json",
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assert_no_crash(result)
+        findings = parsed_json(result)["findings"]
+        self.assertEqual(
+            [(f["code"], f["path"]) for f in findings], [("missing-route-target", self.LINKS)]
+        )
+
+    def test_terminal_with_invalid_utf8_is_a_usage_error_under_plain_strict(self) -> None:
+        result = self.run_mutated(self.invalid_utf8(self.LINKS), "--strict")
+        self.assert_usage_error(result, self.LINKS)
+        self.assertIn("codec can't decode", result.stderr)
+
+    def test_unreadable_terminal_permission_denied_is_never_an_internal_error(self) -> None:
+        def deny(root: Path) -> None:
+            (root / self.LINKS).chmod(0)
+
+        with tempfile.TemporaryDirectory() as probe_raw:
+            probe = Path(probe_raw) / "probe"
+            probe.write_text("x", encoding="utf-8")
+            probe.chmod(0)
+            try:
+                probe.read_text(encoding="utf-8")
+            except PermissionError:
+                pass
+            else:
+                self.skipTest("host ignores file permissions (for example running as root)")
+        # The report digest needs every Markdown file, so even a narrow selector cannot
+        # produce a result: the unreadable file is a usage error, never an internal error.
+        for extra in (
+            ("--strict",),
+            ("--strict", "--format", "json"),
+            ("--strict", "--only", "missing-route-target"),
+        ):
+            with self.subTest(extra=extra):
+                result = self.run_mutated(deny, *extra)
+                self.assert_usage_error(result, self.LINKS)
+                self.assertIn("Permission denied", result.stderr)
+
+    def test_missing_common_route_table_is_a_usage_error(self) -> None:
+        rel = "model/AGENTS.common.md"
+        result = self.run_mutated(self.delete(rel), "--strict")
+        self.assert_usage_error(result, rel)
+
+
 class TrackedTextWhitespaceTests(unittest.TestCase):
     def test_tracked_markdown_and_jinja_files_carry_no_trailing_whitespace(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]

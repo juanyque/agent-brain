@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from model_check_contract import Finding, JsonValue, sorted_findings
+from model_check_contract import Finding, JsonValue, read_required_text, sorted_findings
 from model_check_render import stable_json
 
 
@@ -73,7 +73,7 @@ def ownership_blocks(root: Path) -> tuple[tuple[OwnershipBlock, ...], tuple[Find
         path = root / rel_path
         if not path.is_file():
             continue
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = read_required_text(path, root).splitlines()
         for index, line in enumerate(lines):
             if line.strip() != "```json evidence-ownership":
                 continue
@@ -102,7 +102,7 @@ def ownership_blocks(root: Path) -> tuple[tuple[OwnershipBlock, ...], tuple[Find
 
 
 def frontmatter(path: Path) -> dict[str, str]:
-    lines = path.read_text(encoding="utf-8").splitlines()
+    lines = read_required_text(path).splitlines()
     if not lines or lines[0] != "---":
         return {}
     values: dict[str, str] = {}
