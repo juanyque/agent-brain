@@ -52,23 +52,11 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
-          MODEL_BASE: 993247b2850ac86993c7c6dd18e6c4fd9ec6df7c
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -eu
-          candidate=""
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            candidate="$PR_BASE_SHA"
-          elif [ -n "$PUSH_BEFORE_SHA" ] && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
-            candidate="$PUSH_BEFORE_SHA"
-          fi
-          if [ -n "$candidate" ] && git cat-file -e "${candidate}^{commit}"; then
-            MODEL_BASE="$candidate"
-          elif ! git cat-file -e "${MODEL_BASE}^{commit}"; then
-            MODEL_BASE="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
-            git cat-file -e "${MODEL_BASE}^{commit}"
-          else
-            git cat-file -e "${MODEL_BASE}^{commit}"
-          fi
+          MODEL_BASE="$(bash tests/support/resolve_model_base.sh)"
+          git cat-file -e "${MODEL_BASE}^{commit}"
           printf 'MODEL_BASE=%s\n' "$MODEL_BASE" >> "$GITHUB_ENV"
 
       - name: Run committed-range gates

@@ -241,17 +241,31 @@ class StrictGateTests(unittest.TestCase):
 
 
 class WorkflowContractTests(unittest.TestCase):
-    def test_fetches_and_verifies_pinned_history(self) -> None:
+    def test_resolves_model_base_per_event(self) -> None:
         job = stdlib_contracts_job()
         checkout = job.step_named("Check out repository")
         resolve = job.step_named("Resolve comparison base")
 
         self.assertIn("fetch-depth: 0", checkout)
-        self.assertIn("MODEL_BASE: 993247b2850ac86993c7c6dd18e6c4fd9ec6df7c", resolve)
+        self.assertIn("tests/support/resolve_model_base.sh", resolve)
+        self.assertIn("EVENT_NAME: ${{ github.event_name }}", resolve)
+        self.assertIn(
+            "PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}", resolve
+        )
+        self.assertIn("PUSH_BEFORE_SHA: ${{ github.event.before }}", resolve)
+        self.assertIn(
+            "DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}", resolve
+        )
         self.assertIn('git cat-file -e "${MODEL_BASE}^{commit}"', resolve)
-        self.assertIn("github.event.pull_request.base.sha", resolve)
-        self.assertIn("github.event.before", resolve)
-        self.assertIn("git rev-list --max-parents=0 HEAD", resolve)
+        self.assertIn('"MODEL_BASE=%s\\n" "$MODEL_BASE" >> "$GITHUB_ENV"', resolve.replace("'", '"'))
+        # The base must come from the resolver only: reject any constant pin, however
+        # it is spelled, so re-adding one fails here even if the old SHA changes.
+        self.assertIn('MODEL_BASE="$(bash tests/support/resolve_model_base.sh)"', resolve)
+        self.assertNotRegex(resolve, r"MODEL_BASE[:=]\s*[\"']?[0-9a-f]{7,40}")
+        self.assertNotRegex(WORKFLOW.read_text(), r"MODEL_BASE[:=]\s*[\"']?[0-9a-f]{7,40}")
+        self.assertNotIn("993247b", resolve)
+        self.assertNotIn("993247b", WORKFLOW.read_text())
+        self.assertNotIn("rev-list --max-parents=0", resolve)
 
     def test_macos_and_linux_run_committed_and_worktree_gates(self) -> None:
         job = stdlib_contracts_job()

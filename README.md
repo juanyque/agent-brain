@@ -213,9 +213,18 @@ python3 model/SCRIPTS/model_check.py --strict --format json
 
 GitHub Actions runs the same checks on `ubuntu-latest` and `macos-latest`, plus the
 committed-range gates, and does not assert the zero-`__pycache__` condition. The workflow
-checks out full history (`fetch-depth: 0`), resolves `MODEL_BASE` from a valid pull-request base,
-push base, the pinned model baseline commit (`MODEL_BASELINE`), or root-commit fallback, proves the selected commit object,
-then runs committed-range gates before the suite and worktree gates after compile/shell checks.
+checks out full history (`fetch-depth: 0`) and resolves `MODEL_BASE` with
+`tests/support/resolve_model_base.sh` using an explicit per-event contract: a pull request uses
+its base SHA; a push to an existing branch uses the `before` SHA; a push that creates a branch
+or tag (`before` is all zeros) uses the merge-base with `origin/<default branch>`; any other event (including
+`workflow_dispatch`) is unsupported. A SHA base must be a commit that shares history with
+`HEAD` (one fetch is attempted if the object is missing, for example after a force-push). There
+is no fallback to a pinned commit, `HEAD~1`, or the root commit: when the base cannot be
+determined the step fails with a clear message instead of auditing an arbitrary range. The
+committed-range gates use `A...HEAD`, which audits from the merge-base of `A` and `HEAD` up to
+`HEAD` (after a force-push or rewind this is not the exact `before -> HEAD` delta and can be
+empty). The workflow proves the selected commit object, then runs committed-range gates before
+the suite and worktree gates after compile/shell checks.
 The workflow is a contract map only; private-brain migration remains explicit user work and is not
 automatic.
 
