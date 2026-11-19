@@ -150,7 +150,7 @@ def render_session_digest(state: SessionDigestState) -> str:
     if state.preflight.peer_sessions:
         lines.append(
             f"- peer_sessions: {state.preflight.peer_sessions} "
-            "(shared brain/worktree allowed; coordinate scope)"
+            "(the brain is shared; coordinate scope; work in the main checkout, no brain worktrees)"
         )
     else:
         lines.append("- peer_sessions: none detected")

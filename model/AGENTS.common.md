@@ -55,6 +55,7 @@ Load the narrow rule payload before acting when a trigger matches:
 ## Git ownership for brains
 
 - Git repository state is user-owned.
+- A brain is designed for a single instance: work in its main checkout and do not create worktrees or branches of a brain unless the user explicitly says so. A second checkout carries its own `_COMMON` link and parallel copies of the session and daily notes, and the relative `_COMMON` link only resolves from the depth where it was created.
 - Brain-internal `git mv` operations have standing user authorization when the move is already justified by the current user request or an applicable brain workflow, both paths are inside the same resolved brain root, the destination does not exist, and the move does not cross an active peer-session scope.
 - This standing authorization includes only index changes intrinsic to the approved move. Report each staged rename after execution.
 - The standing authorization is transport authority, not semantic authority: it does not authorize choosing an uncertain classification, expanding an approved batch, overwriting a destination, moving content outside or between brains, or permanently deleting content.

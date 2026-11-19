@@ -8,6 +8,10 @@ Do not treat this repo as a brain. There are no daily notes, no WIP, no JOURNAL.
 
 This root `AGENTS.md` is maintainer-only repository guidance. It is not loaded into brain session context.
 
+## Design assumption: one instance per brain
+
+A brain is used through a single checkout. `_COMMON` is a relative symlink computed from the brain's own location (a symlink target is stored literally, so it cannot use `~` or `$HOME`), and the session notes and daily registrations assume one working tree. Worktrees of a brain are not supported: agents are told to work in the main checkout in `model/AGENTS.common.md` → "Git ownership for brains". `home_setup.py --relink-common` exists to repair a link after a brain is moved or cloned at another depth, not to enable worktrees.
+
 ## Repository structure
 
 ```
