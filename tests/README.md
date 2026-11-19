@@ -38,8 +38,7 @@ python3 model/SCRIPTS/model_check.py --strict --format json
 `test_public_boundary` skips its private-marker check unless `git config pushgate.valuesFile`
 points to a forbidden-values file.
 
-The complete local gate (suite, compile, shell syntax, whitespace, strict checker, and the
-zero-`__pycache__` assertion) is the command list under "Local and CI gates" in the top-level
+The complete local gate (suite, compile, shell syntax, whitespace and strict checker) is the command list under "Local and CI gates" in the top-level
 `README.md`.
 
 Some negative-path tests intentionally print `FAIL` or `SKIP` diagnostics produced by

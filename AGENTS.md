@@ -143,4 +143,4 @@ python3 -m unittest tests.test_model_gates tests.test_model_check.OwnershipContr
 
 For broader verification, run the full suite, strict checker, canonical JSON, compile, and diff checks listed under "Local and CI gates" in `README.md`.
 
-Run every test command with `PYTHONDONTWRITEBYTECODE=1`: the complete local gate fails its last clause if any `__pycache__` directory exists in the repository. Any Python process that imports these scripts without the variable can recreate them between runs; they are gitignored, so if that clause fails, delete the stray `__pycache__` directories and re-run it.
+Run test commands with `PYTHONDONTWRITEBYTECODE=1`: `model_check.py` reports a `source_digest` over every file under `model/`, `skills/brain/` and `docs/`, so stray `__pycache__` files (gitignored, recreated by any Python process that imports these scripts) change that digest. Nothing asserts their absence.

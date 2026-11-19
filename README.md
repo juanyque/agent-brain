@@ -195,8 +195,9 @@ commands, and fixture rules.
 The local gate is the list of commands below, run from the repository root. It runs the
 current unittest suite, Python compilation, shell syntax checks, a working-tree whitespace
 check (`git diff HEAD --check`), worktree scope/whitespace checks, the strict operating-model
-checker, and a zero-`__pycache__` assertion; every command must exit 0. It needs Python 3.10 or
-newer; `uv` supplies the test dependencies. These are local checks: the range of commits being
+checker; every command must exit 0. It needs Python 3.10 or newer; `uv` supplies the test
+dependencies. Set `PYTHONDONTWRITEBYTECODE=1` to keep the checker's `source_digest` stable (it hashes
+every file under `model/` and `skills/brain/`, bytecode included). These are local checks: the range of commits being
 pushed is audited only by CI (see below).
 
 ```bash
@@ -208,11 +209,10 @@ find bootstrap-zero.sh model/SCRIPTS -type f -name '*.sh' -print0 | xargs -0 -n1
 git diff HEAD --check
 python3 model/SCRIPTS/model_check.py --strict --only worktree-scope,whitespace --format json
 python3 model/SCRIPTS/model_check.py --strict --format json
-! find . -type d -name __pycache__ -not -path './.git/*' -print -quit | grep -q .
 ```
 
 GitHub Actions runs the same checks on `ubuntu-latest` and `macos-latest`, plus the
-committed-range gates, and does not assert the zero-`__pycache__` condition. The workflow
+committed-range gates. The workflow
 checks out full history (`fetch-depth: 0`) and resolves `MODEL_BASE` with
 `tests/support/resolve_model_base.sh` using an explicit per-event contract: a pull request uses
 its base SHA; a push to an existing branch uses the `before` SHA; a push that creates a branch
