@@ -3,7 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from model_check_context_baseline import canonical_context_baseline, startup_segments
-from model_check_context_payloads import frozen_context_baseline, session_authority_contract
+from model_check_context_payloads import (
+    FIXTURE_UNAVAILABLE,
+    frozen_context_baseline,
+    session_authority_contract,
+)
+from model_check_context_validator import operational_projection, validate_context_baseline
 from model_check_contract import CodeDef, Finding, JsonValue, UsageError
 
 
@@ -48,9 +53,9 @@ def _budget_findings(
     baseline: dict[str, JsonValue],
     current: dict[str, JsonValue],
     code: CodeDef,
+    fixture_path: str,
 ) -> list[Finding]:
     findings: list[Finding] = []
-    fixture_path = "tests/fixtures/model-context-baseline.json"
     frozen_budgets = _section(baseline.get("budgets"), "budgets")
     current_budgets = _section(current["budgets"], "budgets")
     frozen_startup = _section(frozen_budgets.get("startup"), "startup")
@@ -106,6 +111,94 @@ def _budget_findings(
     return findings
 
 
+MAX_LISTED_DIFFERENCES = 6
+
+
+def _projection_rows(projection: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    rows = dict(projection)
+    scenarios = rows.pop("scenarios", None)
+    if isinstance(scenarios, list):
+        for index, row in enumerate(scenarios):
+            label = row.get("id", index) if isinstance(row, dict) else index
+            rows[f"scenarios[{label}]"] = row
+    return rows
+
+
+def _differences(left: JsonValue, right: JsonValue, prefix: str) -> list[str]:
+    if isinstance(left, dict) and isinstance(right, dict):
+        found: list[str] = []
+        for key in sorted(set(left) | set(right)):
+            child = f"{prefix}.{key}" if prefix else str(key)
+            if key not in left or key not in right:
+                found.append(child)
+            else:
+                found.extend(_differences(left[key], right[key], child))
+        return found
+    return [] if left == right else [prefix]
+
+
+def _derived_mismatch_detail(
+    baseline: dict[str, JsonValue], expected: dict[str, JsonValue]
+) -> str:
+    found = _differences(
+        _projection_rows(operational_projection(baseline)),
+        _projection_rows(operational_projection(expected)),
+        "",
+    )
+    if not found:
+        return ""
+    found.sort(key=lambda path: not path.startswith("scenarios["))
+    listed = ", ".join(found[:MAX_LISTED_DIFFERENCES])
+    extra = len(found) - MAX_LISTED_DIFFERENCES
+    suffix = f", and {extra} more" if extra > 0 else ""
+    return f"; fixture differs from the current route payloads at {listed}{suffix}"
+
+
+def _baseline_paths(model: dict[str, JsonValue]) -> tuple[str, str]:
+    match model.get("context_baseline"):
+        case {"path": str(path), "digest_path": str(digest_path)}:
+            return path, digest_path
+        case _:
+            raise UsageError("context metadata missing context_baseline.path or digest_path")
+
+
+def _read_digest(root: Path, digest_path: str) -> bytes:
+    try:
+        return (root / digest_path).read_bytes()
+    except OSError as error:
+        raise UsageError(f"{FIXTURE_UNAVAILABLE}: {digest_path}: {error.strerror or error}") from error
+
+
+def _stale_findings(root: Path, model: dict[str, JsonValue], code: CodeDef) -> list[Finding]:
+    """Report every finding of the production validator as ``context-baseline-stale``.
+
+    The validator keeps its internal codes; each one is carried in the target and message.
+    Fixture-internal budget findings (``startup-budget``, ``conditional-budget``) differ from
+    ``context-budget-exceeded``, which compares the current bytes with the frozen caps, so
+    both can appear for one tampered fixture and neither is dropped. Paths come from the
+    manifest ``context_baseline`` entry, not from the validator's literals.
+    """
+    fixture_path, digest_path = _baseline_paths(model)
+    raw, baseline = frozen_context_baseline(root, model)
+    digest = _read_digest(root, digest_path)
+    findings: list[Finding] = []
+    for item in validate_context_baseline(root, model, raw, digest):
+        message = f"{item.code}: {item.message}"
+        if item.code == "baseline-derived-mismatch":
+            message += _derived_mismatch_detail(baseline, canonical_context_baseline(root, model))
+        findings.append(
+            Finding(
+                code=code.code,
+                family=code.family,
+                severity=code.severity,
+                path=digest_path if item.code.startswith("digest-") else fixture_path,
+                target=f"{item.code} {item.path}",
+                message=message,
+            )
+        )
+    return findings
+
+
 def _startup_paths() -> tuple[str, ...]:
     return tuple(
         str(segment["path"])
@@ -136,7 +229,11 @@ def loading_findings(root: Path, model: dict[str, JsonValue], code: CodeDef) -> 
     match code.code:
         case "context-budget-exceeded":
             baseline = _load_context_baseline(root, model)
-            return _budget_findings(baseline, canonical_context_baseline(root, model), code)
+            return _budget_findings(
+                baseline, canonical_context_baseline(root, model), code, _baseline_paths(model)[0]
+            )
+        case "context-baseline-stale":
+            return _stale_findings(root, model, code)
         case "eager-skill-reference":
             return _eager_findings(_load_context_baseline(root, model), code)
         case "eager-optional-capability":

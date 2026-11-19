@@ -651,7 +651,10 @@ class BudgetContractTests(unittest.TestCase):
             result = run_cli("--root", str(root), "--strict", "--format", "json")
             findings = parsed_json(result)["findings"]
         self.assertEqual(result.returncode, 1)
-        self.assertEqual({f["code"] for f in findings}, {"context-budget-exceeded"})
+        codes = {f["code"] for f in findings}
+        # A tampered cap is also a stale fixture: the fixture no longer matches the harness.
+        self.assertIn("context-budget-exceeded", codes)
+        self.assertLessEqual(codes, {"context-budget-exceeded", "context-baseline-stale"})
 
     def test_plain_strict_fails_when_startup_exceeds_its_cap(self) -> None:
         def shrink(budgets: dict[str, object]) -> None:
@@ -665,6 +668,336 @@ class BudgetContractTests(unittest.TestCase):
             scenario["cap_bytes"] = scenario["current_bytes"] - 1
 
         self.assert_plain_strict_fails(shrink)
+
+
+class StaleBaselineContractTests(unittest.TestCase):
+    """Plain strict notices a context fixture that no longer matches the loaded text."""
+
+    CODE = "context-baseline-stale"
+    FIXTURE = "tests/fixtures/model-context-baseline.json"
+    LINKS = "model/RULES-LINKS.common.md"
+
+    @staticmethod
+    def write_manifest(root: Path, model: dict[str, object]) -> None:
+        (root / "model" / "OPERATING-MODEL.json").write_text(
+            json.dumps(model, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+
+    def run_copy(self, mutate, *args: str) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            copy_repo_fixture(root)
+            mutate(root)
+            return run_cli("--root", str(root), "--strict", "--format", "json", *args)
+
+    def shrink_terminal(self, root: Path) -> None:
+        path = root / self.LINKS
+        before = path.read_bytes()
+        after = before.replace(b"the ", b"", 1)
+        assert len(after) < len(before)
+        path.write_bytes(after)
+
+    def rewrite_fixture(self, root: Path, mutate) -> None:
+        path = root / self.FIXTURE
+        body = json.loads(path.read_text(encoding="utf-8"))
+        mutate(body)
+        path.write_text(
+            json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+
+    def edit_contract(self, mutate):
+        def apply(root: Path) -> None:
+            manifest = root / "model" / "OPERATING-MODEL.json"
+            model = json.loads(manifest.read_text(encoding="utf-8"))
+            mutate(model["finding_contract"])
+            self.write_manifest(root, model)
+            self.shrink_terminal(root)
+
+        return apply
+
+    def stale_findings(self, result: subprocess.CompletedProcess[str]) -> list[dict[str, object]]:
+        return [f for f in parsed_json(result)["findings"] if f["code"] == self.CODE]
+
+    def test_manifest_declares_the_stale_code_like_the_budget_code(self) -> None:
+        contract = canonical_model()["finding_contract"]
+        self.assertIn(self.CODE, contract["defaults"])
+        self.assertEqual(contract["severity_defaults"][self.CODE], "error")
+        rows = {r["code"]: r for r in contract["code_metadata"]}
+        stale, budget = rows[self.CODE], rows["context-budget-exceeded"]
+        self.assertEqual({k: v for k, v in stale.items() if k != "code"},
+                         {k: v for k, v in budget.items() if k != "code"})
+        for code in ("eager-skill-reference", "session-authority-conflict"):
+            self.assertIs(rows[code]["default"], False)
+
+    def test_real_repository_passes_plain_strict(self) -> None:
+        result = run_cli("--strict", "--format", "json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(parsed_json(result)["findings"], [])
+
+    def test_plain_strict_reports_a_shrunk_terminal_with_an_unregenerated_fixture(self) -> None:
+        result = self.run_copy(self.shrink_terminal)
+        self.assertEqual(result.returncode, 1)
+        findings = parsed_json(result)["findings"]
+        self.assertEqual({f["code"] for f in findings}, {self.CODE})
+        text = " ".join(str(f["message"]) for f in findings)
+        self.assertIn("baseline-derived-mismatch", text)
+        self.assertIn("scenarios[scenario.links]", text)
+        self.assertTrue(all(f["path"] == self.FIXTURE for f in findings))
+
+    def test_only_selector_reports_the_same_stale_fixture(self) -> None:
+        result = self.run_copy(self.shrink_terminal, "--only", self.CODE)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("scenarios[scenario.links]", str(self.stale_findings(result)))
+
+    def test_only_selector_passes_on_a_clean_copy(self) -> None:
+        result = self.run_copy(lambda root: None, "--only", self.CODE)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_tampered_scenario_hash_is_reported(self) -> None:
+        def tamper(root: Path) -> None:
+            self.rewrite_fixture(root, lambda body: body["scenarios"][0].__setitem__("sha256", "0" * 64))
+
+        result = self.run_copy(tamper)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("sha256", str(self.stale_findings(result)))
+
+    def test_tampered_segment_content_is_reported(self) -> None:
+        def tamper(root: Path) -> None:
+            def mutate(body: dict[str, object]) -> None:
+                body["scenarios"][0]["segments"][0]["content"] += "x"
+
+            self.rewrite_fixture(root, mutate)
+
+        result = self.run_copy(tamper)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("segment-sha256", str(self.stale_findings(result)))
+
+    def test_stale_sidecar_digest_is_reported_with_its_own_path(self) -> None:
+        def tamper(root: Path) -> None:
+            (root / "tests" / "fixtures" / "model-context-baseline.sha256").write_text(
+                "0" * 64 + "\n", encoding="utf-8"
+            )
+
+        result = self.run_copy(tamper)
+        self.assertEqual(result.returncode, 1)
+        paths = {f["path"] for f in self.stale_findings(result)}
+        self.assertEqual(paths, {"tests/fixtures/model-context-baseline.sha256"})
+
+    def test_every_validator_finding_is_reported(self) -> None:
+        def tamper(root: Path) -> None:
+            def mutate(body: dict[str, object]) -> None:
+                body["scenarios"][0]["segments"][0]["content"] += "x"
+                body["budgets"]["startup"]["cap_bytes"] = 1
+
+            self.rewrite_fixture(root, mutate)
+
+        result = self.run_copy(tamper)
+        internal = {str(f["target"]).split(" ")[0] for f in self.stale_findings(result)}
+        self.assertLessEqual(
+            {"digest-mismatch", "segment-sha256", "startup-budget", "baseline-derived-mismatch"},
+            internal,
+        )
+
+    def assert_rejected(self, mutate, message: str) -> None:
+        result = self.run_copy(self.edit_contract(mutate))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(message, result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_stale_code_removed_from_defaults_is_rejected(self) -> None:
+        self.assert_rejected(
+            lambda c: c["defaults"].remove(self.CODE), f"{self.CODE} must be selected by default"
+        )
+
+    def test_empty_alias_is_rejected(self) -> None:
+        self.assert_rejected(
+            lambda c: c["aliases"].__setitem__(self.CODE, []),
+            f"{self.CODE} must be selected by default",
+        )
+
+    def test_redirected_alias_is_rejected(self) -> None:
+        self.assert_rejected(
+            lambda c: c["aliases"].__setitem__(self.CODE, ["duplicate-route-id"]),
+            f"{self.CODE} must be selected by default",
+        )
+
+    def test_lower_severity_is_rejected(self) -> None:
+        for severity in ("warning", "info"):
+            with self.subTest(severity=severity):
+
+                def lower(c: dict[str, object]) -> None:
+                    for row in c["code_metadata"]:
+                        if row["code"] == self.CODE:
+                            row["severity"] = severity
+
+                self.assert_rejected(lower, f"{self.CODE} must have effective severity error")
+
+    def test_default_false_is_rejected(self) -> None:
+        def disable(c: dict[str, object]) -> None:
+            for row in c["code_metadata"]:
+                if row["code"] == self.CODE:
+                    row["default"] = False
+
+        self.assert_rejected(disable, f"{self.CODE} must default true")
+
+    def test_selecting_the_loading_family_still_detects_a_stale_fixture(self) -> None:
+        def family(c: dict[str, object]) -> None:
+            c["defaults"].remove(self.CODE)
+            c["defaults"].remove("context-budget-exceeded")
+            c["defaults"].append("loading")
+
+        result = self.run_copy(self.edit_contract(family))
+        self.assertEqual(result.returncode, 1)
+        self.assertTrue(self.stale_findings(result))
+
+    def test_code_moved_to_another_family_is_rejected(self) -> None:
+        budget = "context-budget-exceeded"
+        for codes in ((self.CODE,), (budget,), (self.CODE, budget)):
+            for family in ("audience", "route-target"):
+                for startup_cap in (None, 1):
+                    with self.subTest(codes=codes, family=family, startup_cap=startup_cap):
+
+                        def move(c: dict[str, object]) -> None:
+                            for row in c["code_metadata"]:
+                                if row["code"] in codes:
+                                    row["family"] = family
+
+                        def mutate(root: Path) -> None:
+                            self.edit_contract(move)(root)
+                            if startup_cap is not None:
+                                self.rewrite_fixture(
+                                    root,
+                                    lambda body: body["budgets"]["startup"].__setitem__(
+                                        "cap_bytes", startup_cap
+                                    ),
+                                )
+
+                        result = self.run_copy(mutate)
+                        self.assertEqual(result.returncode, 2)
+                        self.assertIn("must have effective family loading", result.stderr)
+                        self.assertNotIn("Traceback", result.stderr)
+
+    def assert_no_crash(self, result: subprocess.CompletedProcess[str]) -> None:
+        self.assertNotIn("internal error", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn(result.returncode, (1, 2))
+
+    def test_malformed_scenario_segments_are_a_finding_not_a_crash(self) -> None:
+        for value in (None, 42, "x", {}, [1, "a", None]):
+            with self.subTest(value=value):
+
+                def tamper(root: Path) -> None:
+                    self.rewrite_fixture(
+                        root, lambda body: body["scenarios"][0].__setitem__("segments", value)
+                    )
+
+                result = self.run_copy(tamper, "--only", self.CODE)
+                self.assert_no_crash(result)
+                if not isinstance(value, list):
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn("segment-shape", str(self.stale_findings(result)))
+
+    def test_malformed_fixture_fields_never_crash_the_checker(self) -> None:
+        shapes = (None, 42, "x", [1, "a", None], {})
+        fields = (
+            ("scenarios",),
+            ("scenarios", 0),
+            ("scenarios", 0, "terminal_load_count"),
+            ("scenarios", 0, "id"),
+            ("scenarios", 0, "segments", 0),
+            ("scenarios", 0, "segments", 0, "path"),
+            ("scenarios", 0, "segments", 0, "content"),
+            ("scenarios", 0, "segments", 0, "ordinal"),
+            ("budgets",),
+            ("budgets", "startup"),
+            ("budgets", "startup", "segments"),
+            ("budgets", "startup", "segments", 0),
+            ("budgets", "startup", "cap_bytes"),
+            ("budgets", "conditional_scenarios"),
+            ("budgets", "conditional_scenarios", "scenario.links"),
+            ("frozen_route_sets",),
+        )
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            copy_repo_fixture(root)
+            path = root / self.FIXTURE
+            original = json.loads(path.read_text(encoding="utf-8"))
+            for field in fields:
+                for shape in shapes:
+                    body = json.loads(json.dumps(original))
+                    target = body
+                    for key in field[:-1]:
+                        target = target[key]
+                    target[field[-1]] = shape
+                    path.write_text(
+                        json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n",
+                        encoding="utf-8",
+                    )
+                    for args in (("--only", self.CODE), ()):
+                        with self.subTest(field=field, shape=shape, args=args):
+                            result = run_cli("--root", str(root), "--strict", *args)
+                            self.assert_no_crash(result)
+
+    def test_fixture_and_sidecar_paths_come_from_the_manifest(self) -> None:
+        moved = "tests/fixtures/moved/context.json"
+        moved_digest = "tests/fixtures/moved/context.digest"
+
+        def relocate(root: Path) -> None:
+            (root / "tests" / "fixtures" / "moved").mkdir()
+            (root / self.FIXTURE).rename(root / moved)
+            (root / "tests" / "fixtures" / "model-context-baseline.sha256").rename(
+                root / moved_digest
+            )
+            manifest = root / "model" / "OPERATING-MODEL.json"
+            model = json.loads(manifest.read_text(encoding="utf-8"))
+            model["context_baseline"]["path"] = moved
+            model["context_baseline"]["digest_path"] = moved_digest
+            self.write_manifest(root, model)
+
+        clean = self.run_copy(relocate)
+        self.assertEqual(clean.returncode, 0, clean.stderr)
+
+        def stale(root: Path) -> None:
+            relocate(root)
+            self.shrink_terminal(root)
+            (root / moved_digest).write_text("0" * 64 + "\n", encoding="utf-8")
+
+        result = self.run_copy(stale)
+        self.assertEqual(result.returncode, 1)
+        paths = {f["path"] for f in self.stale_findings(result)}
+        self.assertEqual(paths, {moved, moved_digest})
+
+    def test_stale_fixture_with_a_duplicate_scenario_still_reports_the_route_finding(self) -> None:
+        def mutate(root: Path) -> None:
+            self.shrink_terminal(root)
+            LoadingUsageErrorOrderingTests.duplicate_scenario(root)
+
+        result = self.run_copy(mutate)
+        self.assertEqual(result.returncode, 1)
+        codes = {f["code"] for f in parsed_json(result)["findings"]}
+        self.assertIn("duplicate-route-id", codes)
+
+    def test_missing_fixture_is_a_usage_error(self) -> None:
+        result = self.run_copy(LoadingUsageErrorOrderingTests.delete_fixture)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("context baseline fixture is unavailable", result.stderr)
+
+    def test_missing_digest_sidecar_is_a_usage_error(self) -> None:
+        def delete(root: Path) -> None:
+            (root / "tests" / "fixtures" / "model-context-baseline.sha256").unlink()
+
+        result = self.run_copy(delete)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("context baseline fixture is unavailable", result.stderr)
+
+    def test_only_selector_with_an_invalid_route_graph_is_a_usage_error(self) -> None:
+        result = self.run_copy(
+            LoadingUsageErrorOrderingTests.duplicate_scenario, "--only", self.CODE
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("route_graph scenario_id must be unique", result.stderr)
 
 
 class LoadingUsageErrorOrderingTests(unittest.TestCase):

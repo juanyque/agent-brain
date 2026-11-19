@@ -117,6 +117,7 @@ def _validate_segments(baseline: dict[str, JsonValue]) -> list[ContextBaselineFi
         scenario_id = str(scenario.get("id"))
         segments = scenario.get("segments", [])
         if not isinstance(segments, list):
+            findings.append(_finding("segment-shape", f"$.scenarios[{scenario_id}].segments", "segments must be an array"))
             continue
         ordinals = [segment.get("ordinal") for segment in segments if isinstance(segment, dict)]
         if ordinals != list(range(len(segments))) or _duplicates([str(item) for item in ordinals]):
@@ -184,11 +185,12 @@ def _validate_terminal_loading(baseline: dict[str, JsonValue]) -> list[ContextBa
         scenario_id = str(scenario.get("id"))
         if scenario.get("terminal_load_count") != 1:
             findings.append(_finding("terminal-load-count", f"$.scenarios[{scenario_id}].terminal_load_count", "exactly one terminal must load"))
-        if any(
+        segments = scenario.get("segments", [])
+        if isinstance(segments, list) and any(
             isinstance(segment, dict)
             and segment.get("path") == "model/BRAIN.common.md"
             and scenario.get("id") != "scenario.brain-structure"
-            for segment in scenario.get("segments", [])
+            for segment in segments
         ):
             findings.append(_finding("broad-body-inclusion", f"$.scenarios[{scenario_id}].segments", "scenario includes unrelated BRAIN body"))
     return findings

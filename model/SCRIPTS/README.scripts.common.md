@@ -100,7 +100,10 @@ The checker never fetches, pushes, stages, commits, or rewrites Git state. Calle
 locally available committed base; CI proves that object with `git cat-file -e` before invoking the
 committed-range gate.
 
-The route and budget gates compare the model with the frozen context fixture
+The route, budget, and stale-fixture gates compare the model with the frozen context fixture
 `tests/fixtures/model-context-baseline.json` under `--root`, so a copy of the model exported for a
-general check must include that file (the checker exits 2 when it is missing). The
-`--only brain-compatibility` check does not need it.
+general check must include that file and its `.sha256` sidecar (the checker exits 2 when either is
+missing; under plain `--strict` an earlier error finding can absorb the missing-file error, giving
+exit 1 with that finding only, and exit 2 when no other error exists). Plain `--strict` reports
+`context-baseline-stale` when the fixture no longer matches the loaded text. The
+`--only brain-compatibility` check does not need the fixture.

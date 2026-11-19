@@ -75,8 +75,11 @@ REQUIRED_ROUTE_CODE_FAMILIES: Final[tuple[tuple[str, str], ...]] = (
     ("unreachable-conditional-artifact", "route-target"),
 )
 
-BUDGET_CODE: Final[str] = "context-budget-exceeded"
-BUDGET_FAMILY: Final[str] = "loading"
+# Loading codes that plain --strict must always run; the rest of the loading family stays optional.
+REQUIRED_DEFAULT_CODE_FAMILIES: Final[tuple[tuple[str, str], ...]] = (
+    ("context-baseline-stale", "loading"),
+    ("context-budget-exceeded", "loading"),
+)
 
 
 def _validate_route_contract(
@@ -121,24 +124,29 @@ def _validate_route_contract(
         raise UsageError(f"metadata route severity declarations differ: {names}")
 
 
-def _validate_budget_contract(
+def _validate_required_default_codes(
     contract: Contract,
     family_memberships: dict[str, set[str]],
     metadata_defaults: dict[str, bool],
     severity_defaults: dict[str, JsonValue],
 ) -> None:
-    if family_memberships.get(BUDGET_CODE) != {BUDGET_FAMILY} or BUDGET_CODE not in severity_defaults:
-        raise UsageError(
-            f"metadata schema missing required code contract entry: {BUDGET_CODE}"
-        )
-    if metadata_defaults.get(BUDGET_CODE) is not True:
-        raise UsageError(f"metadata {BUDGET_CODE} must default true")
     selected = {code.code: code for code in contract.selected_codes(contract.defaults)}
-    effective = selected.get(BUDGET_CODE)
-    if effective is None:
-        raise UsageError(f"metadata {BUDGET_CODE} must be selected by default")
-    if effective.severity != "error" or severity_defaults[BUDGET_CODE] != "error":
-        raise UsageError(f"metadata {BUDGET_CODE} must have effective severity error")
+    for code, family in REQUIRED_DEFAULT_CODE_FAMILIES:
+        if family_memberships.get(code) != {family} or code not in severity_defaults:
+            raise UsageError(f"metadata schema missing required code contract entry: {code}")
+        if metadata_defaults.get(code) is not True:
+            raise UsageError(f"metadata {code} must default true")
+        effective = selected.get(code)
+        if effective is None:
+            raise UsageError(f"metadata {code} must be selected by default")
+        # normal_report dispatches by the effective family in code_metadata, so a code moved
+        # to another family would never reach the loading checks.
+        if effective.family != family:
+            raise UsageError(
+                f"metadata {code} must have effective family {family}, not {effective.family}"
+            )
+        if effective.severity != "error" or severity_defaults[code] != "error":
+            raise UsageError(f"metadata {code} must have effective severity error")
 
 
 def parse_metadata(raw: JsonValue) -> Contract:
@@ -236,5 +244,7 @@ def parse_metadata(raw: JsonValue) -> Contract:
         if code.code not in metadata_codes:
             parsed_codes.append(code)
     contract = Contract(defaults=default_names, codes=tuple(parsed_codes), aliases=aliases)
-    _validate_budget_contract(contract, family_memberships, metadata_defaults, severity_defaults)
+    _validate_required_default_codes(
+        contract, family_memberships, metadata_defaults, severity_defaults
+    )
     return contract
